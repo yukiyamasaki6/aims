@@ -10,11 +10,14 @@ const ALLOWED_PATTERN = /^[!-~]*$/;
 // 認証サービスが弱いパスワードとして拒否したとき(weak_password)と、invalidRuleは、利用者に同じ規則の文面を示す。
 export type PasswordError = "required" | "invalidRule";
 
+// 現在のパスワードの誤りの種類。未入力だけを検査する(旧い規則で作った既存のパスワードでも変更できるよう、文字種と長さは課さない)。
+export type CurrentPasswordError = Extract<PasswordError, "required">;
+
 // 入力されたパスワードが空でないかだけを見る。
 // 入力されていればundefined、空なら誤りの種類を返す。
 export function validatePasswordPresent(
   password: string,
-): Extract<PasswordError, "required"> | undefined {
+): CurrentPasswordError | undefined {
   return password ? undefined : "required";
 }
 

@@ -137,6 +137,8 @@ secret = "env(TURNSTILE_SECRET_KEY)"
 enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
+# If enabled, updating a password requires the current password (the check is enforced by the auth service, including direct API calls).
+require_current_password = true
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
 max_frequency = "1s"
 # Number of characters used in the email OTP.

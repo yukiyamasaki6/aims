@@ -17,6 +17,7 @@ import type { CallResult } from "../application/call-result";
 import type { PasswordSetup } from "../application/password-setup";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import { createResetPassword } from "../application/reset-password";
+import type { SignInAuthenticator } from "../application/sign-in";
 import { createSignUp } from "../application/sign-up";
 import type { AuthFailure } from "../domain/auth-failure";
 import { ResetPasswordForm } from "./reset-password-form";
@@ -24,7 +25,7 @@ import { SignUpForm } from "./signup-form";
 
 const authText = translatorFor("auth");
 
-const _NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
+const NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
 const CAPTCHA_ERROR_MESSAGE = authText("fieldError.captcha.incomplete");
 const COOLDOWN_ERROR_MESSAGE = authText("fieldError.resend.cooldown");
 const OTP_EXPIRED_MESSAGE = authText("failure.code_expired");
@@ -42,10 +43,14 @@ const auth = {
   sendCode: vi.fn(),
   verifyCode: vi.fn(),
   setPassword: vi.fn(),
+  signIn: vi.fn(),
+  signOutOthers: vi.fn(),
   signOutHere: vi.fn(),
-} satisfies PasswordSetupAuthenticator & {
-  signOutHere(): Promise<CallResult>;
-};
+} satisfies PasswordSetupAuthenticator &
+  SignInAuthenticator & {
+    signOutOthers(): Promise<CallResult>;
+    signOutHere(): Promise<CallResult>;
+  };
 
 // 画面の骨組みを共有する2つの手続きと、手続きごとに違う値(見出し、欄の名前、完了後の遷移先)。
 const subjects: {
@@ -58,6 +63,8 @@ const subjects: {
   passwordSubmit: string;
   destination: string;
   purpose: "sign-up" | "password-reset";
+  // パスワード設定の段階でも、セキュリティチェックを要するか。
+  requiresCheck: boolean;
 }[] = [
   {
     name: authText("signInSignUpLink"),
@@ -75,6 +82,7 @@ const subjects: {
     passwordSubmit: "登録してサインイン",
     destination: "/rounds",
     purpose: "sign-up",
+    requiresCheck: true,
   },
   {
     name: "パスワード再設定",
@@ -94,6 +102,7 @@ const subjects: {
     passwordSubmit: "パスワードを変更",
     destination: "/signin",
     purpose: "password-reset",
+    requiresCheck: false,
   },
 ];
 let subject = subjects[0];
@@ -212,13 +221,15 @@ async function advanceToCodeStep(email = "user@example.com") {
   vi.clearAllMocks();
 }
 
-async function advanceToPasswordStep() {
+// checked: パスワード設定の段階のウィジェットが、トークンを発行した後まで進める(チェックを要する手続きだけ)。
+async function advanceToPasswordStep({ checked = true } = {}) {
   await advanceToCodeStep();
   auth.verifyCode.mockResolvedValue(ACCEPTED);
   changeValue(codeInput(), "123456");
   fireEvent.click(verifyButton());
   await settle();
   expect(heading(subject.passwordHeading)).toBeInTheDocument();
+  if (checked && subject.requiresCheck) completeCaptcha("password-step-token");
   vi.clearAllMocks();
 }
 
@@ -270,6 +281,12 @@ function expectCodeStepOperationsBlocked(pending: "verify" | "send") {
   expect(heading(authText("otpTitle"))).toBeInTheDocument();
   expect(screen.queryByText(COOLDOWN_ERROR_MESSAGE)).not.toBeInTheDocument();
 }
+
+beforeEach(() => {
+  auth.signIn.mockResolvedValue(ACCEPTED);
+  auth.signOutOthers.mockResolvedValue(ACCEPTED);
+  auth.signOutHere.mockResolvedValue(ACCEPTED);
+});
 
 describe.each(subjects)("パスワード設定の画面($name)", (current) => {
   beforeEach(() => {
@@ -861,4 +878,138 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
   });
 
   // 判断Q: 理由が表示された後に再び送信した場合は、次の結果が出るまで、表示された理由が残る。
+});
+
+describe("サインアップのパスワード設定の段階のセキュリティチェック", () => {
+  beforeEach(() => {
+    subject = subjects[0];
+    vi.clearAllMocks();
+  });
+
+  it("チェックのウィジェットを描き、メールアドレスを渡して、設定の後のサインインに使う", async () => {
+    // Given
+    auth.setPassword.mockResolvedValue(ACCEPTED);
+    const user = userEvent.setup();
+    renderForm();
+    await advanceToPasswordStep();
+    await user.type(passwordInput(), "password123");
+
+    // When
+    await user.click(setPasswordButton());
+
+    // Then
+    expect(screen.getByTestId("turnstile-stub")).toBeInTheDocument();
+    await waitFor(() => expect(leave).toHaveBeenCalledWith("/rounds"));
+    expect(auth.signIn).toHaveBeenCalledExactlyOnceWith({
+      email: "user@example.com",
+      password: "password123",
+      captchaToken: "password-step-token",
+    });
+  });
+
+  it("コード入力の段階で発行されたトークンは使わず、パスワード設定の段階で発行されたトークンで設定とサインインを行う", async () => {
+    // Given
+    auth.setPassword.mockResolvedValue(ACCEPTED);
+    const user = userEvent.setup();
+    renderForm();
+    await advanceToCodeStep();
+    completeCaptcha("code-step-token");
+    auth.verifyCode.mockResolvedValue(ACCEPTED);
+    changeValue(codeInput(), "123456");
+    fireEvent.click(verifyButton());
+    await settle();
+    completeCaptcha("password-step-token");
+    await user.type(passwordInput(), "password123");
+
+    // When
+    await user.click(setPasswordButton());
+
+    // Then
+    await waitFor(() => expect(leave).toHaveBeenCalledWith("/rounds"));
+    expect(auth.signIn).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ captchaToken: "password-step-token" }),
+    );
+  });
+
+  it("パスワード設定の段階のチェックが未完了なら、コード入力の段階でチェックを完了していても、未完了の理由を表示し、設定しない", async () => {
+    // Given
+    const user = userEvent.setup();
+    renderForm();
+    await advanceToCodeStep();
+    completeCaptcha("code-step-token");
+    auth.verifyCode.mockResolvedValue(ACCEPTED);
+    changeValue(codeInput(), "123456");
+    fireEvent.click(verifyButton());
+    await settle();
+    await user.type(passwordInput(), "password123");
+
+    // When
+    await user.click(setPasswordButton());
+
+    // Then
+    expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
+    expect(auth.setPassword).not.toHaveBeenCalled();
+  });
+
+  it("設定の後のサインインが失敗すると、その理由を表示し、パスワード設定の段階に留まり、遷移しない", async () => {
+    // Given
+    auth.setPassword.mockResolvedValue(ACCEPTED);
+    auth.signIn.mockResolvedValue(refused("unreachable"));
+    const user = userEvent.setup();
+    renderForm();
+    await advanceToPasswordStep();
+    await user.type(passwordInput(), "password123");
+
+    // When
+    await user.click(setPasswordButton());
+
+    // Then
+    expect(await screen.findByText(NETWORK_ERROR_MESSAGE)).toBeInTheDocument();
+    expect(heading(subject.passwordHeading)).toBeInTheDocument();
+    expect(leave).not.toHaveBeenCalled();
+  });
+});
+
+describe("パスワード再設定のパスワード設定の段階", () => {
+  beforeEach(() => {
+    subject = subjects[1];
+    vi.clearAllMocks();
+  });
+
+  it("チェックのウィジェットを描かず、チェックが未完了でも設定できる", async () => {
+    // Given
+    auth.setPassword.mockResolvedValue(ACCEPTED);
+    const user = userEvent.setup();
+    renderForm();
+    await advanceToPasswordStep();
+    await user.type(passwordInput(), "password123");
+
+    // When
+    await user.click(setPasswordButton());
+
+    // Then
+    expect(screen.queryByTestId("turnstile-stub")).not.toBeInTheDocument();
+    await waitFor(() => expect(leave).toHaveBeenCalledWith("/signin"));
+    expect(auth.signIn).not.toHaveBeenCalled();
+  });
+
+  it("現在と同じパスワードで拒否されると、同じパスワードにはできない旨を表示し、サインインの終了も遷移もせず、入力値を保つ", async () => {
+    // Given
+    auth.setPassword.mockResolvedValue(refusedWith({ kind: "same_password" }));
+    const user = userEvent.setup();
+    renderForm();
+    await advanceToPasswordStep();
+    await user.type(passwordInput(), "password123");
+
+    // When
+    await user.click(setPasswordButton());
+
+    // Then
+    expect(
+      await screen.findByText(authText("failure.same_password")),
+    ).toBeInTheDocument();
+    expect(passwordInput()).toHaveValue("password123");
+    expect(auth.signOutHere).not.toHaveBeenCalled();
+    expect(leave).not.toHaveBeenCalled();
+  });
 });

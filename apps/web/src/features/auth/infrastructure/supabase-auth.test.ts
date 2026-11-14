@@ -676,6 +676,222 @@ describe("パスワードの設定(setPassword)", () => {
   });
 });
 
+describe("パスワードの設定の同じパスワードの拒否", () => {
+  it("設定の目的によらず、422 same_passwordを同じパスワードの失敗に写して返す", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.updateUser.mockResolvedValue({
+      error: new AuthApiError("same", 422, "same_password"),
+    });
+
+    // When
+    const result = await service.setPassword("password1");
+
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "same_password" },
+    });
+  });
+
+  it("サインインでは、same_passwordとcurrent_password_invalidのコードを専用の種類に写さず、その他の失敗にする", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.signInWithPassword
+      .mockResolvedValueOnce({
+        error: new AuthApiError("same", 422, "same_password"),
+      })
+      .mockResolvedValueOnce({
+        error: new AuthApiError("wrong", 400, "current_password_invalid"),
+      });
+
+    // When
+    const same = await service.signIn(credentials);
+    const invalid = await service.signIn(credentials);
+
+    // Then
+    const other = { kind: "failed", failure: { kind: "other" } };
+    expect(same).toEqual(other);
+    expect(invalid).toEqual(other);
+  });
+});
+
+describe("パスワードの変更(updatePassword)", () => {
+  const input = {
+    currentPassword: "password-original1",
+    newPassword: "password-changed1",
+  };
+
+  it("現在のパスワードと新しいパスワードを認証サービスへ1回渡し、成功を受け付けられたで返す", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.updateUser.mockResolvedValue({ error: null });
+
+    // When
+    const result = await service.updatePassword(input);
+
+    // Then
+    expect(auth.updateUser).toHaveBeenCalledExactlyOnceWith({
+      password: "password-changed1",
+      current_password: "password-original1",
+    });
+    expect(result).toEqual({ kind: "accepted" });
+  });
+
+  it.each([
+    ["400 current_password_invalid", 400, "current_password_invalid"],
+    ["422 same_password", 422, "same_password"],
+    ["422 weak_password", 422, "weak_password"],
+    [
+      "400 validation_failed(73バイトの新しいパスワード)",
+      400,
+      "validation_failed",
+      "weak_password",
+    ],
+    ["over_request_rate_limit", 429, "over_request_rate_limit", "rate_limited"],
+    [
+      "400 current_password_required",
+      400,
+      "current_password_required",
+      "other",
+    ],
+    ["未知のコード", 400, "some_unknown_code", "other"],
+    [
+      "サインインのinvalid_credentials(この操作では写さないコード)",
+      400,
+      "invalid_credentials",
+      "other",
+    ],
+    [
+      "コードの確認のotp_expired(この操作では写さないコード)",
+      403,
+      "otp_expired",
+      "other",
+    ],
+  ] as [string, number, string, string?][])(
+    "応答%sを、対応する失敗の種類にする",
+    async (_name, status, code, mapped) => {
+      // Given
+      const { service, auth } = setup();
+      auth.updateUser.mockResolvedValue({
+        error: new AuthApiError("元の文言", status, code),
+      });
+
+      // When
+      const result = await service.updatePassword(input);
+
+      // Then
+      expect(result).toEqual({
+        kind: "failed",
+        failure: { kind: mapped ?? code },
+      });
+    },
+  );
+
+  it("通信の断を値で返しても、呼び出しが投げても、届かなかった失敗にする", async () => {
+    // Given
+    const lost = setup();
+    lost.auth.updateUser.mockResolvedValue({ error: connectionLost });
+    const thrown = setup();
+    thrown.auth.updateUser.mockRejectedValue(new Error("network down"));
+
+    // When
+    const lostResult = await lost.service.updatePassword(input);
+    const thrownResult = await thrown.service.updatePassword(input);
+
+    // Then
+    const unreachable = { kind: "failed", failure: { kind: "unreachable" } };
+    expect(lostResult).toEqual(unreachable);
+    expect(thrownResult).toEqual(unreachable);
+  });
+
+  it("current_password_requiredとcurrent_password_invalidは、メッセージが同文でも、コードで区別する", async () => {
+    // Given
+    const message = "Current password required when setting new password.";
+    const required = setup();
+    required.auth.updateUser.mockResolvedValue({
+      error: new AuthApiError(message, 400, "current_password_required"),
+    });
+    const invalid = setup();
+    invalid.auth.updateUser.mockResolvedValue({
+      error: new AuthApiError(message, 400, "current_password_invalid"),
+    });
+
+    // When
+    const requiredResult = await required.service.updatePassword(input);
+    const invalidResult = await invalid.service.updatePassword(input);
+
+    // Then
+    expect(requiredResult).toEqual({
+      kind: "failed",
+      failure: { kind: "other" },
+    });
+    expect(invalidResult).toEqual({
+      kind: "failed",
+      failure: { kind: "current_password_invalid" },
+    });
+  });
+
+  it("接続を得られないときも、届かなかった失敗にする", async () => {
+    // Given
+    const service = unavailableService();
+
+    // When
+    const result = await service.updatePassword(input);
+
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+  });
+});
+
+describe("他の端末のサインアウト(signOutOthers)", () => {
+  it("scopeにothersを指定して1回頼み、問題が無ければ受け付けられたを返す", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.signOut.mockResolvedValue({ error: null });
+
+    // When
+    const result = await service.signOutOthers();
+
+    // Then
+    expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "others" });
+    expect(result).toEqual({ kind: "accepted" });
+  });
+
+  it("エラーが値で返ったときは、拒否された失敗の種類にして返す", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.signOut.mockResolvedValue({ error: rateLimited });
+
+    // When
+    const result = await service.signOutOthers();
+
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "rate_limited" },
+    });
+  });
+
+  it("呼び出しが投げたときと、接続を得られないときは、投げずに届かなかった失敗にする", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.signOut.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    // When
+    const thrown = await service.signOutOthers();
+    const unavailable = await unavailableService().signOutOthers();
+
+    // Then
+    const unreachable = { kind: "failed", failure: { kind: "unreachable" } };
+    expect(thrown).toEqual(unreachable);
+    expect(unavailable).toEqual(unreachable);
+  });
+});
+
 describe("この端末のサインアウト(signOutHere)", () => {
   it("この端末のサインアウトだけを、scopeにlocalを指定して1回頼み、問題が無ければ受け付けられたを返す", async () => {
     // Given

@@ -213,7 +213,7 @@ describe("パスワード再設定の手続き", () => {
       const view = viewOf(onPasswordStep);
 
       // When
-      await procedure.setPassword({ password }, view);
+      await procedure.setPassword({ email, password }, view);
 
       // Then
       expect(authenticator.setPassword).toHaveBeenCalledExactlyOnceWith(
@@ -233,7 +233,7 @@ describe("パスワード再設定の手続き", () => {
       const view = viewOf(onPasswordStep);
 
       // When
-      await procedure.setPassword({ password }, view);
+      await procedure.setPassword({ email, password }, view);
 
       // Then
       expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/signin");
@@ -247,7 +247,7 @@ describe("パスワード再設定の手続き", () => {
         refused({ kind: "weak_password" }),
       );
       const view = viewOf(onPasswordStep);
-      await procedure.setPassword({ password }, view);
+      await procedure.setPassword({ email, password }, view);
       const seen: {
         events: string[];
         error: string | null;
@@ -262,7 +262,7 @@ describe("パスワード再設定の手続き", () => {
       });
 
       // When
-      await procedure.setPassword({ password }, view);
+      await procedure.setPassword({ email, password }, view);
 
       // Then
       expect(seen).toEqual([
@@ -286,7 +286,7 @@ describe("パスワード再設定の手続き", () => {
         const view = viewOf(onPasswordStep);
 
         // When
-        await procedure.setPassword({ password }, view);
+        await procedure.setPassword({ email, password }, view);
 
         // Then
         expect(view.observedState.error).toBe(message);
@@ -304,14 +304,50 @@ describe("パスワード再設定の手続き", () => {
         refused({ kind: "weak_password" }),
       );
       const view = viewOf(onPasswordStep);
-      await procedure.setPassword({ password }, view);
+      await procedure.setPassword({ email, password }, view);
 
       // When
-      await procedure.setPassword({ password }, view);
+      await procedure.setPassword({ email, password }, view);
 
       // Then
       expect(authenticator.setPassword).toHaveBeenCalledTimes(2);
       expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+
+    it("同じパスワードで拒否されたら、その旨を示し、サインインを終えず、遷移せず、実行中を解除して再び送れる", async () => {
+      // Given
+      const { procedure, authenticator, navigation, viewOf } = setup();
+      authenticator.setPassword.mockResolvedValueOnce(
+        refused({ kind: "same_password" }),
+      );
+      const view = viewOf(onPasswordStep);
+
+      // When
+      await procedure.setPassword({ email, password }, view);
+      const afterRefused = view.observedState;
+      await procedure.setPassword({ email, password }, view);
+
+      // Then
+      expect(afterRefused).toMatchObject({
+        error: "same_password",
+        pending: null,
+        step: "password",
+      });
+      expect(authenticator.setPassword).toHaveBeenCalledTimes(2);
+      expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+
+    it("チェックを要さないため、パスワード設定の段階のチェックが未完了でも、設定を頼む", async () => {
+      // Given
+      const { procedure, authenticator, viewOf } = setup();
+      const view = viewOf(onPasswordStep);
+
+      // When
+      await procedure.setPassword({ email, password }, view);
+
+      // Then
+      expect(view.observedState.captchaToken).toBeNull();
+      expect(authenticator.setPassword).toHaveBeenCalledOnce();
     });
 
     it("パスワードに不備があれば、不備だけを示し、設定を頼まない", async () => {
@@ -321,7 +357,7 @@ describe("パスワード再設定の手続き", () => {
       const view = viewOf(onPasswordStep);
 
       // When
-      await procedure.setPassword({ password: "" }, view);
+      await procedure.setPassword({ email, password: "" }, view);
 
       // Then
       expect(events).toEqual([]);
@@ -336,8 +372,8 @@ describe("パスワード再設定の手続き", () => {
 
       // When
       await Promise.all([
-        procedure.setPassword({ password }, view),
-        procedure.setPassword({ password }, view),
+        procedure.setPassword({ email, password }, view),
+        procedure.setPassword({ email, password }, view),
       ]);
 
       // Then
@@ -351,7 +387,7 @@ describe("パスワード再設定の手続き", () => {
       const running = { ...onPasswordStep, pending: "setPassword" as const };
 
       // When
-      await procedure.setPassword({ password }, viewOf(running));
+      await procedure.setPassword({ email, password }, viewOf(running));
 
       // Then
       expect(events).toEqual([]);
@@ -383,7 +419,7 @@ describe("パスワード再設定の手続き", () => {
           return outcome;
         });
         const running = procedure.setPassword(
-          { password },
+          { email, password },
           viewOf(onPasswordStep),
         );
 
@@ -471,9 +507,9 @@ describe("パスワード再設定の手続き", () => {
         { email: "new@example.com", code: "123456" },
         view,
       );
-      await procedure.setPassword({ password }, view);
+      await procedure.setPassword({ email, password }, view);
       const afterWeak = view.observedState;
-      await procedure.setPassword({ password }, view);
+      await procedure.setPassword({ email, password }, view);
 
       // Then
       expect(afterRefused.captchaToken).toBeNull();

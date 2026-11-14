@@ -21,6 +21,7 @@ import { AuthHeader } from "./auth-header";
 import { OtpCodeStep } from "./otp-code-step";
 import { OtpEmailStep } from "./otp-email-step";
 import { PasswordInput } from "./password-input";
+import { Turnstile } from "./turnstile";
 import { useAuthTexts } from "./use-auth-texts";
 import { useScreenView } from "./use-screen-view";
 
@@ -74,7 +75,8 @@ export function PasswordSetupForm({
   );
   const step = { procedure, copy, flow, view, siteKey };
 
-  if (flow.step === "password") return <PasswordStep {...step} />;
+  if (flow.step === "password")
+    return <PasswordStep {...step} check={check} email={email} />;
   if (flow.step === "code")
     return <CodeStep {...step} check={check} email={email} />;
   return (
@@ -142,7 +144,19 @@ function CodeStep({
   );
 }
 
-function PasswordStep({ procedure, copy, flow, view }: StepProps) {
+// パスワード設定の段階。チェックを要する手続き(サインアップ)だけが、この段階のウィジェットでトークンを取り直す。
+function PasswordStep({
+  procedure,
+  copy,
+  flow,
+  view,
+  siteKey,
+  check,
+  email,
+}: StepProps & {
+  check: RefObject<TurnstileInstance | undefined>;
+  email: string;
+}) {
   const t = useTranslations("auth");
   const texts = useAuthTexts();
   const [password, setPassword] = useState("");
@@ -154,7 +168,7 @@ function PasswordStep({ procedure, copy, flow, view }: StepProps) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          void procedure.setPassword({ password }, view);
+          void procedure.setPassword({ email, password }, view);
         }}
         noValidate
         className="flex w-full flex-col gap-3"
@@ -177,6 +191,16 @@ function PasswordStep({ procedure, copy, flow, view }: StepProps) {
             />
           )}
         </AuthField>
+        {procedure.requiresCheck && (
+          <Turnstile
+            siteKey={siteKey}
+            ref={check}
+            onVerify={(token) =>
+              view.dispatch({ type: "captchaChecked", token })
+            }
+            error={texts.fieldError("captcha", flow.fieldErrors.captcha)}
+          />
+        )}
         <BusyButton type="submit" busy={submitting}>
           {copy.passwordSubmit}
         </BusyButton>

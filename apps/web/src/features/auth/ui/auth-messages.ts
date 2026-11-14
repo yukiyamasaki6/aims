@@ -20,6 +20,9 @@ export const authMessages = {
         "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
       captcha_failed: "認証に失敗しました。もう一度お試しください。",
       weak_password: passwordRule,
+      current_password_invalid: "現在のパスワードが正しくありません。",
+      same_password:
+        "現在のパスワードと同じパスワードにはできません。別のパスワードを入力してください。",
       other: "エラーが発生しました。しばらくしてから再度お試しください。",
     } satisfies Record<AuthFailureKind, string>,
     // 入力の誤りの種類。欄ごとに持つ。
@@ -30,6 +33,13 @@ export const authMessages = {
       },
       password: {
         required: "パスワードを入力してください。",
+        invalidRule: passwordRule,
+      },
+      currentPassword: {
+        required: "現在のパスワードを入力してください。",
+      },
+      newPassword: {
+        required: "新しいパスワードを入力してください。",
         invalidRule: passwordRule,
       },
       captcha: {
@@ -70,6 +80,12 @@ export const authMessages = {
     resetPasswordTitle: "新しいパスワードを設定",
     resetPasswordLabel: "新しいパスワード",
     resetPasswordSubmit: "パスワードを変更",
+    // パスワードの変更
+    changePasswordTitle: "パスワード変更",
+    changePasswordCurrentPlaceholder: "現在のパスワード",
+    changePasswordNewPlaceholder: "新しいパスワード",
+    changePasswordSubmit: "パスワードを変更",
+    changePasswordDone: "パスワードを変更しました。",
     // パスワードの設定(サインアップと再設定で共通)
     passwordFieldPlaceholder: "{label}（{min}文字以上・英数字を含む）",
     // 認証コード

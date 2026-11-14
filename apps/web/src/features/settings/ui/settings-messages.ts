@@ -3,5 +3,6 @@ export const settingsMessages = {
   ja: {
     title: "設定",
     accountTitle: "アカウント",
+    changePasswordItem: "パスワード変更",
   },
 } as const;

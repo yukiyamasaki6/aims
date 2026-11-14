@@ -47,6 +47,31 @@ describe("Button", () => {
       });
     });
 
+    describe("size=row", () => {
+      it("行の大きさのクラスを付与し、既定の高さのクラスは付与しない", () => {
+        // Given
+        const label = "Click me";
+
+        // When
+        render(
+          <Button variant="ghost" size="row">
+            {label}
+          </Button>,
+        );
+
+        // Then
+        const button = screen.getByRole("button", { name: label });
+        expect(button).toHaveClass(
+          "h-10",
+          "w-full",
+          "justify-start",
+          "rounded-none",
+          "px-3",
+        );
+        expect(button).not.toHaveClass("h-8");
+      });
+    });
+
     describe("className", () => {
       it("指定したクラスを付与する", () => {
         // Given

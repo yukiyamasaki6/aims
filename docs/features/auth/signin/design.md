@@ -37,7 +37,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/domain/captcha-token.ts`、`password.ts`: セキュリティチェックのトークンと、パスワードの入力と文字種の規則(domain。誤りの種類を返す)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
 - `src/features/auth/domain/auth-routes.ts`: 経路の規則(domain。`SIGN_IN_PATH`などの経路の文字列は経路表(`src/routes.ts`)が持つ)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(ラウンドの画面の根の経路`ROUNDS_PATH`と設定画面の経路`SETTINGS_PATH`)の配下の同一オリジンのパスだけ。根は経路表の`ROUNDS_PATH`と`SETTINGS_PATH`を読む)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`。書く側は検証せず符号化して付ける。検証は読む側の`destinationOf`だけが行う)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
 - `src/features/auth/index.ts`: 認証の機能の入口。他の機能が使う型を、別名なしで再公開する。
-- `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。`signInWithPassword`の呼び出しと、エラーを失敗の種類に写す変換(通信の断は名前で先に判定する)、例外(接続を作れない場合を含む)を通信エラーの失敗に変える変換を含む。接続は、渡された関数で照合のたびに取得する。
+- `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の5機能で共通。`docs/features/auth/design.md`)。`signInWithPassword`の呼び出しと、エラーを失敗の種類に写す変換(通信の断は名前で先に判定する)、例外(接続を作れない場合を含む)を通信エラーの失敗に変える変換を含む。接続は、渡された関数で照合のたびに取得する。
 - ページ全体の置き換えは `src/features/auth/infrastructure/browser-page-load.ts` が持つ(`window.location.replace`。履歴からサインイン画面を外し、新しい文書が、サインインした利用者の端末の識別情報で起動するので、一覧の見張りは読み込み直さない)。遷移元(`from`)は検証せずに入口から手続きへ渡り、検証は読む側の`destinationOf`が行う。
 - `src/features/auth/ui/use-screen-view.ts`: 画面の状態を持つ汎用のフック。`reducer`で遷移させる状態を`useState`で持ち、画面の約束`ScreenView`を作る。約束は描画ごとに作り、`dispatch`、`resetCheck`、`isMounted`は同じ参照にする。
 - `src/features/auth/application/page-replace.ts`: ページ全体を読み込んで今の場所を置き換える約束(`PageReplace`)。サインイン、サインアップ、セッション(サインアウト、喪失、利用者の不一致)の3つの手続きが使う。

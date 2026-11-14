@@ -2,7 +2,7 @@ import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { SIGN_IN_PATH } from "@/routes";
-import type { CallResult } from "./call-result";
+import { type CallResult, failureOf } from "./call-result";
 import {
   applyPassword,
   type PasswordSetup,
@@ -36,16 +36,24 @@ export function createResetPassword({
     purpose: "password-reset",
     clock,
     connectivity,
+    requiresCheck: false,
   };
   return {
+    requiresCheck: context.requiresCheck,
     sendCode: (input, view) => sendCode(context, input, view),
     verifyCode: (input, view) => verifyCode(context, input, view),
     tickCooldown: (dispatch) => tickCooldown(context, dispatch),
     // パスワードを変え、変えられて画面が表示中なら、この端末のサインインを終えて、サインインの画面へ移る(自動ではサインインしない)。
     // 他の端末のサインインは、認証サービスがパスワードの変更時に終える。端末のサインインの終了の結果は見ない。
-    // 変更の応答待ちに画面を離れたときは、表示も遷移もしない。
+    // 失敗は示して止まる。変更の応答待ちに画面を離れたときは、表示も遷移もしない。
     setPassword: async (input, view) => {
-      if (!(await applyPassword(context, input, view))) return;
+      const applied = await applyPassword(context, input, view);
+      if (!applied?.mounted) return;
+      const failure = failureOf(applied.result);
+      if (failure) {
+        view.dispatch({ type: "failed", failure });
+        return;
+      }
       await authenticator.signOutHere();
       pageNavigation.go(SIGN_IN_PATH);
     },

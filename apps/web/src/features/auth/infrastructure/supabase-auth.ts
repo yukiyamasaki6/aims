@@ -8,12 +8,14 @@ import {
 } from "@supabase/supabase-js";
 import type { SignInChange, SignInChanges } from "../application/auth-changes";
 import type { CallResult } from "../application/call-result";
+import type { ChangePasswordAuthenticator } from "../application/change-password";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import type {
   SessionAuthenticator,
   SessionReading,
 } from "../application/session";
 import type { SignInAuthenticator } from "../application/sign-in";
+import type { OtherSessionsSignOut } from "../application/sign-up";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 
 // 認証サービスの語彙(エラーのクラス名とコード、イベントの名前、セッションの形)を知るのは、このファイルだけである。
@@ -23,6 +25,8 @@ import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 // 接続は、作る関数を受け取り、頼みごとのたびに取得する(環境変数の欠落は届かない失敗になる)。ブラウザでは同じ接続が返る。
 export type SupabaseAuth = SignInAuthenticator &
   PasswordSetupAuthenticator &
+  ChangePasswordAuthenticator &
+  OtherSessionsSignOut &
   SessionAuthenticator &
   SignInChanges;
 
@@ -58,13 +62,26 @@ export function createSupabaseAuth(
       ),
     // パスワードの長さと強さの正本は認証サービスで、validation_failed(72バイトを超えるなど)も規則の文面で示す。
     // 全体の対応には足さない。メールアドレスの形式の誤りなど、他の操作のvalidation_failedを規則の文面にしてしまうため。
+    // 同じパスワードの拒否(same_password)も、サインアップ、再設定で共通に写す。
     setPassword: (password) =>
       toCallResult(
         () => auth().updateUser({ password }),
         PASSWORD_REJECTION_KINDS,
       ),
+    // 現在のパスワードは、必ず付ける(認証サービスが検証する)。コードの意味は専用の対応で写し、他の操作の対応は継がない。
+    updatePassword: ({ currentPassword, newPassword }) =>
+      toCallResult(
+        () =>
+          auth().updateUser({
+            password: newPassword,
+            current_password: currentPassword,
+          }),
+        CHANGE_PASSWORD_REJECTION_KINDS,
+      ),
     // この端末のサインインだけを終える。終えられたかは、呼び出し側が、この後のサインインの状態の読み取りで決める。
     signOutHere: () => toCallResult(() => signOut(auth(), "local")),
+    // この端末以外の全てのサインインを終える。
+    signOutOthers: () => toCallResult(() => signOut(auth(), "others")),
     subscribe: (listener) => {
       const {
         data: { subscription },
@@ -84,8 +101,8 @@ export function createSupabaseAuth(
   };
 }
 
-// 認証サービスのサインアウトの呼び出しは、ここだけである。この端末のセッションだけを無効にする。
-function signOut(auth: Auth, scope: "local") {
+// 認証サービスのサインアウトの呼び出しは、ここだけである。scopeは、この端末のセッションだけ(local)か、この端末以外(others)。
+function signOut(auth: Auth, scope: "local" | "others") {
   return auth.signOut({ scope });
 }
 
@@ -142,10 +159,22 @@ const REJECTION_KINDS = new Map<string, RejectionKind>([
   ["weak_password", "weak_password"],
 ]);
 
-// パスワードの設定だけが、上の対応に足して使う対応。
+// パスワードの設定(サインアップ、再設定)だけが、上の対応に足して使う対応。
 const PASSWORD_REJECTION_KINDS = new Map<string, RejectionKind>([
   ...REJECTION_KINDS,
   ["validation_failed", "weak_password"],
+  ["same_password", "same_password"],
+]);
+
+// パスワードの変更だけが使う対応。上の対応は継がない。
+// 現在のパスワードの誤りは、サインインのinvalid_credentialsと別のコードである。
+// current_password_requiredは、メッセージが同文でもコードで区別し、対応に置かずotherにする(画面が未入力を送らないため、起きたときは不整合)。
+const CHANGE_PASSWORD_REJECTION_KINDS = new Map<string, RejectionKind>([
+  ["current_password_invalid", "current_password_invalid"],
+  ["same_password", "same_password"],
+  ["weak_password", "weak_password"],
+  ["validation_failed", "weak_password"],
+  ["over_request_rate_limit", "rate_limited"],
 ]);
 
 type AuthServiceError = { name?: string; code?: string };

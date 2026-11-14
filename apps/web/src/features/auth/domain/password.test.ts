@@ -62,6 +62,16 @@ describe("validatePasswordPresent", () => {
     },
   );
 
+  it("空白だけの値は、空ではないためundefinedを返す", () => {
+    // Given
+
+    // When
+    const result = validatePasswordPresent("   ");
+
+    // Then
+    expect(result).toBeUndefined();
+  });
+
   it("空なら入力を促す文言を返す", () => {
     // Given
 

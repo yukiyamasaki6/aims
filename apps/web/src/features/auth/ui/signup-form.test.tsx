@@ -9,6 +9,7 @@ import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
+import type { SignInAuthenticator } from "../application/sign-in";
 import { createSignUp } from "../application/sign-up";
 import { SignUpForm } from "./signup-form";
 
@@ -22,7 +23,10 @@ const auth = {
   sendCode: vi.fn(),
   verifyCode: vi.fn(),
   setPassword: vi.fn(),
-} satisfies PasswordSetupAuthenticator & {};
+  signIn: vi.fn(),
+  signOutOthers: vi.fn(),
+} satisfies PasswordSetupAuthenticator &
+  SignInAuthenticator & { signOutOthers(): Promise<CallResult> };
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、onVerifyの発火とreset()の呼び出しを制御し、errorの表示を受け取れるスタブで模す。
 const turnstile = vi.hoisted(() => ({

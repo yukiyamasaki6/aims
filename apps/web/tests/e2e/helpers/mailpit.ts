@@ -1,4 +1,5 @@
-const MAILPIT_URL = "http://127.0.0.1:54324";
+// 独立したスタックで実行するときは、環境変数で宛先を上書きする。
+const MAILPIT_URL = process.env.E2E_MAILPIT_URL ?? "http://127.0.0.1:54324";
 
 async function findOtpEmailHtml(email: string): Promise<string> {
   for (let i = 0; i < 20; i++) {
