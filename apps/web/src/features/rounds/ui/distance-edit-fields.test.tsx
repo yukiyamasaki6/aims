@@ -73,6 +73,16 @@ const recordedShots: Shot[] = [1, 2, 3].map((n) => ({
 
 const EVENT_ID = "00000000-0000-4000-8000-000000000001";
 
+// 種別・弓種の選択欄を開き、名前の選択肢を選ぶ。
+async function chooseFilter(
+  user: ReturnType<typeof userEvent.setup>,
+  testId: string,
+  optionName: string,
+) {
+  await user.click(screen.getByTestId(testId));
+  await user.click(await screen.findByRole("option", { name: optionName }));
+}
+
 function setup(
   overrides: Partial<Parameters<typeof DistanceEditFields>[0]> = {},
 ) {
@@ -879,7 +889,179 @@ describe("DistanceEditFields", () => {
       });
     });
 
-    describe("タブの切り替え", () => {
+    describe("種別・弓種の選択欄", () => {
+      it("ラウンドの種別・弓種を選択中として表示する", async () => {
+        // Given
+        const user = userEvent.setup();
+        setup();
+
+        // When
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+        // Then
+        expect(
+          screen.getByTestId("target-face-format-select"),
+        ).toHaveTextContent(roundsText("formatOption.outdoor"));
+        expect(
+          screen.getByTestId("target-face-bow-type-select"),
+        ).toHaveTextContent(roundsText("bowTypeOption.recurve"));
+      });
+
+      it.each([
+        [
+          "種別",
+          "target-face-format-select",
+          ["formatOption.outdoor", "formatOption.indoor", "formatOption.field"],
+        ],
+        [
+          "弓種",
+          "target-face-bow-type-select",
+          [
+            "bowTypeOption.recurve",
+            "bowTypeOption.compound",
+            "bowTypeOption.barebow",
+          ],
+        ],
+      ] as const)(
+        "%sの選択欄を開くと、先頭に「指定なし」を置いて選択肢を並べ、「すべて」は置かない",
+        async (_name, testId, keys) => {
+          // Given
+          const user = userEvent.setup();
+          setup();
+          await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+          // When
+          await user.click(screen.getByTestId(testId));
+
+          // Then
+          expect(
+            (await screen.findAllByRole("option")).map((o) => o.textContent),
+          ).toEqual([
+            roundsText("targetFaceFilterNone"),
+            ...keys.map((k) => roundsText(k)),
+          ]);
+          expect(
+            screen.queryByRole("option", { name: roundsText("filterAll") }),
+          ).not.toBeInTheDocument();
+        },
+      );
+
+      it("種別・弓種の選択欄が、それぞれの項目名を持つ", async () => {
+        // Given
+        const user = userEvent.setup();
+        setup();
+
+        // When
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+        // Then
+        expect(
+          screen.getByRole("combobox", {
+            name: roundsText("roundConfigFormat"),
+          }),
+        ).toBe(screen.getByTestId("target-face-format-select"));
+        expect(
+          screen.getByRole("combobox", {
+            name: roundsText("roundConfigBowType"),
+          }),
+        ).toBe(screen.getByTestId("target-face-bow-type-select"));
+      });
+
+      it("種別だけを「指定なし」にすると、弓種だけで絞り込む", async () => {
+        // Given
+        const user = userEvent.setup();
+        const targetFaceIndoorRecurve: TargetFaceOption = {
+          ...targetFaceIndoorCompound,
+          id: "face-indoor-recurve",
+          name: "5点的インドア(リカーブ)",
+          bow_type: ["recurve"],
+        };
+        setup({ targetFaces: [...targetFaces, targetFaceIndoorRecurve] });
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+        // When
+        await chooseFilter(
+          user,
+          "target-face-format-select",
+          roundsText("targetFaceFilterNone"),
+        );
+
+        // Then
+        expect(
+          screen.getByTestId(
+            `target-face-option-${targetFaceIndoorRecurve.id}`,
+          ),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByTestId(
+            `target-face-option-${targetFaceIndoorCompound.id}`,
+          ),
+        ).not.toBeInTheDocument();
+      });
+
+      it("弓種だけを「指定なし」にすると、種別だけで絞り込む", async () => {
+        // Given
+        const user = userEvent.setup();
+        const targetFaceOutdoorBarebow: TargetFaceOption = {
+          ...targetFaceOutdoorRecurve,
+          id: "face-outdoor-barebow",
+          name: "10点的アウトドア(ベアボウ)",
+          bow_type: ["barebow"],
+        };
+        setup({ targetFaces: [...targetFaces, targetFaceOutdoorBarebow] });
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+        // When
+        await chooseFilter(
+          user,
+          "target-face-bow-type-select",
+          roundsText("targetFaceFilterNone"),
+        );
+
+        // Then
+        expect(
+          screen.getByTestId(
+            `target-face-option-${targetFaceOutdoorBarebow.id}`,
+          ),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByTestId(
+            `target-face-option-${targetFaceIndoorCompound.id}`,
+          ),
+        ).not.toBeInTheDocument();
+      });
+
+      it("選び直した値は、ポップアップを閉じて開き直しても保持される", async () => {
+        // Given
+        const user = userEvent.setup();
+        setup();
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
+        await chooseFilter(
+          user,
+          "target-face-format-select",
+          roundsText("targetFaceFilterNone"),
+        );
+        await chooseFilter(
+          user,
+          "target-face-bow-type-select",
+          roundsText("targetFaceFilterNone"),
+        );
+        await user.keyboard("{Escape}");
+
+        // When
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+        // Then
+        expect(
+          screen.getByTestId("target-face-format-select"),
+        ).toHaveTextContent(roundsText("targetFaceFilterNone"));
+        expect(
+          screen.getByTestId("target-face-bow-type-select"),
+        ).toHaveTextContent(roundsText("targetFaceFilterNone"));
+      });
+    });
+
+    describe("選択欄の切り替え", () => {
       it("選んだ種別・弓種で絞り込み直す", async () => {
         // Given
         const user = userEvent.setup();
@@ -887,8 +1069,16 @@ describe("DistanceEditFields", () => {
         await user.click(screen.getByTestId("target-face-picker-trigger"));
 
         // When
-        await user.click(screen.getByTestId("target-face-format-tab-all"));
-        await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
+        await chooseFilter(
+          user,
+          "target-face-format-select",
+          roundsText("targetFaceFilterNone"),
+        );
+        await chooseFilter(
+          user,
+          "target-face-bow-type-select",
+          roundsText("targetFaceFilterNone"),
+        );
 
         // Then
         expect(
@@ -904,7 +1094,7 @@ describe("DistanceEditFields", () => {
       });
     });
 
-    describe("種別タブの切り替え", () => {
+    describe("種別の選択欄の切り替え", () => {
       it("選んだ種別・弓種に対応する的だけを表示する", async () => {
         // Given
         const user = userEvent.setup();
@@ -920,7 +1110,11 @@ describe("DistanceEditFields", () => {
         await user.click(screen.getByTestId("target-face-picker-trigger"));
 
         // When
-        await user.click(screen.getByTestId("target-face-format-tab-field"));
+        await chooseFilter(
+          user,
+          "target-face-format-select",
+          roundsText("formatOption.field"),
+        );
 
         // Then
         expect(
@@ -945,8 +1139,16 @@ describe("DistanceEditFields", () => {
         const user = userEvent.setup();
         setup();
         await user.click(screen.getByTestId("target-face-picker-trigger"));
-        await user.click(screen.getByTestId("target-face-format-tab-all"));
-        await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
+        await chooseFilter(
+          user,
+          "target-face-format-select",
+          roundsText("targetFaceFilterNone"),
+        );
+        await chooseFilter(
+          user,
+          "target-face-bow-type-select",
+          roundsText("targetFaceFilterNone"),
+        );
 
         // When
         await user.click(
@@ -968,8 +1170,16 @@ describe("DistanceEditFields", () => {
         const user = userEvent.setup();
         const { enqueue } = setup();
         await user.click(screen.getByTestId("target-face-picker-trigger"));
-        await user.click(screen.getByTestId("target-face-format-tab-all"));
-        await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
+        await chooseFilter(
+          user,
+          "target-face-format-select",
+          roundsText("targetFaceFilterNone"),
+        );
+        await chooseFilter(
+          user,
+          "target-face-bow-type-select",
+          roundsText("targetFaceFilterNone"),
+        );
         await user.click(
           screen.getByTestId(
             `target-face-option-${targetFaceIndoorCompound.id}`,
@@ -1002,8 +1212,16 @@ describe("DistanceEditFields", () => {
         await user.click(screen.getByTestId("target-face-picker-trigger"));
 
         // When
-        await user.click(screen.getByTestId("target-face-format-tab-all"));
-        await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
+        await chooseFilter(
+          user,
+          "target-face-format-select",
+          roundsText("targetFaceFilterNone"),
+        );
+        await chooseFilter(
+          user,
+          "target-face-bow-type-select",
+          roundsText("targetFaceFilterNone"),
+        );
 
         // Then
         const items = screen.getAllByTestId(/^target-face-option-/);

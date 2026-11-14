@@ -428,6 +428,16 @@ afterEach(() => {
   setOnline(true);
 });
 
+// 種別・弓種の選択欄を開き、名前の選択肢を選ぶ。
+async function chooseFilter(
+  user: ReturnType<typeof userEvent.setup>,
+  testId: string,
+  optionName: string,
+) {
+  await user.click(screen.getByTestId(testId));
+  await user.click(await screen.findByRole("option", { name: optionName }));
+}
+
 describe("ScorecardClient 初期表示・集計", () => {
   it("スコアを入力すると、エンド小計・距離の集計・ラウンド全体の集計に反映される", async () => {
     // Given
@@ -2593,8 +2603,16 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     // When
     await user.click(screen.getByTestId("distance-config-toggle-1"));
     await user.click(screen.getByTestId("target-face-picker-trigger"));
-    await user.click(screen.getByTestId("target-face-format-tab-all"));
-    await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
+    await chooseFilter(
+      user,
+      "target-face-format-select",
+      roundsText("targetFaceFilterNone"),
+    );
+    await chooseFilter(
+      user,
+      "target-face-bow-type-select",
+      roundsText("targetFaceFilterNone"),
+    );
     await user.click(
       screen.getByTestId(`target-face-option-${targetFaceNoX.id}`),
     );
@@ -2620,8 +2638,16 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
     await user.click(screen.getByTestId("distance-config-toggle-1"));
     await user.click(screen.getByTestId("target-face-picker-trigger"));
-    await user.click(screen.getByTestId("target-face-format-tab-all"));
-    await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
+    await chooseFilter(
+      user,
+      "target-face-format-select",
+      roundsText("targetFaceFilterNone"),
+    );
+    await chooseFilter(
+      user,
+      "target-face-bow-type-select",
+      roundsText("targetFaceFilterNone"),
+    );
     await user.click(
       screen.getByTestId(`target-face-option-${targetFaceNoX.id}`),
     );

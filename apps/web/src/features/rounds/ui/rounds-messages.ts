@@ -169,6 +169,7 @@ export const roundsMessages = {
     targetFaceTriggerLocked: "{name}（スコア記録済みのため変更不可）",
     targetFaceTriggerMissing: "的データを取得できません（タップで変更）",
     filterAll: "すべて",
+    targetFaceFilterNone: "指定なし",
     // スコア入力
     keypadClose: "テンキーを閉じる",
     keypadPanelClose: "テンキーパネルを閉じる",

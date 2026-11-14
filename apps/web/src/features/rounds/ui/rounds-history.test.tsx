@@ -286,6 +286,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// 種別・弓種の選択欄を開き、名前の選択肢を選ぶ。
+async function chooseFilter(
+  user: ReturnType<typeof userEvent.setup>,
+  testId: string,
+  optionName: string,
+) {
+  await user.click(screen.getByTestId(testId));
+  await user.click(await screen.findByRole("option", { name: optionName }));
+}
+
 describe("RoundsHistory", () => {
   describe("履歴の表示", () => {
     it("表示を始めると履歴を1回取得し、取得できた完了のラウンドをカードで表示する", async () => {
@@ -1320,6 +1330,12 @@ describe("RoundsHistory", () => {
             await screen.findByTestId(`target-face-option-${face.id}`),
           ).toBeVisible();
         }
+        expect(
+          screen.getByTestId("target-face-format-select"),
+        ).toHaveTextContent(roundsText("targetFaceFilterNone"));
+        expect(
+          screen.getByTestId("target-face-bow-type-select"),
+        ).toHaveTextContent(roundsText("targetFaceFilterNone"));
         await user.click(
           screen.getByTestId(`target-face-option-${OUTDOOR_FACE.id}`),
         );
@@ -1402,6 +1418,42 @@ describe("RoundsHistory", () => {
         expect(
           screen.queryByTestId(`target-face-option-${OUTDOOR_FACE.id}`),
         ).toBeNull();
+        expect(
+          screen.getByTestId("target-face-format-select"),
+        ).toHaveTextContent(roundsText("formatOption.indoor"));
+        expect(
+          screen.getByTestId("target-face-bow-type-select"),
+        ).toHaveTextContent(roundsText("bowTypeOption.compound"));
+      });
+
+      it("的の絞り込み欄で種別を選び直すと、的の一覧が変わる", async () => {
+        // Given
+        procedures.fetching.savedTargetFaces.mockReturnValue(FACES);
+        const user = await renderWithDistances([distanceRow(50)], {
+          format: "indoor",
+          bowType: "compound",
+        });
+        await user.click(
+          screen.getByTestId("history-filter-distance-0-target-add"),
+        );
+        await screen.findByTestId(`target-face-option-${INDOOR_FACE.id}`);
+
+        // When
+        await chooseFilter(
+          user,
+          "target-face-format-select",
+          roundsText("targetFaceFilterNone"),
+        );
+        await chooseFilter(
+          user,
+          "target-face-bow-type-select",
+          roundsText("targetFaceFilterNone"),
+        );
+
+        // Then
+        expect(
+          screen.getByTestId(`target-face-option-${OUTDOOR_FACE.id}`),
+        ).toBeVisible();
       });
 
       it("的の一覧は、保存した一覧を読むだけで、履歴のために的を取得しない", async () => {
