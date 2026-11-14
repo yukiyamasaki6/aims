@@ -89,6 +89,19 @@ test.describe("認証済み", () => {
     await expect(badge).not.toBeVisible();
     expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
   });
+
+  test("設定画面で分類「アカウント」の「パスワード変更」を押すと、パスワード変更の画面へ移動する", async ({
+    page,
+  }) => {
+    await page.goto("/settings");
+    await page
+      .getByRole("link", { name: settingsText("changePasswordItem") })
+      .click();
+    await expect(page).toHaveURL(/\/settings\/password$/);
+    await expect(
+      page.getByRole("heading", { name: authText("changePasswordTitle") }),
+    ).toBeVisible();
+  });
 });
 
 test.describe("未認証", () => {

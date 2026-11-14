@@ -19,6 +19,7 @@ const buttonVariants = cva(
         default: "h-8 gap-1.5 px-2.5",
         sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-9 gap-1.5 px-2.5",
+        row: "relative h-10 w-full justify-start rounded-none border-t-0 border-foreground/40 px-3 focus-visible:z-10",
         "icon-sm": "size-7 rounded-[min(var(--radius-md),12px)]",
       },
     },

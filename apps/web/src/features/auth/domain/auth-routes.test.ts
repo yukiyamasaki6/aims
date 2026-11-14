@@ -253,6 +253,11 @@ describe("redirectFor", () => {
       "/signin?returnTo=%2Fsettings%2Fx",
     ],
     [
+      "未認証で/settings/passwordを開くと、その遷移元つきのサインイン",
+      { pathname: "/settings/password" },
+      "/signin?returnTo=%2Fsettings%2Fpassword",
+    ],
+    [
       "認証済みでサインインを設定の遷移元付きで開くと、設定",
       {
         signedIn: true,

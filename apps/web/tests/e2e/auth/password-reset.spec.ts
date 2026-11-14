@@ -1,17 +1,20 @@
-import type { Browser, Page } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
+import type { Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   clickSignInAndAwaitRounds,
   createConfirmedUser,
   SHARED_AUTH_STATE_PATH,
-  signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
+import { signInError } from "../helpers/auth-api";
 import { fastForwardResendCooldown } from "../helpers/clock";
 import { getOtpCodeFromMailpit } from "../helpers/mailpit";
-import { mockTurnstile, waitForTurnstileToken } from "../helpers/turnstile";
+import {
+  expectSignedOutIn,
+  signInOnOtherDevice,
+} from "../helpers/other-browser-device";
+import { waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
@@ -41,58 +44,16 @@ async function newUser(prefix: string) {
   return email;
 }
 
-// アクセストークンの期限(jwt_expiry、3600秒)を過ぎるまで時計を進める量。
-const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
-
-// 別の端末に見立てた、別のブラウザの文脈でサインインし、保護された画面(ラウンド一覧)を開いた画面を返す。
-// 画面の枠をService Workerのキャッシュから返さないため、この文脈ではService Workerを使わない。
-// 時計を先に差し替え、期限を過ぎるまで進められるようにする。
-async function signInOnOtherDevice(browser: Browser, email: string) {
-  const context = await browser.newContext({ serviceWorkers: "block" });
-  const page = await context.newPage();
-  await mockTurnstile(page);
-  await page.clock.install();
-  await signUpAndSignIn(page, { email, password: ORIGINAL_PASSWORD });
-  await page.goto("/rounds");
-  await waitForHydration(page);
-  return { context, page };
-}
-
-// 他の端末のセッションは、パスワードの変更で認証サービスが終える。proxy は端末内でトークンを検証するため、アクセストークンの期限までは枠が開く。
-// 期限を過ぎて更新が拒否されると、見張りがサインインへ移す。
-async function expectSignedOutIn(page: Page) {
-  await page.clock.fastForward(PAST_JWT_EXPIRY_MS);
-  await expect(page).toHaveURL(/\/signin(\?|$)/);
-  await expect(
-    page.getByRole("heading", { name: authText("signInTitle") }),
-  ).toBeVisible();
-}
-
-// 検証の対象のセッションとは別のクライアントで、その資格情報でサインインできるかを確かめる。
-async function signInError(email: string, password: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    throw new Error("Missing Supabase environment variables in e2e helper.");
-  }
-  const client = createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { error } = await client.auth.signInWithPassword({
-    email,
-    password,
-    options: { captchaToken: "test-captcha-token" },
-  });
-  return error?.code ?? null;
-}
-
 test("メールで本人確認してパスワードを変更すると、この端末と別の端末のサインインが終わり、新しいパスワードでだけサインインできる", async ({
   page,
   browser,
 }) => {
   // 別の端末でサインインしておく。
   const email = await newUser("password-reset");
-  const otherDevice = await signInOnOtherDevice(browser, email);
+  const otherDevice = await signInOnOtherDevice(browser, {
+    email,
+    password: ORIGINAL_PASSWORD,
+  });
 
   // メールを送って認証コードの入力画面へ進む。
   const { emailInput, sendCodeButton } = await openEmailStep(page);

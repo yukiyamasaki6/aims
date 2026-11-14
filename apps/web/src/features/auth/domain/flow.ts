@@ -1,7 +1,7 @@
 import type { AuthCodeError, ResendWaitError } from "./auth-code";
 import type { CaptchaError } from "./captcha-token";
 import type { EmailError } from "./email-address";
-import type { PasswordError } from "./password";
+import type { CurrentPasswordError, PasswordError } from "./password";
 
 // 操作の流れ(集約)が共通に使う型。4つの操作の集約が、同じ形の命令の結果を返す。
 
@@ -9,6 +9,8 @@ import type { PasswordError } from "./password";
 export type FieldErrorKinds = {
   email: EmailError;
   password: PasswordError;
+  currentPassword: CurrentPasswordError;
+  newPassword: PasswordError;
   code: AuthCodeError;
   captcha: CaptchaError;
   resend: ResendWaitError;
