@@ -6,10 +6,10 @@ import {
 import { createBrowserHistoryViewMemory } from "./browser-history-view-memory";
 
 const saved: HistoryViewState = {
-  condition: {
+  input: {
     unit: "distance",
-    sortKey: "score",
-    sortDirection: "asc",
+    dateDirection: "asc",
+    scoreDirection: "desc",
     format: "indoor",
     bowType: "compound",
     dateFrom: "2026-05-01",
@@ -20,24 +20,16 @@ const saved: HistoryViewState = {
       {
         distance: 50,
         arrowsPerEnd: 6,
-        totalArrows: 36,
         targetFaceId: "a1000000-0000-0000-0000-000000000001",
       },
       {
         distance: 30,
         arrowsPerEnd: null,
-        totalArrows: null,
         targetFaceId: null,
       },
     ],
-    distanceRow: {
-      distance: 30,
-      arrowsPerEnd: 3,
-      totalArrows: null,
-      targetFaceId: null,
-    },
+    distanceRow: { distance: 30, arrowsPerEnd: 3, targetFaceId: null },
   },
-  filterOpen: false,
 };
 
 // 端末に最後にサインインした利用者。テストが差し替える。
@@ -67,77 +59,110 @@ describe("createBrowserHistoryViewMemory", () => {
       expect(state).toEqual(saved);
     });
 
-    it("単位と距離の行の項目が無い旧い保存値(配備前にタブへ保存されたもの)は、単位をラウンド、距離の行を指定なしにし、他の項目は保存値のままにして返す", () => {
+    it("旧い形の保存値(condition・sortKey・unit・distanceRow・filterOpen・distanceRowInput)は、読み替えず、既定の状態で返す", () => {
       // Given
-      const { unit, distanceRow, ...legacyCondition } = saved.condition;
-      window.sessionStorage.setItem(
-        "aims:history-view",
-        JSON.stringify({
-          userId: "user-1",
-          state: { condition: legacyCondition, filterOpen: false },
-        }),
-      );
-      const memory = createBrowserHistoryViewMemory(identityReader);
-
-      // When
-      const state = memory.read();
-
-      // Then
-      expect(state).toEqual({
-        condition: { ...saved.condition, unit: "round", distanceRow: null },
-        filterOpen: false,
-      });
-    });
-
-    it("期間と得点の範囲と距離の構成の項目が無い旧い保存値は、範囲を指定なし、距離の構成を空の配列にし、他の項目は保存値のままにして返す", () => {
-      // Given
-      const {
-        dateFrom,
-        dateTo,
-        scoreMin,
-        scoreMax,
-        distances,
-        ...legacyCondition
-      } = saved.condition;
-      window.sessionStorage.setItem(
-        "aims:history-view",
-        JSON.stringify({
-          userId: "user-1",
-          state: { condition: legacyCondition, filterOpen: false },
-        }),
-      );
-      const memory = createBrowserHistoryViewMemory(identityReader);
-
-      // When
-      const state = memory.read();
-
-      // Then
-      expect(state).toEqual({
-        condition: {
-          ...legacyCondition,
-          dateFrom: null,
-          dateTo: null,
-          scoreMin: null,
-          scoreMax: null,
-          distances: [],
-        },
-        filterOpen: false,
-      });
-    });
-
-    it("保存値の距離の構成の行が型に合わなければ、距離の構成だけを空の配列にし、他の項目は保存値のままにして返す", () => {
-      // Given
-      const brokenRows = [
-        { ...saved.condition.distances[0], targetFaceId: "not-a-uuid" },
-        saved.condition.distances[1],
-      ];
+      // 旧い形を読み替えない規則の全組はdomainで確かめる。ここでは、読み出しがその規則を通ることを確かめる。
       window.sessionStorage.setItem(
         "aims:history-view",
         JSON.stringify({
           userId: "user-1",
           state: {
-            condition: { ...saved.condition, distances: brokenRows },
+            condition: {
+              unit: "distance",
+              sortKey: "score",
+              sortDirection: "asc",
+              format: "indoor",
+            },
             filterOpen: false,
+            distanceRowInput: [
+              { distance: "50", arrowsPerEnd: "", targetFaceId: null },
+            ],
+          },
+        }),
+      );
+      const memory = createBrowserHistoryViewMemory(identityReader);
+
+      // When
+      const state = memory.read();
+
+      // Then
+      expect(state).toEqual(DEFAULT_HISTORY_VIEW_STATE);
+    });
+
+    it("旧い保存値に矢の総数(totalArrows)が入っていても、他の項目は保ち、総数だけを捨てて読み、再保存すると鍵が消える", () => {
+      // Given
+      window.sessionStorage.setItem(
+        "aims:history-view",
+        JSON.stringify({
+          userId: "user-1",
+          state: {
+            input: {
+              ...saved.input,
+              distances: [
+                {
+                  distance: 50,
+                  arrowsPerEnd: 6,
+                  totalArrows: 36,
+                  targetFaceId: null,
+                },
+              ],
+              distanceRow: {
+                distance: 30,
+                arrowsPerEnd: 3,
+                totalArrows: 36,
+                targetFaceId: null,
+              },
+            },
+          },
+        }),
+      );
+      const memory = createBrowserHistoryViewMemory(identityReader);
+
+      // When
+      const state = memory.read();
+      memory.write(state);
+
+      // Then
+      expect(state.input.distanceRow).toEqual(saved.input.distanceRow);
+      expect(state.input.distances).toEqual([
+        { distance: 50, arrowsPerEnd: 6, targetFaceId: null },
+      ]);
+      expect(window.sessionStorage.getItem("aims:history-view")).not.toContain(
+        "totalArrows",
+      );
+    });
+
+    it("距離の行を持つ入力値を書いて読むと、同じ距離の行が返り、旧い距離の行の入力の鍵は書かない", () => {
+      // Given
+      const memory = createBrowserHistoryViewMemory(identityReader);
+
+      // When
+      memory.write(saved);
+      const state = createBrowserHistoryViewMemory(identityReader).read();
+
+      // Then
+      expect(state.input.distanceRow).toEqual({
+        distance: 30,
+        arrowsPerEnd: 3,
+        targetFaceId: null,
+      });
+      expect(window.sessionStorage.getItem("aims:history-view")).not.toContain(
+        "distanceRowInput",
+      );
+    });
+
+    it("保存値の向きが壊れていれば、その項目だけを既定にし、他の項目は保存値のままにして返す", () => {
+      // Given
+      window.sessionStorage.setItem(
+        "aims:history-view",
+        JSON.stringify({
+          userId: "user-1",
+          state: {
+            input: {
+              ...saved.input,
+              dateDirection: "up",
+              scoreDirection: "up",
+            },
           },
         }),
       );
@@ -148,8 +173,7 @@ describe("createBrowserHistoryViewMemory", () => {
 
       // Then
       expect(state).toEqual({
-        condition: { ...saved.condition, distances: [] },
-        filterOpen: false,
+        input: { ...saved.input, dateDirection: "desc", scoreDirection: null },
       });
     });
 

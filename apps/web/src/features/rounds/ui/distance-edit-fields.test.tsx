@@ -923,7 +923,7 @@ describe("DistanceEditFields", () => {
           ],
         ],
       ] as const)(
-        "%sの選択欄を開くと、先頭に「指定なし」を置いて選択肢を並べ、「すべて」は置かない",
+        "%sの選択欄を開くと、先頭に「指定なし」を置いて選択肢だけを並べる",
         async (_name, testId, keys) => {
           // Given
           const user = userEvent.setup();
@@ -940,9 +940,6 @@ describe("DistanceEditFields", () => {
             roundsText("targetFaceFilterNone"),
             ...keys.map((k) => roundsText(k)),
           ]);
-          expect(
-            screen.queryByRole("option", { name: roundsText("filterAll") }),
-          ).not.toBeInTheDocument();
         },
       );
 

@@ -465,8 +465,8 @@ describe("roundsList", () => {
   const noFaces = ok(null);
   const condition: HistoryCondition = {
     unit: "round",
-    sortKey: "score",
-    sortDirection: "asc",
+    dateDirection: "asc",
+    scoreDirection: "desc",
     format: "indoor",
     bowType: "compound",
     dateFrom: "2026-05-01",
@@ -478,7 +478,7 @@ describe("roundsList", () => {
   };
   const request = { condition, after: "round-9", size: 25 };
 
-  it("条件(基準・向き・種別・弓種・期間・得点の範囲)、続きの起点、件数を、履歴の関数(rounds_list)の引数に写して1回呼ぶ", async () => {
+  it("条件(日付の向き・得点の向き・種別・弓種・期間・得点の範囲)、続きの起点、件数を、履歴の関数(rounds_list)の引数に写して1回呼ぶ", async () => {
     // Given
     const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
 
@@ -491,8 +491,8 @@ describe("roundsList", () => {
       {
         name: "rounds_list",
         args: {
-          p_sort_key: "score",
-          p_sort_direction: "asc",
+          p_date_direction: "asc",
+          p_score_direction: "desc",
           p_format: "indoor",
           p_bow_type: "compound",
           p_after_id: "round-9",
@@ -506,7 +506,7 @@ describe("roundsList", () => {
     ]);
   });
 
-  it("期間・得点の範囲・距離の構成の指定が全くなければ、5引数を含めず、旧い版と同じ6引数で呼ぶ", async () => {
+  it("期間・得点の範囲・距離の構成の指定が全くなければ、5引数を含めず、6引数で呼ぶ", async () => {
     // Given
     const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
 
@@ -517,10 +517,10 @@ describe("roundsList", () => {
     expect(Object.keys(database.rpcCalls[0]?.args ?? {}).sort()).toEqual([
       "p_after_id",
       "p_bow_type",
+      "p_date_direction",
       "p_format",
       "p_limit",
-      "p_sort_direction",
-      "p_sort_key",
+      "p_score_direction",
     ]);
   });
 
@@ -545,7 +545,9 @@ describe("roundsList", () => {
       const args = database.rpcCalls[0]?.args ?? {};
       expect(args).toMatchObject(expected);
       expect(
-        Object.keys(args).filter((key) => /^p_(date|score)_/.test(key)),
+        Object.keys(args).filter((key) =>
+          /^p_(date_(from|to)|score_(min|max))$/.test(key),
+        ),
       ).toEqual(Object.keys(expected));
     },
   );
@@ -557,13 +559,11 @@ describe("roundsList", () => {
       {
         distance: 50,
         arrowsPerEnd: 6,
-        totalArrows: 36,
         targetFaceId: "a1000000-0000-0000-0000-000000000001",
       },
       {
         distance: 30,
         arrowsPerEnd: null,
-        totalArrows: null,
         targetFaceId: null,
       },
     ];
@@ -577,18 +577,16 @@ describe("roundsList", () => {
     // Then
     expect(database.rpcCalls).toHaveLength(1);
     expect(database.rpcCalls[0]?.args).toMatchObject({
-      p_sort_key: listRequest.condition.sortKey,
+      p_date_direction: listRequest.condition.dateDirection,
       p_distances: [
         {
           distance: 50,
           arrows_per_end: 6,
-          total_arrows: 36,
           target_face_id: "a1000000-0000-0000-0000-000000000001",
         },
         {
           distance: 30,
           arrows_per_end: null,
-          total_arrows: null,
           target_face_id: null,
         },
       ],
@@ -616,7 +614,6 @@ describe("roundsList", () => {
       {
         distance: 70,
         arrowsPerEnd: null,
-        totalArrows: null,
         targetFaceId: null,
       },
     ];
@@ -631,15 +628,15 @@ describe("roundsList", () => {
     expect(Object.keys(database.rpcCalls[0]?.args ?? {}).sort()).toEqual([
       "p_after_id",
       "p_bow_type",
+      "p_date_direction",
       "p_date_from",
       "p_date_to",
       "p_distances",
       "p_format",
       "p_limit",
+      "p_score_direction",
       "p_score_max",
       "p_score_min",
-      "p_sort_direction",
-      "p_sort_key",
     ]);
   });
 
@@ -655,6 +652,20 @@ describe("roundsList", () => {
       p_format: null,
       p_bow_type: null,
       p_after_id: null,
+    });
+  });
+
+  it("得点の向きの指定なしはnullで、日付の向きはその値で渡す", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+
+    // When
+    await database.createQueries().roundsList(listRequest);
+
+    // Then
+    expect(database.rpcCalls[0]?.args).toMatchObject({
+      p_date_direction: "desc",
+      p_score_direction: null,
     });
   });
 
@@ -727,19 +738,17 @@ describe("roundsList: 距離単位", () => {
   const rowArg = {
     distance: 50,
     arrows_per_end: 6,
-    total_arrows: 36,
     target_face_id: "a1000000-0000-0000-0000-000000000001",
   };
   const distanceRow = {
     distance: 50,
     arrowsPerEnd: 6,
-    totalArrows: 36,
     targetFaceId: "a1000000-0000-0000-0000-000000000001",
   };
   const distanceCondition: HistoryCondition = {
     unit: "distance",
-    sortKey: "score",
-    sortDirection: "asc",
+    dateDirection: "asc",
+    scoreDirection: "desc",
     format: "indoor",
     bowType: "compound",
     dateFrom: "2026-05-01",
@@ -764,8 +773,8 @@ describe("roundsList: 距離単位", () => {
       {
         name: "distances_list",
         args: {
-          p_sort_key: "score",
-          p_sort_direction: "asc",
+          p_date_direction: "asc",
+          p_score_direction: "desc",
           p_format: "indoor",
           p_bow_type: "compound",
           p_after_id: "d-9",
@@ -779,7 +788,28 @@ describe("roundsList: 距離単位", () => {
     ]);
   });
 
-  it("距離の行が指定ありなら、p_distanceに1つのオブジェクトで送る", async () => {
+  it("得点の向きの指定なしはnullで、日付の向きはその値で渡す", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+
+    // When
+    await database.createQueries().roundsList({
+      ...request,
+      condition: {
+        ...distanceCondition,
+        dateDirection: "asc",
+        scoreDirection: null,
+      },
+    });
+
+    // Then
+    expect(database.rpcCalls[0]).toMatchObject({
+      name: "distances_list",
+      args: { p_date_direction: "asc", p_score_direction: null },
+    });
+  });
+
+  it("距離の行が指定ありなら、p_distanceに距離・1エンドの矢数・的の3鍵だけの1つのオブジェクトで送る", async () => {
     // Given
     const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
 
@@ -790,7 +820,7 @@ describe("roundsList: 距離単位", () => {
     });
 
     // Then
-    expect(database.rpcCalls[0]?.args).toMatchObject({ p_distance: rowArg });
+    expect(database.rpcCalls[0]?.args?.p_distance).toStrictEqual(rowArg);
   });
 
   it("距離の行が指定なしなら、p_distanceを含めない", async () => {

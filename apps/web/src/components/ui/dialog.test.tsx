@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Dialog, DialogContent } from "./dialog";
+import { Dialog, DialogContent, DialogTitle } from "./dialog";
 
 // backdropはroleやテキストを持たないため、DialogContentが付与するクラスで特定する。
 function backdrops() {
@@ -102,5 +102,26 @@ describe("DialogContent", () => {
         },
       );
     });
+  });
+});
+
+describe("DialogTitle", () => {
+  it("ダイアログの名前になる", () => {
+    // Given
+
+    // When
+    render(
+      <Dialog open>
+        <DialogContent>
+          <DialogTitle>フィルター</DialogTitle>
+          本文
+        </DialogContent>
+      </Dialog>,
+    );
+
+    // Then
+    expect(
+      screen.getByRole("dialog", { name: "フィルター" }),
+    ).toBeInTheDocument();
   });
 });

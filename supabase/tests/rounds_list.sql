@@ -7,7 +7,7 @@
 
 begin;
 
-select plan(95);
+select plan(111);
 
 create temp table rl_id (alias text primary key, id uuid not null);
 insert into rl_id (alias, id) values
@@ -93,6 +93,16 @@ begin
 end;
 $$;
 
+-- 旧い条件（基準と向き）を、日付の向きと得点の向きに写す（基準がscoreなら日付は降順・得点は向き、それ以外は日付は向き・得点は指定なし。向きがasc以外なら降順）。
+-- 旧い条件の期待値を変えずに、新しい引数で確かめるための写しである。
+create function pg_temp.date_direction(p_sort_key text, p_sort_direction text) returns text
+language sql immutable
+as $$ select case when p_sort_key = 'score' then 'desc' when p_sort_direction = 'asc' then 'asc' else 'desc' end $$;
+
+create function pg_temp.score_direction(p_sort_key text, p_sort_direction text) returns text
+language sql immutable
+as $$ select case when p_sort_key = 'score' then case when p_sort_direction = 'asc' then 'asc' else 'desc' end end $$;
+
 -- 期間（p_from、p_to）、得点の範囲（p_min、p_max）、距離の構成（p_distances）は任意で、指定しなければ絞り込まない。
 create function pg_temp.list(
   p_sort_key text, p_sort_direction text, p_format text, p_bow_type text, p_after text, p_limit int,
@@ -100,7 +110,7 @@ create function pg_temp.list(
   p_distances jsonb default null
 ) returns jsonb
 language sql stable
-as $$ select public.rounds_list(p_sort_key, p_sort_direction, p_format, p_bow_type, p_after::uuid, p_limit, p_from, p_to, p_min, p_max, p_distances) $$;
+as $$ select public.rounds_list(pg_temp.date_direction(p_sort_key, p_sort_direction), pg_temp.score_direction(p_sort_key, p_sort_direction), p_format, p_bow_type, p_after::uuid, p_limit, p_from, p_to, p_min, p_max, p_distances) $$;
 
 -- 返した行の別名を、返した順に並べる。
 create function pg_temp.ids(p_page jsonb) returns text
@@ -664,7 +674,7 @@ select is(
 
 -- ============================================================
 -- 距離の構成（利用者V）
---   p_distances は射つ順の行の配列 [{distance, arrows_per_end, total_arrows, target_face_id}]。指定のない項目は null（鍵が無くても同じ）。
+--   p_distances は射つ順の行の配列 [{distance, arrows_per_end, target_face_id}]。指定のない項目は null（鍵が無くても同じ）。
 --   無効でない距離を (position_key, id) の順に並べた行が、指定と同じ個数で、先頭から順に各行が一致するラウンドだけを返す。
 -- ============================================================
 
@@ -714,19 +724,6 @@ select is(
 );
 
 select is(
-  concat_ws('|',
-    '36=' || pg_temp.byd('[{"distance": 50, "total_arrows": 36}]'),
-    '35=' || pg_temp.byd('[{"distance": 50, "total_arrows": 35}]'),
-    '37=' || pg_temp.byd('[{"distance": 50, "total_arrows": 37}]'),
-    '72=' || pg_temp.byd('[{"distance": 50, "total_arrows": 72}]'),
-    '12=' || pg_temp.byd('[{"distance": 50, "total_arrows": 12}]'),
-    '3=' || pg_temp.byd('[{"distance": 50, "total_arrows": 3}]')
-  ),
-  '36=M7,M6,M5|35=|37=|72=|12=|3=',
-  '矢の総数は総エンド数×1エンドの矢数（6×6と12×3の36）で比べ、1つ違い（35、37）・総エンド数だけ（12）・1エンドの矢数だけ（3）では一致しない'
-);
-
-select is(
   pg_temp.byd(format('[{"distance": 50, "target_face_id": "%s"}]', 'a1000000-0000-0000-0000-000000000002'))
     || '|' || pg_temp.byd(format('[{"distance": 50, "target_face_id": "%s"}]', 'a1000000-0000-0000-0000-000000000001')),
   'M5|M7,M6',
@@ -735,18 +732,23 @@ select is(
 
 select is(
   concat_ws('|',
-    'all=' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 6, "total_arrows": 36, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]'),
-    'face=' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 6, "total_arrows": 36, "target_face_id": "a1000000-0000-0000-0000-000000000004"}]'),
-    'total=' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 6, "total_arrows": 35, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]'),
-    'ape=' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 3, "total_arrows": 36, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]'),
-    'dist=' || pg_temp.byd('[{"distance": 30, "arrows_per_end": 6, "total_arrows": 36, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]')
+    'all=' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 6, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]'),
+    'face=' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 6, "target_face_id": "a1000000-0000-0000-0000-000000000004"}]'),
+    'ape=' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 3, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]'),
+    'dist=' || pg_temp.byd('[{"distance": 30, "arrows_per_end": 6, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]')
   ),
-  'all=M5|face=|total=|ape=|dist=',
-  '距離・1エンドの矢数・矢の総数・的のすべてを指定した行は、すべてが一致するラウンドだけを返し、1項目でも違えば除外する'
+  'all=M5|face=|ape=|dist=',
+  '距離・1エンドの矢数・的のすべてを指定した行は、すべてが一致するラウンドだけを返し、1項目でも違えば除外する'
 );
 
 select is(
-  pg_temp.byd('[{"distance": 50, "arrows_per_end": null, "total_arrows": null, "target_face_id": null}]'),
+  pg_temp.byd('[{"distance": 50, "total_arrows": 36}]') || '|' || pg_temp.byd('[{"distance": 50, "total_arrows": 35}]'),
+  pg_temp.byd('[{"distance": 50}]') || '|' || pg_temp.byd('[{"distance": 50}]'),
+  '旧い版の端末が送る鍵total_arrowsは、一致する値でも一致しない値でも読まれず、エラーにならず、鍵が無い指定と同じ結果になる'
+);
+
+select is(
+  pg_temp.byd('[{"distance": 50, "arrows_per_end": null, "target_face_id": null}]'),
   pg_temp.byd('[{"distance": 50}]'),
   '項目がnullの指定は、項目の鍵が無い指定と同じ結果で、比べない'
 );
@@ -861,6 +863,78 @@ select is(
   'M12|M12',
   '利用者Wに切り替えると、Wのラウンドだけが返る'
 );
+
+-- ============================================================
+-- 日付の向きと得点の向き（新しい引数）
+-- ============================================================
+
+-- 合計点が同じで実施日が違うラウンドを足す（得点の向きがあるときの第2キー、日付の向きの確認用）。
+reset role;
+insert into rl_id (alias, id) values
+  ('T1', 'c0000000-0000-0000-0000-000000000151'),
+  ('T2', 'c0000000-0000-0000-0000-000000000152');
+select pg_temp.mk('T1', 'E', '2026-12-01', 'outdoor', 'recurve', 'completed', '2026-12-01 09:00+00', 333);
+select pg_temp.mk('T2', 'E', '2026-12-02', 'outdoor', 'recurve', 'completed', '2026-12-02 09:00+00', 333);
+select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
+set local role authenticated;
+
+-- 独立のorder byによる正解。得点の向きがあるとき、第1キーは合計点、第2キーは実施日。ないとき、第1キーは実施日。同値は作成時刻の新しい順、ID。
+create function pg_temp.expected(p_date_direction text, p_score_direction text) returns text
+language sql stable
+as $$
+  select string_agg(i.alias, ',' order by
+    case when p_score_direction is not null then t.total * (case p_score_direction when 'asc' then 1 else -1 end)
+      else (r.round_date - date '2000-01-01') * (case p_date_direction when 'asc' then 1 else -1 end) end,
+    case when p_score_direction is not null then (r.round_date - date '2000-01-01') * (case p_date_direction when 'asc' then 1 else -1 end) else 0 end,
+    r.created_at desc, r.id)
+  from public.rounds r
+  join rl_id i on i.id = r.id
+  cross join lateral (
+    select coalesce(sum(s.score_int), 0) as total
+    from public.distances d join public.shots s on s.distance_id = d.id
+    where d.round_id = r.id and d.disabled_at is null and s.disabled_at is null
+  ) t
+  where r.status = 'completed' and r.disabled_at is null
+$$;
+
+create function pg_temp.list2(p_date_direction text, p_score_direction text, p_limit int, p_after text default null) returns jsonb
+language sql stable
+as $$ select public.rounds_list(p_date_direction, p_score_direction, null, null, p_after::uuid, p_limit) $$;
+
+create function pg_temp.walk2(p_date_direction text, p_score_direction text, p_limit int) returns text
+language plpgsql stable
+as $$
+declare
+  v_page jsonb;
+  v_after text := null;
+  v_ids text := '';
+  v_n int := 0;
+  v_pages text;
+begin
+  loop
+    v_page := pg_temp.list2(p_date_direction, p_score_direction, p_limit, v_after);
+    v_pages := pg_temp.ids(v_page);
+    v_ids := v_ids || case when v_ids = '' or v_pages = '' then '' else ',' end || v_pages;
+    exit when not (v_page ->> 'has_more')::boolean;
+    v_after := v_page -> 'rounds' -> -1 ->> 'id';
+    v_n := v_n + 1;
+    exit when v_n > 100;
+  end loop;
+  return v_ids;
+end;
+$$;
+
+select is(pg_temp.ids(pg_temp.list2(d, s, 100)), pg_temp.expected(d, s), '日付の向き' || d || '、得点の向き' || coalesce(s, '指定なし') || ': 1回の取得が独立のorder byと一致する')
+from (values ('asc', null), ('desc', null), ('asc', 'asc'), ('asc', 'desc'), ('desc', 'asc'), ('desc', 'desc')) as v(d, s);
+
+select is(pg_temp.walk2(d, s, 2), pg_temp.expected(d, s), '日付の向き' || d || '、得点の向き' || coalesce(s, '指定なし') || ': 件数2の全ページの連結が独立のorder byと一致する')
+from (values ('asc', null), ('desc', null), ('asc', 'asc'), ('asc', 'desc'), ('desc', 'asc'), ('desc', 'desc')) as v(d, s);
+
+select isnt(pg_temp.expected('asc', 'desc'), pg_temp.expected('desc', 'desc'), '得点が同点のラウンドの並びは、日付の向きで変わる（得点の降順・日付の昇順は同点が古い順）');
+
+select is(pg_temp.ids(pg_temp.list2('up', null, 100)), pg_temp.ids(pg_temp.list2('desc', null, 100)), '日付の向きがasc以外（未知）なら降順になる');
+select is(pg_temp.ids(pg_temp.list2(null, null, 100)), pg_temp.ids(pg_temp.list2('desc', null, 100)), '日付の向きがnullなら降順になる');
+select is(pg_temp.ids(pg_temp.list2('asc', 'up', 100)), pg_temp.ids(pg_temp.list2('asc', null, 100)), '得点の向きがasc・desc以外（未知）なら指定なしになる');
 
 select * from finish();
 

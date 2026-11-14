@@ -1,52 +1,35 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import type { HistoryFilterDraft } from "../domain/history-filter-draft";
 import {
-  type HistoryCondition,
-  type HistoryRange,
+  HISTORY_SORT_DIRECTIONS,
   type HistoryRangeDraft,
   type HistoryRangeError,
-  historyRangeOf,
 } from "../domain/history-view-state";
+import { NullableSelect } from "./history-nullable-select";
 
-function draftOf(range: HistoryRange): HistoryRangeDraft {
-  return {
-    dateFrom: range.dateFrom ?? "",
-    dateTo: range.dateTo ?? "",
-    scoreMin: range.scoreMin === null ? "" : String(range.scoreMin),
-    scoreMax: range.scoreMax === null ? "" : String(range.scoreMax),
-  };
-}
-
-function isSameRange(a: HistoryRange, b: HistoryRange): boolean {
-  return (
-    a.dateFrom === b.dateFrom &&
-    a.dateTo === b.dateTo &&
-    a.scoreMin === b.scoreMin &&
-    a.scoreMax === b.scoreMax
-  );
-}
+// 範囲の2つの入力の間の記号。翻訳しない装飾である。
+const RANGE_SEPARATOR = "~";
 
 type FieldKey = keyof HistoryRangeDraft;
+type FieldSpec = { field: FieldKey; label: string; numeric: boolean };
+type Change = (change: Partial<HistoryFilterDraft>) => void;
 
 function RangeInput({
   field,
   label,
-  draft,
+  value,
   invalid,
   numeric,
   onChange,
-  onCommit,
-}: {
-  field: FieldKey;
-  label: string;
-  draft: HistoryRangeDraft;
+}: FieldSpec & {
+  value: string;
   invalid: boolean;
-  numeric: boolean;
   onChange: (field: FieldKey, value: string) => void;
-  onCommit: () => void;
 }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -61,89 +44,156 @@ function RangeInput({
         type={numeric ? "text" : "date"}
         inputMode={numeric ? "numeric" : undefined}
         data-testid={`history-filter-${field}`}
-        value={draft[field]}
+        value={value}
         aria-invalid={invalid}
         onChange={(e) => onChange(field, e.target.value)}
-        onBlur={onCommit}
       />
     </div>
   );
 }
 
-// 期間と得点の範囲の入力。4つの下書きを持ち、欄を離れたときかEnterで、まとめて検証して反映する。不正なときは反映せず、エラーを出して入力した文字を残す。
-export function HistoryRangeFields({
-  condition,
-  onApply,
+// 日付順(必ず指定)。編集中の値を変えるだけで、適用で反映する。
+function DateDirectionSelect({
+  draft,
+  onChange,
 }: {
-  condition: HistoryCondition;
-  onApply: (range: HistoryRange) => void;
+  draft: HistoryFilterDraft;
+  onChange: Change;
 }) {
   const t = useTranslations("rounds");
-  const [draft, setDraft] = useState(() => draftOf(condition));
-  const [errors, setErrors] = useState<readonly HistoryRangeError[]>([]);
+  return (
+    <Select
+      label={t("historyFilterDateDirection")}
+      options={HISTORY_SORT_DIRECTIONS.map((value) => ({
+        value,
+        label: t(`historyDateDirection.${value}`),
+      }))}
+      value={draft.dateDirection}
+      onChange={(next) => {
+        const dateDirection = HISTORY_SORT_DIRECTIONS.find(
+          (direction) => direction === next,
+        );
+        if (dateDirection) onChange({ dateDirection });
+      }}
+      testId="history-sort-date-direction"
+      className="w-28"
+    />
+  );
+}
 
-  function commit() {
-    const result = historyRangeOf(draft);
-    if (!result.ok) {
-      setErrors(result.errors);
-      return;
-    }
-    setErrors([]);
-    if (!isSameRange(result.range, condition)) onApply(result.range);
-  }
+// 得点順(指定なしがある)。編集中の値を変えるだけで、適用で反映する。
+function ScoreDirectionSelect({
+  draft,
+  onChange,
+}: {
+  draft: HistoryFilterDraft;
+  onChange: Change;
+}) {
+  const t = useTranslations("rounds");
+  return (
+    <NullableSelect
+      label={t("historyFilterScoreDirection")}
+      options={HISTORY_SORT_DIRECTIONS.map((value) => ({
+        value,
+        label: t(`historyScoreDirection.${value}`),
+      }))}
+      value={draft.scoreDirection}
+      onChange={(scoreDirection) => onChange({ scoreDirection })}
+      testId="history-sort-score-direction"
+      className="w-28"
+    />
+  );
+}
 
-  const inputs: { field: FieldKey; label: string; numeric: boolean }[] = [
+// 範囲の1行。2つの入力、向きの選択、エラー。
+function RangeGroup({
+  fields,
+  errors,
+  range,
+  direction,
+  onChange,
+}: {
+  fields: FieldSpec[];
+  errors: readonly HistoryRangeError[];
+  range: HistoryRangeDraft;
+  direction: ReactNode;
+  onChange: (field: FieldKey, value: string) => void;
+}) {
+  const t = useTranslations("rounds");
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="flex min-w-48 flex-1 items-end gap-2">
+          {fields.map((input, index) => (
+            <Fragment key={input.field}>
+              {index > 0 && (
+                <span
+                  aria-hidden="true"
+                  className="pb-1.5 text-muted-foreground"
+                >
+                  {RANGE_SEPARATOR}
+                </span>
+              )}
+              <RangeInput
+                {...input}
+                value={range[input.field]}
+                invalid={errors.length > 0}
+                onChange={onChange}
+              />
+            </Fragment>
+          ))}
+        </div>
+        {direction}
+      </div>
+      {errors.map((error) => (
+        <p
+          key={error}
+          role="alert"
+          className="text-destructive text-sm"
+          data-testid={`history-filter-error-${error}`}
+        >
+          {t(`historyRangeError.${error}`)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+// 期間と得点の範囲の入力と、それぞれの並べ替えの向き。値を持たず、編集中の値とエラーを受けて、変更を返すだけである。
+export function HistoryRangeFields({
+  draft,
+  errors,
+  onChange,
+}: {
+  draft: HistoryFilterDraft;
+  errors: readonly HistoryRangeError[];
+  onChange: Change;
+}) {
+  const t = useTranslations("rounds");
+  const inputs: FieldSpec[] = [
     { field: "dateFrom", label: t("historyFilterDateFrom"), numeric: false },
     { field: "dateTo", label: t("historyFilterDateTo"), numeric: false },
     { field: "scoreMin", label: t("historyFilterScoreMin"), numeric: true },
     { field: "scoreMax", label: t("historyFilterScoreMax"), numeric: true },
   ];
-  const groups = [
-    {
-      label: t("historyFilterPeriod"),
-      fields: inputs.slice(0, 2),
-      errors: errors.filter((e) => e.startsWith("date")),
-    },
-    {
-      label: t("historyFilterScore"),
-      fields: inputs.slice(2),
-      errors: errors.filter((e) => e.startsWith("score")),
-    },
-  ];
-
+  const setField = (field: FieldKey, value: string) =>
+    onChange({ range: { ...draft.range, [field]: value } });
   return (
     <>
-      {groups.map((group) => (
-        <div key={group.label} className="flex flex-col gap-2">
-          <span className="text-muted-foreground text-sm">{group.label}</span>
-          <div className="flex gap-2">
-            {group.fields.map(({ field, label, numeric }) => (
-              <RangeInput
-                key={field}
-                field={field}
-                label={label}
-                draft={draft}
-                invalid={group.errors.length > 0}
-                numeric={numeric}
-                onChange={(key, value) =>
-                  setDraft((current) => ({ ...current, [key]: value }))
-                }
-                onCommit={commit}
-              />
-            ))}
-          </div>
-          {group.errors.map((error) => (
-            <p
-              key={error}
-              role="alert"
-              className="text-destructive text-sm"
-              data-testid={`history-filter-error-${error}`}
-            >
-              {t(`historyRangeError.${error}`)}
-            </p>
-          ))}
-        </div>
-      ))}
+      <RangeGroup
+        fields={inputs.slice(0, 2)}
+        errors={errors.filter((e) => e.startsWith("date"))}
+        range={draft.range}
+        onChange={setField}
+        direction={<DateDirectionSelect draft={draft} onChange={onChange} />}
+      />
+      <RangeGroup
+        fields={inputs.slice(2)}
+        errors={errors.filter((e) => e.startsWith("score"))}
+        range={draft.range}
+        onChange={setField}
+        direction={<ScoreDirectionSelect draft={draft} onChange={onChange} />}
+      />
     </>
   );
 }

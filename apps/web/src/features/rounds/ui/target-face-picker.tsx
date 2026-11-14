@@ -1,5 +1,5 @@
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -137,14 +137,25 @@ export function TargetFaceFilters({
   );
 }
 
+// 的の項目の枠(的の各項目と、先頭の「指定なし」で同じ)。
+function itemClassName(selected: boolean) {
+  return cn(
+    "flex shrink-0 items-center justify-center rounded-md p-2 transition-colors hover:bg-muted",
+    selected && "bg-muted ring-1 ring-primary",
+  );
+}
+
+// 的の一覧。`none`を渡すと、先頭に的の各項目と同じ枠で、渡された表示(`content`)の項目を置き、選ぶと`onSelect`でなく`none.onSelect`が呼ばれる(選択中は`selectedId`がnullのとき)。
 export function TargetFaceList({
   faces,
   selectedId,
   onSelect,
+  none,
 }: {
   faces: TargetFaceOption[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  none?: { content: ReactNode; testId: string; onSelect: () => void };
 }) {
   return (
     // 選択中の項目に付くring（box-shadow）がコンテナの縁に接して
@@ -153,6 +164,17 @@ export function TargetFaceList({
     // 項目の最小幅から列の数を自動で決める格子にし、幅に余裕があれば複数列、
     // なければ1列にする。各項目の中で的の情報は左右の中央に置く。
     <div className="-mx-1 grid flex-1 grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] content-start gap-2 overflow-y-auto p-1">
+      {none && (
+        <button
+          type="button"
+          aria-pressed={selectedId === null}
+          data-testid={none.testId}
+          onClick={none.onSelect}
+          className={itemClassName(selectedId === null)}
+        >
+          {none.content}
+        </button>
+      )}
       {faces.map((f) => (
         <button
           key={f.id}
@@ -161,10 +183,7 @@ export function TargetFaceList({
           aria-pressed={f.id === selectedId}
           data-testid={`target-face-option-${f.id}`}
           onClick={() => onSelect(f.id)}
-          className={cn(
-            "flex shrink-0 items-center justify-center rounded-md p-2 transition-colors hover:bg-muted",
-            f.id === selectedId && "bg-muted ring-1 ring-primary",
-          )}
+          className={itemClassName(f.id === selectedId)}
         >
           <TargetFaceInfo face={f} />
         </button>

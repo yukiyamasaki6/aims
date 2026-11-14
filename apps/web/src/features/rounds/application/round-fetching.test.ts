@@ -813,8 +813,8 @@ describe("fetchRoundsList", () => {
     const { fetching, queries } = setup();
     const scoreCondition: HistoryCondition = {
       unit: "round",
-      sortKey: "score",
-      sortDirection: "asc",
+      dateDirection: "desc",
+      scoreDirection: "asc",
       format: "indoor",
       bowType: "compound",
       dateFrom: "2026-05-01",

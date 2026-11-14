@@ -9,10 +9,10 @@ describe("createFakeHistoryViewMemory", () => {
   it("書いた状態を、readとstoredが返す", () => {
     // Given
     const written: HistoryViewState = {
-      condition: {
+      input: {
         unit: "distance",
-        sortKey: "score",
-        sortDirection: "asc",
+        dateDirection: "desc",
+        scoreDirection: "asc",
         format: "indoor",
         bowType: null,
         dateFrom: "2026-05-01",
@@ -23,18 +23,11 @@ describe("createFakeHistoryViewMemory", () => {
           {
             distance: 50,
             arrowsPerEnd: 6,
-            totalArrows: null,
             targetFaceId: null,
           },
         ],
-        distanceRow: {
-          distance: 30,
-          arrowsPerEnd: 3,
-          totalArrows: null,
-          targetFaceId: null,
-        },
+        distanceRow: { distance: 30, arrowsPerEnd: 3, targetFaceId: null },
       },
-      filterOpen: false,
     };
     const { memory, stored } = createFakeHistoryViewMemory();
 

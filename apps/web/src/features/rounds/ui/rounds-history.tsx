@@ -35,13 +35,15 @@ export function RoundsHistory() {
   );
 }
 
-// 一覧の末尾。続きがあるときは続きの取得の状態を出す場所(自動の取得の監視の対象)、続きがなければ「以上」の文言。
+// 一覧の末尾。続きがあるときは続きの取得の状態を出す場所(自動の取得の監視の対象)、続きがなければ「以上」の文言(ラウンド単位は「該当するラウンドは以上です」、距離単位は「該当する距離は以上です」)。
 function HistoryTail({
+  unit,
   hasMore,
   more,
   tailRef,
   onRetry,
 }: {
+  unit: HistoryUnit | undefined;
   hasMore: boolean;
   more: MoreStatus;
   tailRef: (element: HTMLDivElement | null) => void;
@@ -49,7 +51,11 @@ function HistoryTail({
 }) {
   const t = useTranslations("rounds");
   if (!hasMore) {
-    return <p className="text-muted-foreground text-sm">{t("historyEnd")}</p>;
+    return (
+      <p className="text-muted-foreground text-sm">
+        {t(unit === "distance" ? "historyEndDistance" : "historyEnd")}
+      </p>
+    );
   }
   return (
     <div ref={tailRef}>
@@ -85,15 +91,59 @@ function HistoryCards({
   return <RoundCards rounds={items} origin="history" onDelete={onDelete} />;
 }
 
-function RoundsHistoryScreen() {
+// 一覧の本体。取得の状態、0件、カードと末尾。
+function HistoryBody({
+  content,
+  unit,
+  more,
+  tailRef,
+  onRetry,
+  onRetryMore,
+  onDelete,
+}: {
+  content: ReturnType<typeof historyView>;
+  unit: HistoryUnit | undefined;
+  more: MoreStatus;
+  tailRef: (element: HTMLDivElement | null) => void;
+  onRetry: () => void;
+  onRetryMore: () => void;
+  onDelete: (round: RoundListItem) => void;
+}) {
   const t = useTranslations("rounds");
+  const { rest, rounds, hasMore } = content;
+  if (rest) {
+    return (
+      <FetchState
+        view={rest}
+        onRetry={onRetry}
+        loading={<RoundCardsSkeleton />}
+      />
+    );
+  }
+  if (rounds.length === 0 && !hasMore) {
+    return <p className="text-muted-foreground text-sm">{t("historyEmpty")}</p>;
+  }
+  return (
+    <>
+      <HistoryCards unit={unit} items={rounds} onDelete={onDelete} />
+      <HistoryTail
+        unit={unit}
+        hasMore={hasMore}
+        more={more}
+        tailRef={tailRef}
+        onRetry={onRetryMore}
+      />
+    </>
+  );
+}
+
+function RoundsHistoryScreen() {
   const { historyViewMemory } = useRoundProcedures();
   const anchorRef = useRef<HTMLDivElement>(null);
   const local = useLocalRoundsList();
   const { removed, target, requestDelete, cancel, confirmDelete } =
     useRoundDelete();
-  const { state, ...controls } = useHistoryView(historyViewMemory);
-  const condition = state?.condition ?? null;
+  const { input, condition, applyInput } = useHistoryView(historyViewMemory);
   const { view, more, retry, retryMore, restoreScroll, tailRef } =
     useHistoryPages({
       condition,
@@ -101,13 +151,8 @@ function RoundsHistoryScreen() {
       measureItemHeight: () => measureSkeletonPitch(anchorRef.current),
       anchorRef,
     });
-  const { rounds, hasMore, rest } = historyView(
-    view,
-    local,
-    removed,
-    condition,
-  );
-  const shown = rest === null;
+  const content = historyView(view, local, removed, condition);
+  const shown = content.rest === null;
   // biome-ignore lint/correctness/useExhaustiveDependencies: 一覧が描かれたときに、戻ったときのスクロールの位置を戻す
   useLayoutEffect(() => {
     if (shown) restoreScroll();
@@ -115,30 +160,25 @@ function RoundsHistoryScreen() {
 
   return (
     <div ref={anchorRef}>
-      {state && <HistoryControls state={state} controls={controls} />}
-      {rest ? (
-        <FetchState
-          view={rest}
-          onRetry={retry}
-          loading={<RoundCardsSkeleton />}
-        />
-      ) : rounds.length === 0 && !hasMore ? (
-        <p className="text-muted-foreground text-sm">{t("historyEmpty")}</p>
-      ) : (
-        <>
-          <HistoryCards
-            unit={condition?.unit}
-            items={rounds}
-            onDelete={requestDelete}
+      {/* 一覧の右上に固定するアイコンの置き場。静止時は最初の項目の上の余白になり、スクロール中は項目の上に重なって通る。読み込み前も置く(出現時に一覧が動かないため)。 */}
+      <div className="sticky top-2 z-10 ml-auto size-12">
+        {input && condition && (
+          <HistoryControls
+            input={input}
+            condition={condition}
+            onApply={applyInput}
           />
-          <HistoryTail
-            hasMore={hasMore}
-            more={more}
-            tailRef={tailRef}
-            onRetry={retryMore}
-          />
-        </>
-      )}
+        )}
+      </div>
+      <HistoryBody
+        content={content}
+        unit={condition?.unit}
+        more={more}
+        tailRef={tailRef}
+        onRetry={retry}
+        onRetryMore={retryMore}
+        onDelete={requestDelete}
+      />
 
       <RoundDeleteDialog
         target={target}

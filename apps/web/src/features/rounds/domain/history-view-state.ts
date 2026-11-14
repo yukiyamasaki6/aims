@@ -6,18 +6,15 @@ import {
   type FormatOption,
 } from "./round-constants";
 
-export const HISTORY_SORT_KEYS = ["date", "score"] as const;
-export type HistorySortKey = (typeof HISTORY_SORT_KEYS)[number];
-
 // 一覧の単位。ラウンド単位は完了したラウンドを、距離単位は完了したラウンドの距離を1件ずつ出す。
-export const HISTORY_UNITS = ["round", "distance"] as const;
+const HISTORY_UNITS = ["round", "distance"] as const;
 export type HistoryUnit = (typeof HISTORY_UNITS)[number];
 
 export const HISTORY_SORT_DIRECTIONS = ["asc", "desc"] as const;
 export type HistorySortDirection = (typeof HISTORY_SORT_DIRECTIONS)[number];
 
 // 期間と得点の範囲。反映済みの値だけを持つ(常に正しい)。日付は実在する YYYY-MM-DD、得点は0以上の安全な整数。null は指定なし。
-export type HistoryRange = {
+type HistoryRange = {
   dateFrom: string | null;
   dateTo: string | null;
   scoreMin: number | null;
@@ -28,15 +25,14 @@ export type HistoryRange = {
 export type HistoryDistanceRow = {
   distance: number;
   arrowsPerEnd: number | null;
-  totalArrows: number | null;
   targetFaceId: string | null;
 };
 
-// 履歴の条件。単位は`round`か`distance`。並べ替えの基準は1つ、種別と弓種はそれぞれ1つ(null は指定なし)。期間と得点の範囲、距離の構成、距離の行は反映済みの値(距離の構成は空の配列、距離の行は null が指定なし)。距離の行は、単位が`distance`のときだけ適用する。
+// 履歴の条件。単位は`round`か`distance`。並べ替えは、日付の向き(必ず指定)と得点の向き(null は指定なし)。得点の向きがあれば、得点を第1キー、日付を第2キーにする。種別と弓種はそれぞれ1つ(null は指定なし)。期間と得点の範囲、距離の構成、距離の行は反映済みの値(距離の構成は空の配列、距離の行は null が指定なし)。距離の行は、単位が`distance`のときだけ適用する。
 export type HistoryCondition = HistoryRange & {
   unit: HistoryUnit;
-  sortKey: HistorySortKey;
-  sortDirection: HistorySortDirection;
+  dateDirection: HistorySortDirection;
+  scoreDirection: HistorySortDirection | null;
   format: FormatOption | null;
   bowType: BowTypeOption | null;
   distances: HistoryDistanceRow[];
@@ -67,7 +63,6 @@ export type HistoryRangeResult =
 export type HistoryDistanceDraftRow = {
   distance: string;
   arrowsPerEnd: string;
-  totalArrows: string;
   targetFaceId: string | null;
 };
 
@@ -76,7 +71,6 @@ export type HistoryDistanceDraft = readonly HistoryDistanceDraftRow[];
 const HISTORY_DISTANCE_ERRORS = [
   "distanceInvalid",
   "arrowsPerEndInvalid",
-  "totalArrowsInvalid",
 ] as const;
 export type HistoryDistanceError = (typeof HISTORY_DISTANCE_ERRORS)[number];
 
@@ -84,16 +78,18 @@ export type HistoryDistanceResult =
   | { ok: true; distances: HistoryDistanceRow[] }
   | { ok: false; errors: { row: number; error: HistoryDistanceError }[] };
 
-// 履歴の表示の状態。条件と、絞り込みの欄の開閉。
+// 履歴の入力値。保存・保持する唯一の状態で、HistoryConditionと同じ型である(全て検証済みの値)。条件との違いは、導出(historyConditionOf)で、単位がラウンドのときに距離の行をnullにする点だけである。
+export type HistoryInput = HistoryCondition;
+
+// 履歴の表示の状態。入力値だけを持つ。導出されるフィルター(HistoryCondition)は保存せず、historyConditionOfで導く。
 export type HistoryViewState = {
-  condition: HistoryCondition;
-  filterOpen: boolean;
+  input: HistoryInput;
 };
 
 export const DEFAULT_HISTORY_CONDITION: HistoryCondition = {
   unit: "round",
-  sortKey: "date",
-  sortDirection: "desc",
+  dateDirection: "desc",
+  scoreDirection: null,
   format: null,
   bowType: null,
   dateFrom: null,
@@ -105,9 +101,23 @@ export const DEFAULT_HISTORY_CONDITION: HistoryCondition = {
 };
 
 export const DEFAULT_HISTORY_VIEW_STATE: HistoryViewState = {
-  condition: DEFAULT_HISTORY_CONDITION,
-  filterOpen: true,
+  input: DEFAULT_HISTORY_CONDITION,
 };
+
+function textOf(value: number | null): string {
+  return value === null ? "" : String(value);
+}
+
+// 検証済みの行を入力途中の行に写す。
+export function historyDistanceDraftRowOf(
+  row: HistoryDistanceRow,
+): HistoryDistanceDraftRow {
+  return {
+    distance: String(row.distance),
+    arrowsPerEnd: textOf(row.arrowsPerEnd),
+    targetFaceId: row.targetFaceId,
+  };
+}
 
 function oneOf<T extends string>(
   options: readonly T[],
@@ -175,13 +185,12 @@ function isIntegerIn(value: unknown, min: number, max: number): boolean {
   );
 }
 
-// 距離は必須で1〜上限、1エンドの矢数と矢の総数の空は指定なし(null)。
+// 距離は必須で1〜上限、1エンドの矢数の空は指定なし(null)。
 function distanceRowOf(
   draft: HistoryDistanceDraftRow,
 ): { row: HistoryDistanceRow } | { errors: HistoryDistanceError[] } {
   const distance = scoreOfDraft(draft.distance);
   const arrowsPerEnd = scoreOfDraft(draft.arrowsPerEnd);
-  const totalArrows = scoreOfDraft(draft.totalArrows);
   const errors: HistoryDistanceError[] = [];
   if (distance == null || !isIntegerIn(distance, 1, DISTANCE_LIMITS.distance)) {
     errors.push("distanceInvalid");
@@ -193,15 +202,11 @@ function distanceRowOf(
   ) {
     errors.push("arrowsPerEndInvalid");
   }
-  if (totalArrows === undefined || totalArrows === 0) {
-    errors.push("totalArrowsInvalid");
-  }
   if (errors.length > 0 || distance == null) return { errors };
   return {
     row: {
       distance,
       arrowsPerEnd: arrowsPerEnd ?? null,
-      totalArrows: totalArrows ?? null,
       targetFaceId: draft.targetFaceId,
     },
   };
@@ -284,22 +289,18 @@ const UUID_PATTERN =
 
 function storedDistanceRowOf(raw: unknown): HistoryDistanceRow | null {
   if (!isRecord(raw)) return null;
-  const { distance, arrowsPerEnd, totalArrows, targetFaceId } = raw;
+  const { distance, arrowsPerEnd, targetFaceId } = raw;
   if (!isIntegerIn(distance, 1, DISTANCE_LIMITS.distance)) return null;
   const isArrowsPerEnd =
     arrowsPerEnd === null ||
     isIntegerIn(arrowsPerEnd, 1, DISTANCE_LIMITS.arrowsPerEnd);
-  const isTotalArrows =
-    totalArrows === null ||
-    isIntegerIn(totalArrows, 1, Number.MAX_SAFE_INTEGER);
   const isTargetFace =
     targetFaceId === null ||
     (typeof targetFaceId === "string" && UUID_PATTERN.test(targetFaceId));
-  if (!(isArrowsPerEnd && isTotalArrows && isTargetFace)) return null;
+  if (!(isArrowsPerEnd && isTargetFace)) return null;
   return {
     distance: distance as number,
     arrowsPerEnd: arrowsPerEnd as number | null,
-    totalArrows: totalArrows as number | null,
     targetFaceId: targetFaceId as string | null,
   };
 }
@@ -316,20 +317,21 @@ function historyDistancesOfStored(value: unknown): HistoryDistanceRow[] {
   return rows;
 }
 
-function historyConditionOf(raw: unknown): HistoryCondition {
+// 保存した値の並べ替え。日付の向きと得点の向きを項目ごとに読み、型に合わない値は既定(日付は降順、得点は指定なし)にする。
+function historySortOfStored(
+  raw: Record<string, unknown>,
+): Pick<HistoryCondition, "dateDirection" | "scoreDirection"> {
+  return {
+    dateDirection: oneOf(HISTORY_SORT_DIRECTIONS, raw.dateDirection, "desc"),
+    scoreDirection: nullableOneOf(HISTORY_SORT_DIRECTIONS, raw.scoreDirection),
+  };
+}
+
+function storedInputOf(raw: unknown): HistoryInput {
   if (!isRecord(raw)) return DEFAULT_HISTORY_CONDITION;
   return {
     unit: oneOf(HISTORY_UNITS, raw.unit, DEFAULT_HISTORY_CONDITION.unit),
-    sortKey: oneOf(
-      HISTORY_SORT_KEYS,
-      raw.sortKey,
-      DEFAULT_HISTORY_CONDITION.sortKey,
-    ),
-    sortDirection: oneOf(
-      HISTORY_SORT_DIRECTIONS,
-      raw.sortDirection,
-      DEFAULT_HISTORY_CONDITION.sortDirection,
-    ),
+    ...historySortOfStored(raw),
     format: nullableOneOf(FORMAT_OPTIONS, raw.format),
     bowType: nullableOneOf(BOW_TYPE_OPTIONS, raw.bowType),
     ...historyRangeOfStored(raw),
@@ -338,14 +340,13 @@ function historyConditionOf(raw: unknown): HistoryCondition {
   };
 }
 
-// 保存した値を表示の状態にする。未知の値や形の崩れは、その項目を既定に直す。
+// 入力値から導出されるフィルター。単位がラウンドのときだけ距離の行をnullにする。純粋で全域である。
+export function historyConditionOf(input: HistoryInput): HistoryCondition {
+  return input.unit === "round" ? { ...input, distanceRow: null } : input;
+}
+
+// 保存した値を表示の状態にする。未知の値や形の崩れ(旧い形を含む)は、その項目を既定に直す。
 export function historyViewStateOf(raw: unknown): HistoryViewState {
   if (!isRecord(raw)) return DEFAULT_HISTORY_VIEW_STATE;
-  return {
-    condition: historyConditionOf(raw.condition),
-    filterOpen:
-      typeof raw.filterOpen === "boolean"
-        ? raw.filterOpen
-        : DEFAULT_HISTORY_VIEW_STATE.filterOpen,
-  };
+  return { input: storedInputOf(raw.input) };
 }

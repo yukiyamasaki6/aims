@@ -7,6 +7,18 @@ import { cn } from "@/lib/utils";
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
 
+function DialogTitle({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Title>) {
+  return (
+    <DialogPrimitive.Title
+      className={cn("font-medium text-base", className)}
+      {...props}
+    />
+  );
+}
+
 function DialogContent({
   className,
   children,
@@ -39,4 +51,4 @@ function DialogContent({
   );
 }
 
-export { Dialog, DialogContent, DialogTrigger };
+export { Dialog, DialogContent, DialogTitle, DialogTrigger };

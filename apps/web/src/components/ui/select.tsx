@@ -27,6 +27,8 @@ function Select({
     <SelectPrimitive.Root
       items={options}
       value={value}
+      // 開いている間も周りの操作を妨げない(既定のmodalは周りを不活性にし、別のSelectやボタンの押下を吸収する)。
+      modal={false}
       // 型はnullを含むが、値は選択肢(文字列)からしか届かない(base-uiは項目の値と自動入力の一致でだけ変更を通知し、nullでは呼ばない)。
       onValueChange={(next) => onChange(next as string)}
     >

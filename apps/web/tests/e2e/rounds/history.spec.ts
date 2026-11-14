@@ -31,6 +31,27 @@ const SMALL_FACE_ID = "a1000000-0000-0000-0000-000000000002";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
+// 選択欄を開いて、名前の項目を選ぶ。
+async function chooseOption(page: Page, testId: string, optionName: string) {
+  await page.getByTestId(testId).click();
+  await page.getByRole("option", { name: optionName, exact: true }).click();
+}
+
+// 右上のフィルターのアイコンを押して、ポップアップを開く。
+async function openFilter(page: Page) {
+  await page.getByTestId("history-controls-toggle").click();
+  await expect(page.getByTestId("history-controls")).toBeVisible();
+}
+
+// 適用を押して、ポップアップが閉じるまで待つ。
+async function applyFilter(page: Page) {
+  await page.getByTestId("history-controls-apply").click();
+  await expect(page.getByTestId("history-controls")).toHaveCount(0);
+}
+
+const SCORE_DESC = roundsText("historyScoreDirection.desc");
+const DATE_ASC = roundsText("historyDateDirection.asc");
+
 // 履歴の1ページ目の取得(起点なし)と続きの取得を数えるため、履歴の関数(rounds_list)の呼び出しを記録する。
 function trackRoundsListRequests(page: Page) {
   const bodies: { p_after_id: string | null; p_format: string | null }[] = [];
@@ -134,10 +155,13 @@ async function addCompletedRounds(
 }
 
 // 一覧の末尾が見えるまで、最後のカードを見える位置へ動かし続けて、続きの自動の取得を起こす。
-async function scrollToHistoryEnd(page: Page) {
+async function scrollToHistoryEnd(
+  page: Page,
+  end: "historyEnd" | "historyEndDistance" = "historyEnd",
+) {
   await expect(async () => {
     await page.getByRole("listitem").last().scrollIntoViewIfNeeded();
-    await expect(page.getByText(roundsText("historyEnd"))).toBeVisible({
+    await expect(page.getByText(roundsText(end))).toBeVisible({
       timeout: 1_000,
     });
   }).toPass({ timeout: 30_000 });
@@ -274,31 +298,47 @@ test.describe("履歴", () => {
     });
     const cards = page.getByRole("listitem");
 
-    // 履歴を開き、既定の実施日の新しい順から、得点の高い順に並べ替える。
+    // 履歴を開き、フィルターを開いて、日付順を古い順にして適用し、古い順に並べ替える。
     await page.goto("/rounds/history");
     await expect(cards).toHaveText([
       /屋内リカーブ/,
       /屋内コンパウンド/,
       /屋外リカーブ/,
     ]);
-    await page.getByTestId("history-sort-key-score").click();
+    await expect(page.getByTestId("history-controls-active")).toHaveCount(0);
+    await openFilter(page);
+    await chooseOption(page, "history-sort-date-direction", DATE_ASC);
+    await applyFilter(page);
     await expect(cards).toHaveText([
-      /屋内コンパウンド/,
       /屋外リカーブ/,
+      /屋内コンパウンド/,
       /屋内リカーブ/,
     ]);
 
-    // 種別を屋内に絞り込み、一致する2件だけを得点の順に表示する。
-    await page.getByTestId("history-filter-format-indoor").click();
+    // フィルターを開き直して、得点順を高い順、種別を屋内にして適用し、一致する2件だけを得点順に表示する。
+    await openFilter(page);
+    await chooseOption(page, "history-sort-score-direction", SCORE_DESC);
+    await chooseOption(
+      page,
+      "history-filter-format",
+      roundsText("formatOption.indoor"),
+    );
+    await applyFilter(page);
     await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
 
-    // 再読み込みしても、並べ替えと絞り込みが保たれる。
+    // 再読み込みしても、入力値が保たれ、アイコンに印が出て、ポップアップは閉じている。
     await page.reload();
     await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
-    await expect(page.getByTestId("history-sort-key-score")).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    await expect(page.getByTestId("history-controls")).toHaveCount(0);
+    await expect(page.getByTestId("history-controls-active")).toHaveCount(1);
+    await openFilter(page);
+    await expect(page.getByTestId("history-sort-score-direction")).toHaveText(
+      SCORE_DESC,
     );
+    await expect(page.getByTestId("history-filter-format")).toHaveText(
+      roundsText("formatOption.indoor"),
+    );
+    await page.keyboard.press("Escape");
 
     // 1件の詳細を開き、戻って履歴へ移っても、条件が保たれる。
     await page.getByRole("link", { name: /屋内コンパウンド/ }).click();
@@ -307,22 +347,18 @@ test.describe("履歴", () => {
     await page.getByRole("link", { name: roundsText("back") }).click();
     await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
     await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
-
-    // 欄を閉じて再読み込みすると、閉じたまま絞り込みが適用されている。
-    await page.getByTestId("history-controls-toggle").click();
     await expect(page.getByTestId("history-controls")).toHaveCount(0);
-    await page.reload();
-    await expect(page.getByTestId("history-controls")).toHaveCount(0);
-    await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
 
-    // 欄を開いてリセットすると、3件が実施日の新しい順に戻る。
-    await page.getByTestId("history-controls-toggle").click();
+    // フィルターを開いてリセットし、適用すると、3件が実施日の新しい順に戻り、印が消える。
+    await openFilter(page);
     await page.getByTestId("history-controls-reset").click();
+    await applyFilter(page);
     await expect(cards).toHaveText([
       /屋内リカーブ/,
       /屋内コンパウンド/,
       /屋外リカーブ/,
     ]);
+    await expect(page.getByTestId("history-controls-active")).toHaveCount(0);
   });
 
   test("完了したラウンドを期間と得点の範囲で絞り込むと、境界の当日・点を含む一致するラウンドだけが表示され、不正な指定は欄にエラーが出て表示が変わらず、再読み込みで条件が保たれる", async ({
@@ -343,38 +379,40 @@ test.describe("履歴", () => {
       });
     }
     const cards = page.getByRole("listitem");
-    const fillRange = async (field: string, value: string) => {
-      await page.getByTestId(`history-filter-${field}`).fill(value);
-      await page.getByTestId(`history-filter-${field}`).press("Enter");
-    };
+    const fillRange = (field: string, value: string) =>
+      page.getByTestId(`history-filter-${field}`).fill(value);
 
     // 履歴を開き、期間を5月に絞り込む。開始日・終了日の当日のラウンドも表示される。
     await page.goto("/rounds/history");
     await expect(cards).toHaveCount(5);
+    await openFilter(page);
     await fillRange("dateFrom", "2026-05-01");
     await fillRange("dateTo", "2026-05-31");
+    await applyFilter(page);
     await expect(cards).toHaveText([/五月末/, /五月中/, /五月初め/]);
 
     // 得点の範囲を5点以上9点以下にして、期間と合わせて一致する2件だけにする。境界の点のラウンドも表示される。
+    await openFilter(page);
     await fillRange("scoreMin", "5");
     await fillRange("scoreMax", "9");
+    await applyFilter(page);
     await expect(cards).toHaveText([/五月中/, /五月初め/]);
 
-    // 開始日を終了日より後にするとエラーが出て、一覧は直前のままである。直すとエラーが消え、絞り込みが更新される。
+    // 開始日を終了日より後にして適用するとエラーが出てポップアップは開いたままである。直して適用すると、エラーが消えて絞り込みが更新される。
+    await openFilter(page);
     await fillRange("dateFrom", "2026-06-01");
+    await page.getByTestId("history-controls-apply").click();
     await expect(page.getByTestId("history-filter-error-dateOrder")).toHaveText(
       roundsText("historyRangeError.dateOrder"),
     );
-    await expect(cards).toHaveText([/五月中/, /五月初め/]);
     await fillRange("dateFrom", "2026-05-02");
-    await expect(
-      page.getByTestId("history-filter-error-dateOrder"),
-    ).toHaveCount(0);
+    await applyFilter(page);
     await expect(cards).toHaveText([/五月中/]);
 
     // 再読み込みしても、範囲の条件と入力の値が保たれる。
     await page.reload();
     await expect(cards).toHaveText([/五月中/]);
+    await openFilter(page);
     await expect(page.getByTestId("history-filter-dateFrom")).toHaveValue(
       "2026-05-02",
     );
@@ -417,15 +455,21 @@ test.describe("履歴", () => {
       distances: [round(50, SMALL_FACE_ID)],
     });
     const cards = page.getByRole("listitem");
-    const fillDistance = async (index: number, value: string) => {
-      const input = page.getByTestId(
-        `history-filter-distance-${index}-distance`,
-      );
-      await input.fill(value);
-      await input.press("Enter");
+    const summaries = page.getByTestId(/^history-filter-distance-\d+$/);
+    const confirmDistance = page.getByTestId("history-distance-dialog-confirm");
+    // 「距離を追加」のダイアログで距離を入れて追加し、閉じるまで待つ。
+    const addDistance = async (value: string) => {
+      await page.getByTestId("history-filter-distance-add").click();
+      await page.getByTestId("history-distance-dialog-distance").fill(value);
+      await confirmDistance.click();
+      await expect(confirmDistance).toHaveCount(0);
     };
-    const addRow = () =>
-      page.getByTestId("history-filter-distance-add").click();
+    // 要約を押して開いたダイアログで、その行を削除する。
+    const deleteDistance = async (index: number) => {
+      await summaries.nth(index).click();
+      await page.getByTestId("history-distance-dialog-delete").click();
+      await expect(confirmDistance).toHaveCount(0);
+    };
 
     // 履歴を開くと5件が実施日の新しい順に表示される。
     await page.goto("/rounds/history");
@@ -437,24 +481,28 @@ test.describe("履歴", () => {
       /五十から三十/,
     ]);
 
-    // 50m→30mにすると、その順で2行のラウンドだけが表示される(個数の違う50m→30m→30mは表示されない)。
-    await addRow();
-    await fillDistance(0, "50");
-    await addRow();
-    await fillDistance(1, "30");
+    // 「距離を追加」で50と30を追加して適用すると、50m→30mの順で2行のラウンドだけが表示される(個数の違う50m→30m→30mは表示されない)。
+    await openFilter(page);
+    await addDistance("50");
+    await addDistance("30");
+    await expect(summaries).toHaveCount(2);
+    await applyFilter(page);
     await expect(cards).toHaveText([/五十から三十/]);
 
-    // 行を入れ替える操作はないため、削除して追加し直して30m→50mにすると、逆順のラウンドだけが表示される。
-    await page.getByTestId("history-filter-distance-0-remove").click();
-    await addRow();
-    await fillDistance(1, "50");
+    // 行を入れ替える操作はないため、先頭の行を削除して50を追加し、30m→50mにして適用すると、逆順のラウンドだけが表示される。
+    await openFilter(page);
+    await deleteDistance(0);
+    await addDistance("50");
+    await applyFilter(page);
     await expect(cards).toHaveText([/三十から五十/]);
 
-    // 先頭の行を削除して50mだけにすると、50mの1行のラウンドが表示される。
-    await page.getByTestId("history-filter-distance-0-remove").click();
+    // 先頭の行を削除して50mだけにして適用すると、50mの1行のラウンドが表示される。
+    await openFilter(page);
+    await deleteDistance(0);
+    await applyFilter(page);
     await expect(cards).toHaveText([/的違いの五十/, /五十だけ/]);
 
-    // 的を選ぶと、その的のラウンドだけに絞られる。的の一覧は端末に保存済みであることを待ち、欄を開き直して読み込む。
+    // 的を選んで適用すると、その的のラウンドだけに絞られる。的の一覧は端末に保存済みであることを待ち、ポップアップを開き直して読み込む。
     await expect
       .poll(() =>
         page.evaluate(() =>
@@ -464,37 +512,43 @@ test.describe("履歴", () => {
         ),
       )
       .toBe(true);
-    await page.getByTestId("history-controls-toggle").click();
-    await page.getByTestId("history-controls-toggle").click();
-    await page.getByTestId("history-filter-distance-0-target-add").click();
+    await openFilter(page);
+    await summaries.nth(0).click();
+    await page.getByTestId("history-distance-dialog-target").click();
     await page.getByTestId(`target-face-option-${LARGE_FACE_ID}`).click();
+    await confirmDistance.click();
+    await expect(confirmDistance).toHaveCount(0);
+    await applyFilter(page);
     await expect(cards).toHaveText([/五十だけ/]);
 
-    // 距離に101を入れるとエラーが出て、一覧は直前のままである。直すとエラーが消え、絞り込みが更新される。
-    await fillDistance(0, "101");
+    // 距離を空のまま追加しようとするとエラーが出てダイアログは開いたままで、閉じても要約は増えず、一覧は変わらない。
+    await openFilter(page);
+    await page.getByTestId("history-filter-distance-add").click();
+    await confirmDistance.click();
     await expect(
-      page.getByTestId("history-filter-distance-error-0-distanceInvalid"),
+      page.getByTestId("history-distance-dialog-error-distanceInvalid"),
     ).toHaveText(roundsText("historyDistanceError.distanceInvalid"));
-    await expect(cards).toHaveText([/五十だけ/]);
-    await fillDistance(0, "50");
-    await expect(
-      page.getByTestId("history-filter-distance-error-0-distanceInvalid"),
-    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(confirmDistance).toHaveCount(0);
+    await expect(summaries).toHaveCount(1);
+    await applyFilter(page);
     await expect(cards).toHaveText([/五十だけ/]);
 
-    // 再読み込みしても、距離の構成の行と入力の値が保たれる。
+    // 再読み込みしても、距離の構成の行が要約として保たれる。
     await page.reload();
     await expect(cards).toHaveText([/五十だけ/]);
-    await expect(
-      page.getByTestId("history-filter-distance-0-distance"),
-    ).toHaveValue("50");
-    await expect(
-      page.getByTestId("history-filter-distance-0-target"),
-    ).toBeVisible();
+    await openFilter(page);
+    await expect(summaries).toHaveCount(1);
+    await expect(summaries.nth(0)).toContainText("50m");
+    await expect(summaries.nth(0)).not.toContainText(
+      roundsText("historyFilterNone"),
+    );
 
-    // 欄を開いてリセットすると、行が消え、5件が実施日の新しい順に戻る。
+    // リセットして適用すると、要約が消えて「距離を追加」だけになり、5件が実施日の新しい順に戻る。
     await page.getByTestId("history-controls-reset").click();
-    await expect(page.getByTestId("history-filter-distance-0")).toHaveCount(0);
+    await expect(summaries).toHaveCount(0);
+    await expect(page.getByTestId("history-filter-distance-add")).toBeVisible();
+    await applyFilter(page);
     await expect(cards).toHaveText([
       /的違いの五十/,
       /五十から三十を2つ/,
@@ -544,7 +598,9 @@ test.describe("履歴", () => {
       /七十から五十/,
       /五十から三十/,
     ]);
-    await page.getByTestId("history-unit-distance").click();
+    await openFilter(page);
+    await page.getByTestId("history-unit-toggle").click();
+    await applyFilter(page);
     await expect(cards).toHaveText([
       distanceCard("五十だけ", "2026-05-03", 1, 50, 2),
       distanceCard("七十から五十", "2026-05-02", 1, 70, 6),
@@ -556,7 +612,9 @@ test.describe("履歴", () => {
     expect(requests.rounds()).toBe(1);
 
     // 得点の高い順に並べ替えると、小計の大きい順に並ぶ。
-    await page.getByTestId("history-sort-key-score").click();
+    await openFilter(page);
+    await chooseOption(page, "history-sort-score-direction", SCORE_DESC);
+    await applyFilter(page);
     await expect(cards).toHaveText([
       distanceCard("五十から三十", "2026-05-01", 1, 50, 9),
       distanceCard("七十から五十", "2026-05-02", 2, 50, 8),
@@ -566,10 +624,14 @@ test.describe("履歴", () => {
     ]);
 
     // 距離の行に50mを指定すると、ラウンドの構成によらず50mの距離だけが表示される。
-    await page.getByTestId("history-filter-distance-row-add").click();
-    const rowInput = page.getByTestId("history-filter-distance-row-0-distance");
-    await rowInput.fill("50");
-    await rowInput.press("Enter");
+    await openFilter(page);
+    await page.getByTestId("history-filter-distance-select").click();
+    await page.getByTestId("history-distance-dialog-distance").fill("50");
+    await page.getByTestId("history-distance-dialog-confirm").click();
+    await expect(
+      page.getByTestId("history-distance-dialog-confirm"),
+    ).toHaveCount(0);
+    await applyFilter(page);
     await expect(cards).toHaveText([
       distanceCard("五十から三十", "2026-05-01", 1, 50, 9),
       distanceCard("七十から五十", "2026-05-02", 2, 50, 8),
@@ -577,13 +639,14 @@ test.describe("履歴", () => {
     ]);
 
     // 得点の範囲を8点以上9点以下にすると、小計が範囲に入る50mの距離だけが表示される。ラウンドの合計点では絞られない。
+    await openFilter(page);
     for (const [field, value] of [
       ["scoreMin", "8"],
       ["scoreMax", "9"],
     ]) {
       await page.getByTestId(`history-filter-${field}`).fill(value);
-      await page.getByTestId(`history-filter-${field}`).press("Enter");
     }
+    await applyFilter(page);
     await expect(cards).toHaveText([
       distanceCard("五十から三十", "2026-05-01", 1, 50, 9),
       distanceCard("七十から五十", "2026-05-02", 2, 50, 8),
@@ -605,26 +668,33 @@ test.describe("履歴", () => {
     });
     const requests = trackHistoryRpcRequests(page);
     const cards = page.getByRole("listitem");
-    const unitDistance = page.getByTestId("history-unit-distance");
+    const unitDistance = page.getByTestId("history-unit-toggle");
     const expectedCards = [
       distanceCard("七十から五十", "2026-05-02", 2, 50, 0),
       distanceCard("五十から三十", "2026-05-01", 1, 50, 0),
     ];
 
-    // 距離単位に切り替えて、距離の行を50mにする。
+    // 距離単位で表示をオンにして、絞り込む距離を50mにして適用する。
     await page.goto("/rounds/history");
+    await openFilter(page);
     await unitDistance.click();
-    await page.getByTestId("history-filter-distance-row-add").click();
-    const rowInput = page.getByTestId("history-filter-distance-row-0-distance");
-    await rowInput.fill("50");
-    await rowInput.press("Enter");
+    const rowSummary = page.getByTestId("history-filter-distance-row");
+    const confirmDistance = page.getByTestId("history-distance-dialog-confirm");
+    await page.getByTestId("history-filter-distance-select").click();
+    await page.getByTestId("history-distance-dialog-distance").fill("50");
+    await confirmDistance.click();
+    await expect(confirmDistance).toHaveCount(0);
+    await applyFilter(page);
     await expect(cards).toHaveText(expectedCards);
 
     // 再読み込みしても、単位と距離の行が保たれる。
     await page.reload();
     await expect(cards).toHaveText(expectedCards);
-    await expect(unitDistance).toHaveAttribute("aria-pressed", "true");
-    await expect(rowInput).toHaveValue("50");
+    await openFilter(page);
+    await expect(unitDistance).toHaveAttribute("aria-checked", "true");
+    await expect(rowSummary).toContainText("50m");
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("history-controls")).toHaveCount(0);
 
     // 件を押して詳細へ移り、戻るリンクで履歴へ戻ると、同じ表示が取得し直されずに残る。
     await cards.first().click();
@@ -635,18 +705,58 @@ test.describe("履歴", () => {
     await page.getByRole("link", { name: roundsText("back") }).click();
     await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
     await expect(cards).toHaveText(expectedCards);
-    await expect(unitDistance).toHaveAttribute("aria-pressed", "true");
     expect(requests.all()).toBe(before);
 
-    // リセットすると、ラウンド単位で指定なしに戻り、2件がラウンドのカードで表示される。
+    // フィルターを開いて要約から距離を削除すると「距離を選択」に戻り、リセットして適用すると、ラウンド単位で指定なしに戻り、2件がラウンドのカードで表示される。
+    await openFilter(page);
+    await rowSummary.click();
+    await page.getByTestId("history-distance-dialog-delete").click();
+    await expect(confirmDistance).toHaveCount(0);
+    await expect(
+      page.getByTestId("history-filter-distance-select"),
+    ).toBeVisible();
     await page.getByTestId("history-controls-reset").click();
+    await expect(unitDistance).toHaveAttribute("aria-checked", "false");
+    await expect(
+      page.getByTestId("history-filter-distance-select"),
+    ).toHaveCount(0);
+    await expect(rowSummary).toHaveCount(0);
+    await applyFilter(page);
     await expect(cards).toHaveText([/七十から五十/, /五十から三十/]);
-    await expect(page.getByTestId("history-unit-round")).toHaveAttribute(
-      "aria-pressed",
-      "true",
+  });
+
+  test("種別の選択を開いたまま弓種を押すと、種別が閉じて弓種の選択が開き、弓種を選べる", async ({
+    page,
+  }) => {
+    await signInFreshUser(page, "e2e-history");
+    await page.goto("/rounds/history");
+    const indoor = page.getByRole("option", {
+      name: roundsText("formatOption.indoor"),
+    });
+    const compound = page.getByRole("option", {
+      name: roundsText("bowTypeOption.compound"),
+    });
+
+    // フィルターのポップアップを開き、種別の選択を開いたまま弓種を押すと、種別が閉じて弓種の選択が開き、ポップアップは開いたまま弓種を選べる。
+    await openFilter(page);
+    await page.getByTestId("history-filter-format").click();
+    await expect(indoor).toBeVisible();
+    await page.getByTestId("history-filter-bow-type").click();
+    await expect(compound).toBeVisible();
+    await expect(indoor).toHaveCount(0);
+    await expect(page.getByTestId("history-controls")).toBeVisible();
+    await compound.click();
+    await expect(page.getByTestId("history-filter-bow-type")).toHaveText(
+      roundsText("bowTypeOption.compound"),
     );
-    await expect(page.getByTestId("history-filter-distance-row-0")).toHaveCount(
-      0,
+
+    // 選択を開いたまま距離単位で表示を押すと、距離単位で表示がオンになる。
+    await page.getByTestId("history-filter-format").click();
+    await expect(indoor).toBeVisible();
+    await page.getByTestId("history-unit-toggle").click();
+    await expect(page.getByTestId("history-unit-toggle")).toHaveAttribute(
+      "aria-checked",
+      "true",
     );
   });
 
@@ -659,7 +769,9 @@ test.describe("履歴", () => {
       distances: outdoorDistances(70, 50),
     });
     await page.goto("/rounds/history");
-    await page.getByTestId("history-unit-distance").click();
+    await openFilter(page);
+    await page.getByTestId("history-unit-toggle").click();
+    await applyFilter(page);
     const secondDistance = page.getByRole("link").filter({
       hasText: distanceCard("七十から五十", "2026-05-02", 2, 50, 0),
     });
@@ -773,19 +885,35 @@ test.describe("履歴", () => {
 
       // 距離単位で履歴を開くと、最初は全件でなく一部だけが表示される。
       await page.goto("/rounds/history");
-      await page.getByTestId("history-unit-distance").click();
+      await openFilter(page);
+      await page.getByTestId("history-unit-toggle").click();
+      await applyFilter(page);
       await expect(cards.first()).toBeVisible();
       expect(await cards.count()).toBeLessThan(24);
-      await expect(page.getByText(roundsText("historyEnd"))).toHaveCount(0);
+      await expect(
+        page.getByText(roundsText("historyEndDistance")),
+      ).toHaveCount(0);
 
-      // 末尾までスクロールすると、続きが取得されて24件が重複なく並び、以上の文言が出る。
-      await scrollToHistoryEnd(page);
+      // 末尾までスクロールすると、続きが取得されて24件が重複なく並び、距離単位の以上の文言が出る。
+      await scrollToHistoryEnd(page, "historyEndDistance");
       await expect(cards).toHaveCount(24);
       const texts = await cards.allTextContents();
       expect(new Set(texts).size).toBe(24);
       for (const name of names) {
         await expect(cards.filter({ hasText: name })).toHaveCount(4);
       }
+
+      // スクロールしても、フィルターのアイコンは一覧の項目に隠れず、押せる最前面にある。
+      const toggle = page.getByTestId("history-controls-toggle");
+      const isFront = await toggle.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const front = document.elementFromPoint(
+          box.x + box.width / 2,
+          box.y + box.height / 2,
+        );
+        return front !== null && element.contains(front);
+      });
+      expect(isFront).toBe(true);
     });
 
     test("後ろのページにある条件に一致するラウンドも、得点順に並べて種別で絞り込むと先頭側に表示され、条件を変えるたびに先頭から取得し直される", async ({
@@ -802,11 +930,19 @@ test.describe("履歴", () => {
       await expect(page.getByText(/屋内-/)).toHaveCount(0);
 
       // 得点の高い順に並べ替えて、先頭から取得し直す。
-      await page.getByTestId("history-sort-key-score").click();
+      await openFilter(page);
+      await chooseOption(page, "history-sort-score-direction", SCORE_DESC);
+      await applyFilter(page);
       await expect.poll(() => requests.firstPages()).toBe(2);
 
       // 種別を屋内に絞り込むと、後ろのページにあった屋内3件だけが先頭から表示される。
-      await page.getByTestId("history-filter-format-indoor").click();
+      await openFilter(page);
+      await chooseOption(
+        page,
+        "history-filter-format",
+        roundsText("formatOption.indoor"),
+      );
+      await applyFilter(page);
       // 得点が同じため、実施日の新しい順になる。
       await expect(cards).toHaveText([/屋内-02/, /屋内-01/, /屋内-00/]);
       await expect.poll(() => requests.formats()).toContain("indoor");
