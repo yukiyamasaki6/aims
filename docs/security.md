@@ -34,6 +34,7 @@
 | `preset_distances` | RLS: 認証済みユーザー全員 | RLS: 親の`owner_id`が`auth.uid()`と一致する | RLS: 不可 | RLS: 不可（親の削除の`CASCADE`で消える） |
 
 `preset_distances`のINSERTは親の`preset_rounds.owner_id`判定に従う（親を辿ってRLSを評価する。`distances`/`shots`が`round_users`を辿るのと同じパターン）。
+`distances`のSELECTは見える`rounds`があること、`shots`のSELECTは見える`distances`があることで判定し、`is_round_member`を直接呼ぶのは`rounds`だけである（親の表のRLSを通して`round_users`を辿る）。`shot_events`・`distance_events`は`is_round_member`を直接呼ぶ。
 
 「直接操作不可」はRLSポリシーとテーブルのGRANTの両方がなく、`permission denied`（42501）で拒否される。
 書き込み経路が必要になった時点で、ポリシーとGRANTを設計して追加する。
