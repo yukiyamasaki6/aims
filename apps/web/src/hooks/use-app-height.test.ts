@@ -75,12 +75,47 @@ describe("スタンドアロンでvirtualKeyboardがある環境", () => {
     expect(appHeight()).toBe("400px");
   });
 
+  it("windowのresizeで、値が変わっていれば更新する", () => {
+    // Given
+    viewport = installFakeViewport({
+      ...standalone,
+      visualViewport: { height: 700, scale: 1 },
+    });
+    renderHook(() => useAppHeight());
+
+    // When
+    act(() => {
+      viewport.setVisualViewportHeight(450);
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    // Then
+    expect(appHeight()).toBe("450px");
+  });
+
+  it("時間が経っても、通知なしの変化は書き直さない", () => {
+    // Given
+    viewport = installFakeViewport({
+      ...standalone,
+      visualViewport: { height: 700, scale: 1 },
+    });
+    renderHook(() => useAppHeight());
+
+    // When
+    viewport.setVisualViewportHeight(650);
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    // Then
+    expect(appHeight()).toBe("700px");
+  });
+
   it.each([
-    ["windowのresize", window, "resize"],
     ["windowのpageshow", window, "pageshow"],
-    ["documentのvisibilitychange", document, "visibilitychange"],
     ["windowのorientationchange", window, "orientationchange"],
-  ] as const)("%sで、値が変わっていれば更新する", (_, target, type) => {
+    ["documentのvisibilitychange", document, "visibilitychange"],
+  ] as const)("%sでは、書き直さない", (_, target, type) => {
     // Given
     viewport = installFakeViewport({
       ...standalone,
@@ -95,38 +130,7 @@ describe("スタンドアロンでvirtualKeyboardがある環境", () => {
     });
 
     // Then
-    expect(appHeight()).toBe("450px");
-  });
-
-  it("通知なしに変わった値を、0.5秒後と2秒後の再確認で反映する", () => {
-    // Given
-    viewport = installFakeViewport({
-      ...standalone,
-      visualViewport: { height: 700, scale: 1 },
-    });
-    renderHook(() => useAppHeight());
-
-    // When
-    viewport.setVisualViewportHeight(650);
-    act(() => {
-      vi.advanceTimersByTime(499);
-    });
-    const beforeFirst = appHeight();
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
-    const afterFirst = appHeight();
-    viewport.setVisualViewportHeight(600);
-    act(() => {
-      vi.advanceTimersByTime(1500);
-    });
-
-    // Then
-    expect([beforeFirst, afterFirst, appHeight()]).toEqual([
-      "700px",
-      "650px",
-      "600px",
-    ]);
+    expect(appHeight()).toBe("700px");
   });
 
   it("直前に書いた値との差が0.5px未満なら書かず、0.5px以上なら書く。小数の高さで境界を確かめる", () => {
@@ -158,7 +162,7 @@ describe("スタンドアロンでvirtualKeyboardがある環境", () => {
     ]);
   });
 
-  it("アンマウントで全ての購読と時限を外し、以後は書かない", () => {
+  it("アンマウントで全ての購読を外し、以後は書かない", () => {
     // Given
     viewport = installFakeViewport({
       ...standalone,
@@ -166,17 +170,18 @@ describe("スタンドアロンでvirtualKeyboardがある環境", () => {
     });
     const { unmount } = renderHook(() => useAppHeight());
     const whileMounted = viewport.subscriptions();
+    const timersWhileMounted = vi.getTimerCount();
 
     // When
     unmount();
     viewport.setVisualViewportHeight(300);
     viewport.fireVisualViewportResize();
     window.dispatchEvent(new Event("resize"));
-    document.dispatchEvent(new Event("visibilitychange"));
     vi.advanceTimersByTime(3000);
 
     // Then
-    expect(whileMounted).toBeGreaterThan(0);
+    expect(whileMounted).toBe(2);
+    expect(timersWhileMounted).toBe(0);
     expect(viewport.subscriptions()).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
     expect(appHeight()).toBe("700px");

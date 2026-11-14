@@ -4,8 +4,6 @@ import { createBrowserIdentityStore } from "@/features/auth/infrastructure/brows
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SessionProvider } from "@/features/auth/ui/session-context";
-import { createBrowserDiagnosticsSetting } from "@/features/viewport-diagnostics/infrastructure/browser-diagnostics-setting";
-import { ViewportDiagnosticsProvider } from "@/features/viewport-diagnostics/ui/viewport-diagnostics-provider";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 
@@ -27,7 +25,6 @@ import SettingsPage from "./page";
 
 const authText = translatorFor("auth");
 const settingsText = translatorFor("settings");
-const diagnosticsText = translatorFor("viewportDiagnostics");
 
 // 入口のテスト。SDK(@supabase/ssr)と、ブラウザの保存先(localStorage)・場所(location)の境界だけを差し替え、
 // 手続き、実装、画面、確認ダイアログ、左パネルは実物を通す。
@@ -84,12 +81,9 @@ function SessionWrapper({ children }: { children: ReactNode }) {
       clock: createBrowserClock(),
     }),
   );
-  const [diagnosticsSetting] = useState(createBrowserDiagnosticsSetting);
   return (
     <IntlTestProvider>
-      <ViewportDiagnosticsProvider setting={diagnosticsSetting}>
-        <SessionProvider session={session}>{children}</SessionProvider>
-      </ViewportDiagnosticsProvider>
+      <SessionProvider session={session}>{children}</SessionProvider>
     </IntlTestProvider>
   );
 }
@@ -97,7 +91,6 @@ function SessionWrapper({ children }: { children: ReactNode }) {
 const replace = vi.fn();
 const assign = vi.fn();
 const IDENTITY_KEY = "aims:local-user-id";
-const DIAGNOSTICS_KEY = "aims:viewport-diagnostics";
 const NETWORK_ERROR = authText("failure.unreachable");
 const RATE_LIMIT_ERROR = new AuthApiError(
   "limit",
@@ -205,6 +198,22 @@ describe("SettingsPage", () => {
       ).toHaveLength(1);
     });
 
+    it("診断を有効にしていた端末(旧キーの保存あり)で設定を開いても、バッジは表示されず、サインアウトのボタンが表示され、エラーにならない", () => {
+      // Given
+      // 削除済みの機能が端末に残した実在の値。以後は参照されないことを確かめるため、このテストだけ旧キーと旧testidの文字列を書く。
+      localStorage.setItem("aims:viewport-diagnostics", "1");
+
+      // When
+      const render = () => renderPageWithIdentity();
+
+      // Then
+      expect(render).not.toThrow();
+      expect(screen.queryByTestId("viewport-diagnostics-badge")).toBeNull();
+      expect(
+        screen.getAllByRole("button", { name: authText("signOut") }),
+      ).toHaveLength(1);
+    });
+
     it("Supabaseの環境変数が無くても、描画時に接続を作らず描画できる", () => {
       // Given
       vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
@@ -222,85 +231,6 @@ describe("SettingsPage", () => {
 
       // Then
       expect(render).not.toThrow();
-    });
-  });
-
-  describe("表示領域の診断", () => {
-    function diagnosticsSwitch() {
-      return screen.getByRole("switch", {
-        name: diagnosticsText("toggleLabel"),
-      });
-    }
-
-    function badge() {
-      return screen.queryByTestId("viewport-diagnostics-badge");
-    }
-
-    it("設定の画面に、診断のスイッチをオフで表示し、バッジは表示しない", () => {
-      // Given
-      // When
-      renderPageWithIdentity();
-
-      // Then
-      expect(diagnosticsSwitch()).not.toBeChecked();
-      expect(badge()).toBeNull();
-    });
-
-    it("スイッチを押すと、バッジを表示し、端末の保存へ有効を書く", async () => {
-      // Given
-      const user = userEvent.setup();
-      renderPageWithIdentity();
-
-      // When
-      await user.click(diagnosticsSwitch());
-
-      // Then
-      expect(badge()).toBeInTheDocument();
-      expect(localStorage.getItem(DIAGNOSTICS_KEY)).toBe("1");
-    });
-
-    it("有効にした後、画面を破棄して描き直しても(再読み込みを模す)、スイッチはオンでバッジを表示する", async () => {
-      // Given
-      const user = userEvent.setup();
-      const first = renderPageWithIdentity();
-      await user.click(diagnosticsSwitch());
-      first.unmount();
-
-      // When
-      renderPageWithIdentity();
-
-      // Then
-      expect(diagnosticsSwitch()).toBeChecked();
-      expect(badge()).toBeInTheDocument();
-    });
-
-    it("有効にした後、スイッチを押して無効に戻すと、バッジが消え、保存が無くなる", async () => {
-      // Given
-      const user = userEvent.setup();
-      renderPageWithIdentity();
-      await user.click(diagnosticsSwitch());
-
-      // When
-      await user.click(diagnosticsSwitch());
-
-      // Then
-      expect(badge()).toBeNull();
-      expect(localStorage.getItem(DIAGNOSTICS_KEY)).toBeNull();
-    });
-
-    it("有効にした後、サインアウトを確認しても、診断の保存は消えない(端末の識別情報は消える)", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutClearingSession(async () => ({ error: null }));
-      renderPageWithIdentity();
-      await user.click(diagnosticsSwitch());
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(localStorage.getItem(IDENTITY_KEY)).toBeNull();
-      expect(localStorage.getItem(DIAGNOSTICS_KEY)).toBe("1");
     });
   });
 

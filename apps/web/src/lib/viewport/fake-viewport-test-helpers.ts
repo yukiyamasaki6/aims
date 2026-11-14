@@ -1,12 +1,7 @@
 // ブラウザの表示領域に関する状態(matchMedia、visualViewport、navigator.virtualKeyboard、innerHeight)と、購読の数を、テストが動かせる偽物。
 // jsdomにはmatchMediaとvisualViewportが無い。
 
-const WATCHED_EVENTS = [
-  "resize",
-  "pageshow",
-  "visibilitychange",
-  "orientationchange",
-];
+const WATCHED_EVENTS = ["resize"];
 
 export type FakeViewportOptions = {
   // display-mode: standaloneに一致するか。
@@ -24,7 +19,7 @@ export type FakeViewport = {
   setInnerHeight(height: number): void;
   // visualViewportのresizeを発火する。
   fireVisualViewportResize(): void;
-  // 解除されていない購読(resize、pageshow、visibilitychange、orientationchange)の数。
+  // 解除されていない購読(resize)の数。
   subscriptions(): number;
   restore(): void;
 };

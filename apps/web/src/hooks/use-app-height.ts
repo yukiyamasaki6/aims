@@ -3,8 +3,6 @@ import { useEffect } from "react";
 const APP_HEIGHT_VARIABLE = "--app-height";
 // 値の差がこれ未満なら書かない。
 const MIN_CHANGE_PX = 0.5;
-// 通知なしに変わる値を拾い直す時刻(マウントからのミリ秒)。
-const RECHECK_DELAYS_MS = [500, 2000];
 
 // ソフトキーボードで縮むレイアウトビューポート(interactiveWidget)に対応する環境の代用の判定。
 // iOS Safariは非対応で、可視の高さを書くとキーボードでの縮み方が変わる恐れがあるため、書かない。
@@ -42,20 +40,10 @@ export function useAppHeight(): void {
     const viewport = window.visualViewport;
     viewport?.addEventListener("resize", update);
     window.addEventListener("resize", update);
-    window.addEventListener("pageshow", update);
-    window.addEventListener("orientationchange", update);
-    document.addEventListener("visibilitychange", update);
-    const timers = RECHECK_DELAYS_MS.map((delay) =>
-      window.setTimeout(update, delay),
-    );
 
     return () => {
       viewport?.removeEventListener("resize", update);
       window.removeEventListener("resize", update);
-      window.removeEventListener("pageshow", update);
-      window.removeEventListener("orientationchange", update);
-      document.removeEventListener("visibilitychange", update);
-      for (const timer of timers) window.clearTimeout(timer);
     };
   }, []);
 }
