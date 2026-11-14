@@ -386,6 +386,44 @@ describe("RootClientEntry", () => {
     });
   });
 
+  describe("表示領域の診断", () => {
+    const DiagnosticsKey = "aims:viewport-diagnostics";
+
+    function badge() {
+      return screen.queryByTestId("viewport-diagnostics-badge");
+    }
+
+    it("保存が有効なら、子要素の外側でバッジを表示する(子の画面の種類に依らない)", () => {
+      // Given
+      localStorage.setItem(DiagnosticsKey, "1");
+
+      // When
+      render(
+        <RootClientEntry>
+          <p>子要素</p>
+        </RootClientEntry>,
+      );
+
+      // Then
+      expect(badge()).toBeInTheDocument();
+      expect(badge()?.parentElement).toBe(document.body);
+      expect(screen.getByText("子要素")).toBeInTheDocument();
+    });
+
+    it("保存が無ければ、バッジを表示しない", () => {
+      // Given
+      // When
+      render(
+        <RootClientEntry>
+          <p>子要素</p>
+        </RootClientEntry>,
+      );
+
+      // Then
+      expect(badge()).toBeNull();
+    });
+  });
+
   describe("アンマウント", () => {
     it("更新の切り替えの手続きの停止関数を呼ぶ", () => {
       // Given

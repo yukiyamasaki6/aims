@@ -2,7 +2,6 @@ import { SerwistProvider } from "@serwist/next/react";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 import { createTranslator } from "next-intl";
-import { ViewportDebugBadge } from "@/components/viewport-debug-badge";
 import { intlConfig } from "@/i18n/messages";
 import { SW_PATH } from "@/routes";
 import "./globals.css";
@@ -38,7 +37,6 @@ export default function RootLayout({
           せず、下部要素が隠れることがある）で、スタンドアロンでは
           useAppHeightが実測した可視高さに差し替える。 */}
       <body className="h-(--app-height) overflow-hidden">
-        <ViewportDebugBadge />
         <RootClientEntry>
           <SerwistProvider
             swUrl={SW_PATH}

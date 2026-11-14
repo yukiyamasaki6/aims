@@ -12,6 +12,8 @@ import { waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
 const settingsText = translatorFor("settings");
+const navigationText = translatorFor("navigation");
+const diagnosticsText = translatorFor("viewportDiagnostics");
 
 test.describe("認証済み", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
@@ -43,6 +45,48 @@ test.describe("認証済み", () => {
       page.getByRole("button", { name: authText("signOut") }),
     ).toBeVisible();
     await openSignOutConfirm(page);
+    expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
+  });
+
+  test("認証済みで設定から表示領域の診断を有効にすると、画面を移ってもバッジが表示され、再読み込み後も保たれ、設定で無効に戻すと消える", async ({
+    page,
+  }) => {
+    // ホームから設定へ移り、診断を有効にしてバッジを表示する。
+    const errors = collectHydrationErrors(page);
+    const badge = page.getByTestId("viewport-diagnostics-badge");
+    const diagnosticsSwitch = page.getByRole("switch", {
+      name: diagnosticsText("toggleLabel"),
+    });
+    const settingsLink = page.getByRole("link", {
+      name: navigationText("leftPanelSettings"),
+    });
+    const homeLink = page.getByRole("link", {
+      name: navigationText("leftPanelHome"),
+    });
+    await page.goto("/rounds");
+    await waitForHydration(page);
+    await expect(badge).not.toBeVisible();
+    await settingsLink.click();
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(diagnosticsSwitch).not.toBeChecked();
+    await diagnosticsSwitch.click();
+    await expect(badge).toBeVisible();
+
+    // ホームへ移っても、バッジが表示される。
+    await homeLink.click();
+    await expect(page).toHaveURL(/\/rounds$/);
+    await expect(badge).toBeVisible();
+
+    // 再読み込みしても、バッジが表示される。
+    await page.reload();
+    await waitForHydration(page);
+    await expect(badge).toBeVisible();
+
+    // 設定へ移り、診断を無効に戻してバッジを消す。
+    await settingsLink.click();
+    await expect(diagnosticsSwitch).toBeChecked();
+    await diagnosticsSwitch.click();
+    await expect(badge).not.toBeVisible();
     expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
   });
 });
