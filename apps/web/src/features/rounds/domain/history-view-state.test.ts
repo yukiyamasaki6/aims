@@ -1,275 +1,567 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyHistoryCondition,
   DEFAULT_HISTORY_CONDITION,
   DEFAULT_HISTORY_VIEW_STATE,
-  type HistoryCondition,
+  type HistoryDistanceDraftRow,
+  type HistoryRangeDraft,
   type HistoryViewState,
+  historyDistancesOf,
+  historyRangeOf,
   historyViewStateOf,
 } from "./history-view-state";
-import type { HistoryRoundItem } from "./round-list";
 
-function roundItem(
-  id: string,
-  overrides: Partial<HistoryRoundItem> = {},
-): HistoryRoundItem {
+const EMPTY_DRAFT: HistoryRangeDraft = {
+  dateFrom: "",
+  dateTo: "",
+  scoreMin: "",
+  scoreMax: "",
+};
+
+const NO_RANGE = {
+  dateFrom: null,
+  dateTo: null,
+  scoreMin: null,
+  scoreMax: null,
+};
+
+const TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001";
+
+function rangeOf(draft: Partial<HistoryRangeDraft>) {
+  return historyRangeOf({ ...EMPTY_DRAFT, ...draft });
+}
+
+function distanceDraftOf(
+  row: Partial<HistoryDistanceDraftRow>,
+): HistoryDistanceDraftRow {
   return {
-    id,
-    name: id,
-    roundDate: "2026-09-15",
-    total: 0,
-    format: "outdoor",
-    bowType: "recurve",
-    createdAt: "2026-09-15T10:00:00.000000+00:00",
-    ...overrides,
+    distance: "50",
+    arrowsPerEnd: "",
+    totalArrows: "",
+    targetFaceId: null,
+    ...row,
   };
 }
 
-const ids = (items: HistoryRoundItem[]) => items.map((item) => item.id);
-
-function condition(overrides: Partial<HistoryCondition>): HistoryCondition {
-  return { ...DEFAULT_HISTORY_CONDITION, ...overrides };
+function distanceRowOf(distance: number) {
+  return {
+    distance,
+    arrowsPerEnd: null,
+    totalArrows: null,
+    targetFaceId: null,
+  };
 }
 
-describe("applyHistoryCondition", () => {
-  describe("並べ替え", () => {
-    const dated = [
-      roundItem("mid", { roundDate: "2026-09-10" }),
-      roundItem("new", { roundDate: "2026-09-20" }),
-      roundItem("old", { roundDate: "2026-09-01" }),
-    ];
-
-    it("既定の条件では、全てのラウンドを実施日の新しい順に返す", () => {
-      // Given
-
-      // When
-      const result = applyHistoryCondition(dated, DEFAULT_HISTORY_CONDITION);
-
-      // Then
-      expect(ids(result)).toEqual(["new", "mid", "old"]);
-    });
-
-    it("日付が基準なら、降順で新しい順、昇順で古い順に返し、どちらも同じラウンドの集合を返す", () => {
-      // Given
-      const descending = condition({ sortKey: "date", sortDirection: "desc" });
-      const ascending = condition({ sortKey: "date", sortDirection: "asc" });
-
-      // When
-      const desc = applyHistoryCondition(dated, descending);
-      const asc = applyHistoryCondition(dated, ascending);
-
-      // Then
-      expect(ids(desc)).toEqual(["new", "mid", "old"]);
-      expect(ids(asc)).toEqual(["old", "mid", "new"]);
-      expect(ids(asc).sort()).toEqual(ids(dated).sort());
-    });
-
-    it("得点が基準なら、降順で高い順、昇順で低い順に返し、どちらも同じラウンドの集合を返す", () => {
-      // Given
-      const scored = [
-        roundItem("mid", { total: 500 }),
-        roundItem("high", { total: 620 }),
-        roundItem("low", { total: 310 }),
-      ];
-
-      // When
-      const desc = applyHistoryCondition(
-        scored,
-        condition({ sortKey: "score", sortDirection: "desc" }),
-      );
-      const asc = applyHistoryCondition(
-        scored,
-        condition({ sortKey: "score", sortDirection: "asc" }),
-      );
-
-      // Then
-      expect(ids(desc)).toEqual(["high", "mid", "low"]);
-      expect(ids(asc)).toEqual(["low", "mid", "high"]);
-      expect(ids(asc).sort()).toEqual(ids(scored).sort());
-    });
-  });
-
-  describe("基準が同じラウンドの並び", () => {
-    // 得点が同じ4件。実施日が違う、実施日も同じで作成時刻が違う、作成時刻も同じでIDが違う。
-    const tied = [
-      roundItem("b-same", { total: 500 }),
-      roundItem("a-same", { total: 500 }),
-      roundItem("older-date", { total: 500, roundDate: "2026-09-01" }),
-      roundItem("earlier-created", {
-        total: 500,
-        createdAt: "2026-09-15T08:00:00.000000+00:00",
-      }),
-      roundItem("newer-date", { total: 500, roundDate: "2026-09-20" }),
-    ];
-    const expected = [
-      "newer-date",
-      "a-same",
-      "b-same",
-      "earlier-created",
-      "older-date",
-    ];
-
-    it.each([
-      ["昇順", "asc"],
-      ["降順", "desc"],
-    ] as const)(
-      "得点が同じなら、%sでも、実施日の新しい順、作成時刻の新しい順、IDの順に返す",
-      (_name, sortDirection) => {
-        // Given
-        const scoreCondition = condition({ sortKey: "score", sortDirection });
-
-        // When
-        const result = applyHistoryCondition(tied, scoreCondition);
-
-        // Then
-        expect(ids(result)).toEqual(expected);
-      },
-    );
-
-    it("入力の並びを替えても、同じ並びを返す", () => {
-      // Given
-      const scoreCondition = condition({ sortKey: "score" });
-      const reversed = [...tied].reverse();
-
-      // When
-      const result = applyHistoryCondition(reversed, scoreCondition);
-
-      // Then
-      expect(ids(result)).toEqual(expected);
-    });
-
-    it.each([
-      ["昇順", "asc"],
-      ["降順", "desc"],
-    ] as const)(
-      "実施日が同じなら、%sでも、作成時刻の新しい順、IDの順に返す",
-      (_name, sortDirection) => {
-        // Given
-        const sameDate = [
-          roundItem("b-same"),
-          roundItem("earlier-created", {
-            createdAt: "2026-09-15T08:00:00.000000+00:00",
-          }),
-          roundItem("a-same"),
-          roundItem("later-created", {
-            createdAt: "2026-09-15T12:00:00.000000+00:00",
-          }),
-        ];
-
-        // When
-        const result = applyHistoryCondition(
-          sameDate,
-          condition({ sortKey: "date", sortDirection }),
-        );
-
-        // Then
-        expect(ids(result)).toEqual([
-          "later-created",
-          "a-same",
-          "b-same",
-          "earlier-created",
-        ]);
-      },
-    );
-  });
-
-  describe("絞り込み", () => {
-    const mixed = [
-      roundItem("outdoor-recurve", { format: "outdoor", bowType: "recurve" }),
-      roundItem("indoor-recurve", { format: "indoor", bowType: "recurve" }),
-      roundItem("indoor-compound", { format: "indoor", bowType: "compound" }),
-      roundItem("field-barebow", { format: "field", bowType: "barebow" }),
-      roundItem("outdoor-compound", { format: "outdoor", bowType: "compound" }),
-      roundItem("outdoor-barebow", { format: "outdoor", bowType: "barebow" }),
-    ];
-
-    it("指定がなければ、全てのラウンドを残す", () => {
-      // Given
-      const none = condition({ format: null, bowType: null });
-
-      // When
-      const result = applyHistoryCondition(mixed, none);
-
-      // Then
-      expect(ids(result).sort()).toEqual(ids(mixed).sort());
-    });
-
-    it.each([
-      ["outdoor", ["outdoor-compound", "outdoor-barebow", "outdoor-recurve"]],
-      ["indoor", ["indoor-compound", "indoor-recurve"]],
-      ["field", ["field-barebow"]],
-    ] as const)(
-      "種別に%sを指定すると、その種別だけを残す",
-      (format, expected) => {
-        // Given
-        const formatCondition = condition({ format });
-
-        // When
-        const result = applyHistoryCondition(mixed, formatCondition);
-
-        // Then
-        expect(ids(result).sort()).toEqual([...expected].sort());
-      },
-    );
-
-    it.each([
-      ["recurve", ["outdoor-recurve", "indoor-recurve"]],
-      ["compound", ["indoor-compound", "outdoor-compound"]],
-      ["barebow", ["field-barebow", "outdoor-barebow"]],
-    ] as const)(
-      "弓種に%sを指定すると、その弓種だけを残す",
-      (bowType, expected) => {
-        // Given
-        const bowCondition = condition({ bowType });
-
-        // When
-        const result = applyHistoryCondition(mixed, bowCondition);
-
-        // Then
-        expect(ids(result).sort()).toEqual([...expected].sort());
-      },
-    );
-
-    it("種別と弓種の両方を指定すると、両方に一致するものだけを残す(片方だけ一致するものは残さない)", () => {
-      // Given
-      const both = condition({ format: "indoor", bowType: "recurve" });
-
-      // When
-      const result = applyHistoryCondition(mixed, both);
-
-      // Then
-      expect(ids(result)).toEqual(["indoor-recurve"]);
-    });
-
-    it("一致するラウンドがなければ、空の配列を返す", () => {
-      // Given
-      const none = condition({ format: "field", bowType: "compound" });
-
-      // When
-      const result = applyHistoryCondition(mixed, none);
-
-      // Then
-      expect(result).toEqual([]);
-    });
-  });
-
-  it("絞り込みと並べ替えを併用すると、一致するものだけを、選んだ並びで返す", () => {
+describe("historyRangeOf", () => {
+  it("4つとも空(空白だけを含む)なら、4つとも指定なし(null)にする", () => {
     // Given
-    const items = [
-      roundItem("outdoor-low", { format: "outdoor", total: 300 }),
-      roundItem("indoor-high", { format: "indoor", total: 590 }),
-      roundItem("outdoor-high", { format: "outdoor", total: 640 }),
-      roundItem("outdoor-mid", { format: "outdoor", total: 500 }),
+    const draft = {
+      dateFrom: "",
+      dateTo: "  ",
+      scoreMin: " ",
+      scoreMax: "",
+    };
+
+    // When
+    const result = historyRangeOf(draft);
+
+    // Then
+    expect(result).toEqual({ ok: true, range: NO_RANGE });
+  });
+
+  it("4つとも正しければ、日付はそのまま、得点は整数にして返す", () => {
+    // Given
+    const draft = {
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+      scoreMin: "300",
+      scoreMax: "600",
+    };
+
+    // When
+    const result = historyRangeOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: true,
+      range: {
+        dateFrom: "2026-05-01",
+        dateTo: "2026-05-31",
+        scoreMin: 300,
+        scoreMax: 600,
+      },
+    });
+  });
+
+  it.each([
+    ["開始日だけ", { dateFrom: "2026-05-01" }, { dateFrom: "2026-05-01" }],
+    ["終了日だけ", { dateTo: "2026-05-31" }, { dateTo: "2026-05-31" }],
+    ["下限だけ", { scoreMin: "300" }, { scoreMin: 300 }],
+    ["上限だけ", { scoreMax: "600" }, { scoreMax: 600 }],
+  ])("%sの指定なら、他方は指定なし(null)にする", (_name, draft, expected) => {
+    // Given
+
+    // When
+    const result = rangeOf(draft);
+
+    // Then
+    expect(result).toEqual({ ok: true, range: { ...NO_RANGE, ...expected } });
+  });
+
+  it("開始日と終了日が同じ値、下限と上限が同じ値は正しい指定にする", () => {
+    // Given
+    const draft = {
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-01",
+      scoreMin: "500",
+      scoreMax: "500",
+    };
+
+    // When
+    const result = historyRangeOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: true,
+      range: {
+        dateFrom: "2026-05-01",
+        dateTo: "2026-05-01",
+        scoreMin: 500,
+        scoreMax: 500,
+      },
+    });
+  });
+
+  it("下限の0は指定なし(null)でなく、0として返す", () => {
+    // Given
+    const draft = { scoreMin: "0" };
+
+    // When
+    const result = rangeOf(draft);
+
+    // Then
+    expect(result).toEqual({ ok: true, range: { ...NO_RANGE, scoreMin: 0 } });
+  });
+
+  it.each([
+    ["前後に空白のある得点", " 300 ", 300],
+    ["先頭に0のある得点", "007", 7],
+    ["安全な整数の最大値の得点", "9007199254740991", 9007199254740991],
+  ])("%sは、正しい整数にして返す", (_name, scoreMin, expected) => {
+    // Given
+
+    // When
+    const result = rangeOf({ scoreMin });
+
+    // Then
+    expect(result).toEqual({
+      ok: true,
+      range: { ...NO_RANGE, scoreMin: expected },
+    });
+  });
+
+  it("うるう日(2024-02-29)は実在する日付として返す", () => {
+    // Given
+    const draft = { dateFrom: "2024-02-29" };
+
+    // When
+    const result = rangeOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: true,
+      range: { ...NO_RANGE, dateFrom: "2024-02-29" },
+    });
+  });
+
+  it.each([
+    ["実在しない日", "2026-02-30"],
+    ["実在しない月", "2026-13-01"],
+    ["うるう年でない年の2月29日", "2026-02-29"],
+    ["区切りがスラッシュ", "2026/05/01"],
+    ["月日が1桁", "2026-5-1"],
+    ["日付でない文字列", "yesterday"],
+  ])("日付が%sなら、日付の不正にする", (_name, value) => {
+    // Given
+    const draft = { dateFrom: value, dateTo: "2026-12-31" };
+
+    // When
+    const result = rangeOf(draft);
+
+    // Then
+    expect(result).toEqual({ ok: false, errors: ["dateInvalid"] });
+  });
+
+  it("終了日の不正も、日付の不正にする", () => {
+    // Given
+    const draft = { dateFrom: "2026-01-01", dateTo: "2026-02-30" };
+
+    // When
+    const result = rangeOf(draft);
+
+    // Then
+    expect(result).toEqual({ ok: false, errors: ["dateInvalid"] });
+  });
+
+  it("開始日が終了日より後なら、日付の順の不正にする", () => {
+    // Given
+    const draft = { dateFrom: "2026-05-02", dateTo: "2026-05-01" };
+
+    // When
+    const result = rangeOf(draft);
+
+    // Then
+    expect(result).toEqual({ ok: false, errors: ["dateOrder"] });
+  });
+
+  it.each([
+    ["負の数", "-1"],
+    ["符号つき", "+5"],
+    ["小数", "1.5"],
+    ["指数", "1e3"],
+    ["数字以外の文字を含む", "12a"],
+    ["全角数字(ASCIIの0から9以外は不正)", "１２"],
+    ["安全な整数を超える", "9007199254740992"],
+  ])("得点が%sなら、点数の不正にする", (_name, value) => {
+    // Given
+
+    // When
+    const lower = rangeOf({ scoreMin: value });
+    const upper = rangeOf({ scoreMax: value });
+
+    // Then
+    expect(lower).toEqual({ ok: false, errors: ["scoreInvalid"] });
+    expect(upper).toEqual({ ok: false, errors: ["scoreInvalid"] });
+  });
+
+  it("下限が上限より大きければ、点数の順の不正にする", () => {
+    // Given
+    const draft = { scoreMin: "10", scoreMax: "9" };
+
+    // When
+    const result = rangeOf(draft);
+
+    // Then
+    expect(result).toEqual({ ok: false, errors: ["scoreOrder"] });
+  });
+
+  it("日付と点数の原因が同時にあれば、該当する原因を全て返す", () => {
+    // Given
+    const draft = {
+      dateFrom: "2026-02-30",
+      dateTo: "2026-05-01",
+      scoreMin: "-1",
+      scoreMax: "500",
+    };
+
+    // When
+    const result = historyRangeOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: false,
+      errors: ["dateInvalid", "scoreInvalid"],
+    });
+  });
+
+  it("日付の順と点数の順の不正が同時にあれば、両方を返す", () => {
+    // Given
+    const draft = {
+      dateFrom: "2026-05-02",
+      dateTo: "2026-05-01",
+      scoreMin: "10",
+      scoreMax: "9",
+    };
+
+    // When
+    const result = historyRangeOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: false,
+      errors: ["dateOrder", "scoreOrder"],
+    });
+  });
+
+  it("日付の順は、日付の不正がなく両方が指定されたときだけ比べる", () => {
+    // Given
+    const invalidFrom = { dateFrom: "2026-13-01", dateTo: "2026-01-01" };
+
+    // When
+    const result = rangeOf(invalidFrom);
+
+    // Then
+    expect(result).toEqual({ ok: false, errors: ["dateInvalid"] });
+  });
+
+  it("点数の順は、点数の不正がなく両方が指定されたときだけ比べる", () => {
+    // Given
+    const invalidMin = { scoreMin: "1e3", scoreMax: "5" };
+
+    // When
+    const result = rangeOf(invalidMin);
+
+    // Then
+    expect(result).toEqual({ ok: false, errors: ["scoreInvalid"] });
+  });
+});
+
+describe("historyDistancesOf", () => {
+  it("全項目が正しい行は、整数にした行を返す", () => {
+    // Given
+    const draft = [
+      distanceDraftOf({
+        distance: " 50 ",
+        arrowsPerEnd: "6",
+        totalArrows: "36",
+        targetFaceId: TARGET_FACE_ID,
+      }),
     ];
 
     // When
-    const result = applyHistoryCondition(
-      items,
-      condition({ format: "outdoor", sortKey: "score", sortDirection: "desc" }),
-    );
+    const result = historyDistancesOf(draft);
 
     // Then
-    expect(ids(result)).toEqual(["outdoor-high", "outdoor-mid", "outdoor-low"]);
+    expect(result).toEqual({
+      ok: true,
+      distances: [
+        {
+          distance: 50,
+          arrowsPerEnd: 6,
+          totalArrows: 36,
+          targetFaceId: TARGET_FACE_ID,
+        },
+      ],
+    });
+  });
+
+  it("距離だけが入った行は、1エンドの矢数と矢の総数と的を指定なし(null)にする", () => {
+    // Given
+    const draft = [distanceDraftOf({ distance: "30", arrowsPerEnd: "  " })];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({ ok: true, distances: [distanceRowOf(30)] });
+  });
+
+  it("複数の行は、射つ順(下書きの順)のまま返す", () => {
+    // Given
+    const draft = [
+      distanceDraftOf({ distance: "50" }),
+      distanceDraftOf({ distance: "30" }),
+      distanceDraftOf({ distance: "50" }),
+    ];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: true,
+      distances: [distanceRowOf(50), distanceRowOf(30), distanceRowOf(50)],
+    });
+  });
+
+  it("行が0件の下書きは、正しく、指定なしの空の配列を返す", () => {
+    // Given
+    const draft: HistoryDistanceDraftRow[] = [];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({ ok: true, distances: [] });
+  });
+
+  it("行数に上限はなく、1000行の下書きも正しく返す", () => {
+    // Given
+    const draft = Array.from({ length: 1000 }, () => distanceDraftOf({}));
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.distances).toHaveLength(1000);
+  });
+
+  it.each([
+    ["先頭に0のある数", "007", 7],
+    ["前後に空白のある数", "  12 ", 12],
+  ])("1エンドの矢数が%sでも、正しい整数にして返す", (_name, text, expected) => {
+    // Given
+    const draft = [distanceDraftOf({ arrowsPerEnd: text })];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result.ok && result.distances[0]?.arrowsPerEnd).toBe(expected);
+  });
+
+  it.each([
+    ["符号つき", "+1"],
+    ["小数", "1.5"],
+    ["指数", "1e2"],
+    ["全角数字", "５０"],
+    ["負の数", "-1"],
+    ["16進", "0x10"],
+    ["数字以外", "abc"],
+    ["安全な整数を超える", "9007199254740992"],
+  ])("距離が%sなら、距離の不正にする", (_name, distance) => {
+    // Given
+    const draft = [distanceDraftOf({ distance })];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: false,
+      errors: [{ row: 0, error: "distanceInvalid" }],
+    });
+  });
+
+  it.each(["1", "100", " 50 "])("距離が「%s」なら、正しい", (distance) => {
+    // Given
+    const draft = [distanceDraftOf({ distance })];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result.ok).toBe(true);
+  });
+
+  it.each(["0", "101", "", "   "])(
+    "距離が「%s」なら、距離の不正にする(範囲は1から100、空は不正)",
+    (distance) => {
+      // Given
+      const draft = [distanceDraftOf({ distance })];
+
+      // When
+      const result = historyDistancesOf(draft);
+
+      // Then
+      expect(result).toEqual({
+        ok: false,
+        errors: [{ row: 0, error: "distanceInvalid" }],
+      });
+    },
+  );
+
+  it.each(["1", "12", ""])(
+    "1エンドの矢数が「%s」なら、正しい",
+    (arrowsPerEnd) => {
+      // Given
+      const draft = [distanceDraftOf({ arrowsPerEnd })];
+
+      // When
+      const result = historyDistancesOf(draft);
+
+      // Then
+      expect(result.ok).toBe(true);
+    },
+  );
+
+  it.each(["0", "13", "+1", "1.5"])(
+    "1エンドの矢数が「%s」なら、1エンドの矢数の不正にする(範囲は1から12)",
+    (arrowsPerEnd) => {
+      // Given
+      const draft = [distanceDraftOf({ arrowsPerEnd })];
+
+      // When
+      const result = historyDistancesOf(draft);
+
+      // Then
+      expect(result).toEqual({
+        ok: false,
+        errors: [{ row: 0, error: "arrowsPerEndInvalid" }],
+      });
+    },
+  );
+
+  it.each(["1", "9007199254740991", ""])(
+    "矢の総数が「%s」なら、正しい",
+    (totalArrows) => {
+      // Given
+      const draft = [distanceDraftOf({ totalArrows })];
+
+      // When
+      const result = historyDistancesOf(draft);
+
+      // Then
+      expect(result.ok).toBe(true);
+    },
+  );
+
+  it.each(["0", "9007199254740992", "-1", "1e3"])(
+    "矢の総数が「%s」なら、矢の総数の不正にする(1以上の安全な整数)",
+    (totalArrows) => {
+      // Given
+      const draft = [distanceDraftOf({ totalArrows })];
+
+      // When
+      const result = historyDistancesOf(draft);
+
+      // Then
+      expect(result).toEqual({
+        ok: false,
+        errors: [{ row: 0, error: "totalArrowsInvalid" }],
+      });
+    },
+  );
+
+  it("矢の総数の最大値は、整数のまま返す", () => {
+    // Given
+    const draft = [distanceDraftOf({ totalArrows: "9007199254740991" })];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result.ok && result.distances[0]?.totalArrows).toBe(
+      9007199254740991,
+    );
+  });
+
+  it("距離だけが不正で他の2項目が正しい行は、距離の原因だけを返す", () => {
+    // Given
+    const draft = [
+      distanceDraftOf({ distance: "0", arrowsPerEnd: "6", totalArrows: "36" }),
+    ];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: false,
+      errors: [{ row: 0, error: "distanceInvalid" }],
+    });
+  });
+
+  it("複数の行・複数の項目が不正なら、正しい行を含めず、すべての行と原因を返す", () => {
+    // Given
+    const draft = [
+      distanceDraftOf({ distance: "" }),
+      distanceDraftOf({ distance: "50" }),
+      distanceDraftOf({ distance: "30", arrowsPerEnd: "13", totalArrows: "0" }),
+    ];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: false,
+      errors: [
+        { row: 0, error: "distanceInvalid" },
+        { row: 2, error: "arrowsPerEndInvalid" },
+        { row: 2, error: "totalArrowsInvalid" },
+      ],
+    });
   });
 });
 
@@ -280,6 +572,19 @@ describe("historyViewStateOf", () => {
       sortDirection: "asc",
       format: "indoor",
       bowType: "compound",
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+      scoreMin: 300,
+      scoreMax: 600,
+      distances: [
+        {
+          distance: 50,
+          arrowsPerEnd: 6,
+          totalArrows: 36,
+          targetFaceId: TARGET_FACE_ID,
+        },
+        distanceRowOf(30),
+      ],
     },
     filterOpen: false,
   };
@@ -307,6 +612,259 @@ describe("historyViewStateOf", () => {
     // Then
     expect(state.condition.format).toBeNull();
     expect(state.condition.bowType).toBeNull();
+  });
+
+  it("保存値に期間と得点の範囲の項目が無ければ、範囲は指定なしにし、他の項目は保存値のままにする", () => {
+    // Given
+    const { dateFrom, dateTo, scoreMin, scoreMax, ...legacyCondition } =
+      stored.condition;
+    const raw = { condition: legacyCondition, filterOpen: false };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state).toEqual({
+      condition: { ...legacyCondition, ...NO_RANGE },
+      filterOpen: false,
+    });
+  });
+
+  it("得点の0を保存値のまま状態にする(指定なしにしない)", () => {
+    // Given
+    const raw = {
+      condition: { ...stored.condition, scoreMin: 0, scoreMax: 0 },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition.scoreMin).toBe(0);
+    expect(state.condition.scoreMax).toBe(0);
+  });
+
+  it.each([
+    ["実在しない日付の開始日", { dateFrom: "2026-02-30" }, "dateFrom"],
+    ["YYYY-MM-DDでない終了日", { dateTo: "2026/05/31" }, "dateTo"],
+    ["文字列でない開始日", { dateFrom: 20260501 }, "dateFrom"],
+    ["負の下限", { scoreMin: -1 }, "scoreMin"],
+    ["整数でない上限", { scoreMax: 1.5 }, "scoreMax"],
+    ["安全な整数を超える下限", { scoreMin: 9007199254740992 }, "scoreMin"],
+    ["文字列の上限", { scoreMax: "600" }, "scoreMax"],
+  ])(
+    "範囲の項目が壊れていて%sなら、その項目だけを指定なしにし、他の項目は保存値のままにする",
+    (_name, broken, field) => {
+      // Given
+      const raw = {
+        condition: { ...stored.condition, ...broken },
+        filterOpen: false,
+      };
+
+      // When
+      const state = historyViewStateOf(raw);
+
+      // Then
+      expect(state).toEqual({
+        condition: { ...stored.condition, [field]: null },
+        filterOpen: false,
+      });
+    },
+  );
+
+  it("開始日が終了日より後の保存値は、期間の2項目を指定なしにし、得点の範囲は保存値のままにする", () => {
+    // Given
+    const raw = {
+      condition: {
+        ...stored.condition,
+        dateFrom: "2026-06-01",
+        dateTo: "2026-05-01",
+      },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition).toEqual({
+      ...stored.condition,
+      dateFrom: null,
+      dateTo: null,
+    });
+  });
+
+  it("下限が上限より大きい保存値は、得点の2項目を指定なしにし、期間は保存値のままにする", () => {
+    // Given
+    const raw = {
+      condition: { ...stored.condition, scoreMin: 600, scoreMax: 300 },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition).toEqual({
+      ...stored.condition,
+      scoreMin: null,
+      scoreMax: null,
+    });
+  });
+
+  it("既定の条件は、期間と得点の範囲と距離の構成が指定なしである", () => {
+    // Given
+
+    // When
+    const condition = DEFAULT_HISTORY_CONDITION;
+
+    // Then
+    expect(condition).toMatchObject(NO_RANGE);
+    expect(condition.distances).toEqual([]);
+    expect(DEFAULT_HISTORY_VIEW_STATE.condition.distances).toEqual([]);
+  });
+
+  it("保存値に距離の構成の項目が無ければ、空の配列にし、他の項目は保存値のままにする", () => {
+    // Given
+    const { distances, ...legacyCondition } = stored.condition;
+    const raw = { condition: legacyCondition, filterOpen: false };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state).toEqual({
+      condition: { ...stored.condition, distances: [] },
+      filterOpen: false,
+    });
+  });
+
+  it.each([
+    ["null", null],
+    ["オブジェクト", { distance: 50 }],
+    ["文字列", "50"],
+  ])(
+    "距離の構成が配列でなく%sなら、空の配列にし、他の項目は保存値のままにする",
+    (_name, distances) => {
+      // Given
+      const raw = {
+        condition: { ...stored.condition, distances },
+        filterOpen: false,
+      };
+
+      // When
+      const state = historyViewStateOf(raw);
+
+      // Then
+      expect(state).toEqual({
+        condition: { ...stored.condition, distances: [] },
+        filterOpen: false,
+      });
+    },
+  );
+
+  const validRow = {
+    distance: 50,
+    arrowsPerEnd: 6,
+    totalArrows: 36,
+    targetFaceId: TARGET_FACE_ID,
+  };
+
+  it.each([
+    ["距離が文字列", { ...validRow, distance: "50" }],
+    ["距離が0", { ...validRow, distance: 0 }],
+    ["距離が101", { ...validRow, distance: 101 }],
+    ["距離が小数", { ...validRow, distance: 50.5 }],
+    ["1エンドの矢数が13", { ...validRow, arrowsPerEnd: 13 }],
+    ["1エンドの矢数が0", { ...validRow, arrowsPerEnd: 0 }],
+    ["矢の総数が0", { ...validRow, totalArrows: 0 }],
+    ["矢の総数が文字列", { ...validRow, totalArrows: "36" }],
+    ["的のIDがUUIDの形でない", { ...validRow, targetFaceId: "face-1" }],
+    ["的のIDが数値", { ...validRow, targetFaceId: 1 }],
+    ["的のIDの項目が無い", { distance: 50, arrowsPerEnd: 6, totalArrows: 36 }],
+    ["距離の項目が無い", { ...validRow, distance: undefined }],
+    ["行がオブジェクトでない", "50"],
+    ["行がnull", null],
+  ])(
+    "距離の構成のどれかの行で%sなら、正しい行も含めて配列全体を空の配列にし、他の項目は保存値のままにする",
+    (_name, brokenRow) => {
+      // Given
+      const raw = {
+        condition: {
+          ...stored.condition,
+          distances: [validRow, brokenRow, distanceRowOf(30)],
+        },
+        filterOpen: false,
+      };
+
+      // When
+      const state = historyViewStateOf(raw);
+
+      // Then
+      expect(state).toEqual({
+        condition: { ...stored.condition, distances: [] },
+        filterOpen: false,
+      });
+    },
+  );
+
+  it("距離の構成が壊れていても、壊れた期間の組の指定なし化は独立して働く", () => {
+    // Given
+    const raw = {
+      condition: {
+        ...stored.condition,
+        distances: "broken",
+        dateFrom: "2026-06-01",
+        dateTo: "2026-05-01",
+      },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition).toEqual({
+      ...stored.condition,
+      distances: [],
+      dateFrom: null,
+      dateTo: null,
+    });
+  });
+
+  it("期間の組が壊れていても、距離の構成は保存値のままにする", () => {
+    // Given
+    const raw = {
+      condition: {
+        ...stored.condition,
+        dateFrom: "bad",
+        scoreMin: 600,
+        scoreMax: 300,
+      },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition.distances).toEqual(stored.condition.distances);
+  });
+
+  it("行数の多い距離の構成(1000行)も、そのまま状態にする", () => {
+    // Given
+    const distances = Array.from({ length: 1000 }, () => validRow);
+    const raw = {
+      condition: { ...stored.condition, distances },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition.distances).toEqual(distances);
   });
 
   // 他の項目は既定の値にして、項目ごとに直すか全体を既定に戻すかによらず、既定になる入力にする。

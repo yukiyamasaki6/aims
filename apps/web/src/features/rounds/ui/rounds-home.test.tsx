@@ -101,6 +101,23 @@ describe("RoundsHome", () => {
       // Then
       expect(screen.getByText("午前練習")).toBeInTheDocument();
       expect(fake.store.loadList).not.toHaveBeenCalled();
+      expect(fake.store.readDeleted).not.toHaveBeenCalled();
+    });
+
+    it("履歴の取得が失敗する設定でも、入力中のラウンドを表示する", () => {
+      // Given
+      fakeWindow.setLocal({ inProgress });
+      fake.store.loadList.mockResolvedValue({
+        status: "error",
+        reason: "failed",
+      });
+
+      // When
+      renderHome();
+
+      // Then
+      expect(screen.getByText("午前練習")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).toBeNull();
     });
 
     it("入力中が0件なら、入力中のラウンドがないことを示し、新規作成ボタンは表示する", () => {

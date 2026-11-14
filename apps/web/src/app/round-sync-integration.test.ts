@@ -23,6 +23,7 @@ import { createRoundRefreshControl } from "@/features/rounds/application/round-r
 import { createRoundWindow } from "@/features/rounds/application/round-window";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
 import type { FetchResult } from "@/features/rounds/domain/fetch-status";
+import { DEFAULT_HISTORY_CONDITION } from "@/features/rounds/domain/history-view-state";
 import {
   roundBase,
   roundUpdated,
@@ -219,7 +220,7 @@ describe("一覧と常駐の取得", () => {
     await flush();
 
     // When
-    const loading = t.list.loadList();
+    const loading = t.list.loadList(DEFAULT_HISTORY_CONDITION, null, 10);
     await flush();
 
     // Then

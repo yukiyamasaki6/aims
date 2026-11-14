@@ -9,9 +9,13 @@ import type {
 } from "@/lib/supabase/contract/database";
 import type { FetchResult } from "../domain/fetch-status";
 import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
+import {
+  DEFAULT_HISTORY_CONDITION,
+  type HistoryCondition,
+} from "../domain/history-view-state";
 import type { PresetRecord, Presets } from "../domain/preset";
 import type { QueryFailure, QueryOutcome } from "../domain/query-outcome";
-import type { ServerRoundSummary } from "../domain/round-list";
+import type { ServerRoundsPage } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { TargetFaceRecord } from "../domain/target-face";
 import { createRoundQueries } from "../infrastructure/round-queries";
@@ -153,7 +157,9 @@ function setup(
     ),
     targetFaces: vi.fn(async () => okResponse<TargetFaceRecord[]>([])),
     presets: vi.fn(async () => okResponse<PresetRecord[]>([])),
-    roundsList: vi.fn(async () => okResponse<ServerRoundSummary[]>([])),
+    roundsList: vi.fn(async () =>
+      okResponse<ServerRoundsPage>({ rounds: [], hasMore: false }),
+    ),
     ...options.queries,
   };
   const fetching = createRoundFetching({
@@ -755,84 +761,91 @@ describe("savedTargetFaces", () => {
 });
 
 describe("fetchRoundsList", () => {
-  const summary = (
-    id: string,
-    shots: { score_int: number; disabled: boolean }[],
-  ): ServerRoundSummary => ({
+  const condition = DEFAULT_HISTORY_CONDITION;
+  const summary = (id: string, total: number) => ({
     id,
     name: `ラウンド${id}`,
     round_date: "2026-09-15",
-    format: "outdoor",
-    bow_type: "recurve",
-    created_at: "2026-09-15T10:00:00.123456+00:00",
-    distances: [
-      {
-        disabled_at: null,
-        shots: shots.map(({ score_int, disabled }) => ({
-          score_int,
-          disabled_at: disabled ? "2026-09-15T10:00:00Z" : null,
-        })),
-      },
-    ],
+    total,
   });
 
-  it("取得できたら、各行を合計点を含む一覧の1件にして、問い合わせの返した順のまま返す", async () => {
+  it("取得できたら、各行を一覧の1件にして問い合わせの返した順のまま返し、続きの有無と、最後の行のIDを起点にして返す", async () => {
     // Given
     const { fetching } = setup({
       queries: {
         roundsList: async () =>
-          okResponse([
-            summary("round-2", [{ score_int: 10, disabled: false }]),
-            summary("round-1", [
-              { score_int: 9, disabled: false },
-              { score_int: 8, disabled: true },
-            ]),
-          ]),
+          okResponse<ServerRoundsPage>({
+            rounds: [summary("round-2", 10), summary("round-1", 9)],
+            hasMore: true,
+          }),
       },
     });
 
     // When
-    const result = await fetching.fetchRoundsList();
+    const result = await fetching.fetchRoundsList(condition, null, 10);
 
     // Then
     expect(result).toEqual({
       status: "ok",
-      data: [
-        {
-          id: "round-2",
-          name: "ラウンドround-2",
-          roundDate: "2026-09-15",
-          format: "outdoor",
-          bowType: "recurve",
-          createdAt: "2026-09-15T10:00:00.123456+00:00",
-          total: 10,
-        },
-        {
-          id: "round-1",
-          name: "ラウンドround-1",
-          roundDate: "2026-09-15",
-          format: "outdoor",
-          bowType: "recurve",
-          createdAt: "2026-09-15T10:00:00.123456+00:00",
-          total: 9,
-        },
-      ],
+      data: {
+        items: [
+          {
+            id: "round-2",
+            name: "ラウンドround-2",
+            roundDate: "2026-09-15",
+            total: 10,
+          },
+          {
+            id: "round-1",
+            name: "ラウンドround-1",
+            roundDate: "2026-09-15",
+            total: 9,
+          },
+        ],
+        hasMore: true,
+        after: "round-1",
+      },
     });
   });
 
-  it("0件のとき、not-foundではなく空配列のokを返す", async () => {
+  it("条件、続きの起点、件数を、そのまま問い合わせに渡す", async () => {
     // Given
-    const { fetching } = setup({
-      queries: {
-        roundsList: async () => okResponse<ServerRoundSummary[]>([]),
-      },
-    });
+    const { fetching, queries } = setup();
+    const scoreCondition: HistoryCondition = {
+      sortKey: "score",
+      sortDirection: "asc",
+      format: "indoor",
+      bowType: "compound",
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+      scoreMin: 0,
+      scoreMax: 600,
+      distances: [],
+    };
 
     // When
-    const result = await fetching.fetchRoundsList();
+    await fetching.fetchRoundsList(scoreCondition, "round-9", 25);
 
     // Then
-    expect(result).toEqual({ status: "ok", data: [] });
+    expect(queries.roundsList).toHaveBeenCalledWith({
+      condition: scoreCondition,
+      after: "round-9",
+      size: 25,
+    });
+  });
+
+  it("0件のとき、not-foundではなく空のページのokを返す", async () => {
+    // Given
+    const { fetching } = setup();
+
+    // When
+    const result = await fetching.fetchRoundsList(condition, null, 10);
+
+    // Then
+    expect(result).toEqual({
+      status: "ok",
+      data: { items: [], hasMore: false, after: null },
+    });
   });
 
   it("通信できないとき、原因を断定せずerrorを返す", async () => {
@@ -844,7 +857,7 @@ describe("fetchRoundsList", () => {
     });
 
     // When
-    const result = await fetching.fetchRoundsList();
+    const result = await fetching.fetchRoundsList(condition, null, 10);
 
     // Then
     expect(result).toEqual({ status: "error", reason: "failed" });
@@ -859,10 +872,22 @@ describe("fetchRoundsList", () => {
     });
 
     // When
-    const result = await fetching.fetchRoundsList();
+    const result = await fetching.fetchRoundsList(condition, null, 10);
 
     // Then
     expect(result).toEqual({ status: "error", reason: "failed" });
+  });
+
+  it("通信できないと分かっているとき、問い合わせずにofflineを返す", async () => {
+    // Given
+    const { fetching, queries } = setup({ offline: true });
+
+    // When
+    const result = await fetching.fetchRoundsList(condition, null, 10);
+
+    // Then
+    expect(result).toEqual({ status: "offline" });
+    expect(queries.roundsList).not.toHaveBeenCalled();
   });
 
   it("サインインしていないとき、roundsListを呼ばず、サインインが必要なerrorを返す", async () => {
@@ -872,7 +897,7 @@ describe("fetchRoundsList", () => {
     });
 
     // When
-    const result = await fetching.fetchRoundsList();
+    const result = await fetching.fetchRoundsList(condition, null, 10);
 
     // Then
     expect(result).toEqual({

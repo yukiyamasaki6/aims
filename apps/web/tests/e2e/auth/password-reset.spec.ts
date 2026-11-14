@@ -16,7 +16,7 @@ import { mockTurnstile, waitForTurnstileToken } from "../helpers/turnstile";
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
 
-const ORIGINAL_PASSWORD = "password-original";
+const ORIGINAL_PASSWORD = "password-original1";
 const NEW_PASSWORD = "password-changed1";
 const EMAIL_PLACEHOLDER = "you@example.com";
 const CODE_PLACEHOLDER = "123456";

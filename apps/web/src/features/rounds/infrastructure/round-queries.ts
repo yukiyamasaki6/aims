@@ -4,9 +4,10 @@ import type {
   DbResponse,
 } from "@/lib/supabase/contract/database";
 import type { RoundQueries } from "../application/round-fetching";
+import type { HistoryCondition } from "../domain/history-view-state";
 import type { PresetRecord } from "../domain/preset";
 import { newestById } from "../domain/round-base";
-import type { ServerRoundSummary } from "../domain/round-list";
+import type { ServerRoundsPage } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { TargetFaceRecord } from "../domain/target-face";
 import { failureOfResponses } from "./db-response-outcome";
@@ -20,10 +21,6 @@ import type { RoundsDbSchema } from "./rounds-db-schema";
 const ROUND_SELECT =
   "id, name, round_date, format, bow_type, status, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(id, distance_id, end_number, shooter_id, score_str, score_int, shot_number, revision, disabled_at))";
 
-// 一覧は合計点を求めるため、距離と矢の削除の印と点を取得する。絞り込みと並びのため、種別・弓種・作成時刻も取得する。
-const ROUNDS_LIST_SELECT =
-  "id, name, round_date, format, bow_type, created_at, distances(disabled_at, shots(score_int, disabled_at))";
-
 // 1回の取得に並べるラウンドIDの上限。IDはGETのURLに載るため、ゲートウェイが長いURLを414で拒まない件数に分ける。50件で約3KBで、ローカルで通ることを確かめた長さ(約3.7KB)に収まる。
 const roundIdsPerRequest = 50;
 
@@ -33,6 +30,38 @@ function chunkIds(ids: readonly string[]): string[][] {
     chunks.push(ids.slice(i, i + roundIdsPerRequest));
   }
   return chunks;
+}
+
+// 履歴の関数の戻り値({ rounds: [{ id, name, round_date, total }], has_more })を、ページの形に写す。
+function pageOfResponse(data: unknown): ServerRoundsPage {
+  const { rounds, has_more: hasMore } = data as {
+    rounds: ServerRoundsPage["rounds"];
+    has_more: boolean;
+  };
+  return { rounds, hasMore };
+}
+
+// 期間と得点の範囲の引数。指定があるものだけ送る(指定が全くなければ旧い版と同じ6引数)。
+function rangeArgsOf(condition: HistoryCondition) {
+  return {
+    ...(condition.dateFrom !== null && { p_date_from: condition.dateFrom }),
+    ...(condition.dateTo !== null && { p_date_to: condition.dateTo }),
+    ...(condition.scoreMin !== null && { p_score_min: condition.scoreMin }),
+    ...(condition.scoreMax !== null && { p_score_max: condition.scoreMax }),
+  };
+}
+
+// 距離の構成の引数。行が1つ以上のときだけ送る。
+function distancesArgOf(condition: HistoryCondition) {
+  if (condition.distances.length === 0) return {};
+  return {
+    p_distances: condition.distances.map((row) => ({
+      distance: row.distance,
+      arrows_per_end: row.arrowsPerEnd,
+      total_arrows: row.totalArrows,
+      target_face_id: row.targetFaceId,
+    })),
+  };
 }
 
 function toTargetFaces(rows: unknown): TargetFaceRecord[] {
@@ -140,23 +169,22 @@ export function createRoundQueries(
         },
       };
     },
-    // 履歴の取得。サーバーで完了と記録されたラウンドだけを、並べずに返す(並びは条件の適用が決める)。
+    // 履歴の1ページ。条件の適用(絞り込み、並び、合計点)とページの切り出しは、履歴の関数(rounds_list)がサーバーで行う。
     // 取得できる行はRLSでユーザーが属するラウンドに限るため、利用者で絞らない。
-    async roundsList() {
-      const response = await database.select({
-        table: "rounds",
-        columns: ROUNDS_LIST_SELECT,
-        filters: [
-          { op: "is", column: "disabled_at", value: null },
-          { op: "eq", column: "status", value: "completed" },
-        ],
+    async roundsList({ condition, after, size }) {
+      const response = await database.rpc("rounds_list", {
+        p_sort_key: condition.sortKey,
+        p_sort_direction: condition.sortDirection,
+        p_format: condition.format,
+        p_bow_type: condition.bowType,
+        p_after_id: after,
+        p_limit: size,
+        ...rangeArgsOf(condition),
+        ...distancesArgOf(condition),
       });
       const failure = failureOfResponses([response]);
       if (failure) return failure;
-      return {
-        status: "ok",
-        data: response.data as ServerRoundSummary[],
-      };
+      return { status: "ok", data: pageOfResponse(response.data) };
     },
     // preset_roundsのRLSは認証済みの全員に全行を見せるため、他人の個人プリセットを除くクエリの絞りが必須である。
     async presets(userId) {

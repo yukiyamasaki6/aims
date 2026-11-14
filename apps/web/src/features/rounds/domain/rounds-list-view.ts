@@ -1,10 +1,6 @@
 import type { FetchView } from "./fetch-status";
-import {
-  applyHistoryCondition,
-  type HistoryCondition,
-} from "./history-view-state";
+import type { HistoryCondition } from "./history-view-state";
 import type {
-  HistoryRoundItem,
   LoadedRoundsList,
   LocalRoundsList,
   RoundListItem,
@@ -28,29 +24,33 @@ export function homeView(
 }
 
 export type HistoryView =
-  // 取得が成功し、端末の入力中を読み終えている。`rounds`が0件なら履歴はない。
-  | { rounds: HistoryRoundItem[]; rest: null }
+  // 先頭のページの取得が成功し、端末の入力中を読み終えている。`rounds`は連結したページから除外した後のラウンドで、0件もありうる。`hasMore`は続きの有無。
+  | { rounds: RoundListItem[]; hasMore: boolean; rest: null }
   // それ以外。ラウンドは出さず、取得の状態だけを出す。
-  | { rounds: null; rest: Exclude<FetchView<unknown>, { status: "ok" }> };
+  | {
+      rounds: null;
+      hasMore: false;
+      rest: Exclude<FetchView<unknown>, { status: "ok" }>;
+    };
 
-// 履歴に出す内容を決める。サーバーで完了と記録された取得結果から、端末の入力中のIDと削除済み(取得時に求めた削除済みIDと、この画面で削除した`removed`)を除き、その後に条件を適用する。
-// 取得が成功していても、端末の入力中と保存した条件(`condition`がnull)を読み終えるまでは取得中として返す。
+// 履歴に出す内容を決める。連結したページから、端末の入力中のIDと削除済み(各ページの取得時に求めた削除済みIDの和と、この画面で削除した`removed`)を除く。条件は取得でサーバーが適用済みで、ここでは並べ直さない。
+// 先頭のページの取得が成功していても、端末の入力中と保存した条件(`condition`がnull)を読み終えるまでは取得中として返す。
 export function historyView(
   view: FetchView<LoadedRoundsList>,
   local: LocalRoundsList | null,
   removed: ReadonlySet<string>,
   condition: HistoryCondition | null,
 ): HistoryView {
-  if (view.status !== "ok") return { rounds: null, rest: view };
+  if (view.status !== "ok") return { rounds: null, hasMore: false, rest: view };
   if (local === null || condition === null) {
-    return { rounds: null, rest: { status: "loading" } };
+    return { rounds: null, hasMore: false, rest: { status: "loading" } };
   }
   const inProgress = new Set(local.inProgress.map((round) => round.id));
-  const remaining = view.data.items.filter(
+  const rounds = view.data.items.filter(
     (round) =>
       !inProgress.has(round.id) &&
       !view.data.deleted.has(round.id) &&
       !removed.has(round.id),
   );
-  return { rounds: applyHistoryCondition(remaining, condition), rest: null };
+  return { rounds, hasMore: view.data.hasMore, rest: null };
 }

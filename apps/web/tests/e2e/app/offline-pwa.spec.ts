@@ -404,7 +404,7 @@ test("未認証で紹介画面を開くと画面の枠が保存され、サイ�
   // オフラインで履歴を開き、Service Workerが返した履歴の枠と「ネットワークに接続されていません」が表示され、サインイン画面とラウンドの無い表示が出ないことを確かめる。
   const historyResponse = await page.goto("/rounds/history");
   expect(historyResponse?.fromServiceWorker()).toBe(true);
-  await expect(page).toHaveURL(/\/rounds\/history$/);
+  await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
   await expect(page.getByText(roundsText("fetchOffline"))).toBeVisible();
   await expect(page.getByText(roundsText("historyEmpty"))).toHaveCount(0);
   await expect(page.getByPlaceholder("you@example.com")).toHaveCount(0);

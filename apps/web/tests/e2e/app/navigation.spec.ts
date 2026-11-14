@@ -274,7 +274,7 @@ test.describe("認証済み", () => {
       .getByRole("link", { name: navigationText("leftPanelHistory") })
       .click();
 
-    await expect(page).toHaveURL(/\/rounds\/history$/);
+    await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
   });
 
   test("縦向きで狭い画面でレフトパネルを展開して設定の項目を押すと、設定画面へ移動し、レフトパネルが格納される", async ({

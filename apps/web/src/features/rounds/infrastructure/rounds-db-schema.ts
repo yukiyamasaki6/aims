@@ -14,6 +14,17 @@ type CreateDistanceWithNullable = Omit<CreateDistance, "Args"> & {
   };
 };
 
+type RoundsList = Full["Functions"]["rounds_list"];
+
+// 履歴の取得は、SQL側が種別・弓種・起点にnullを受け付ける(指定なし、先頭のページ)が、生成した型は文字列で出力する。
+type RoundsListWithNullable = Omit<RoundsList, "Args"> & {
+  Args: Omit<RoundsList["Args"], "p_format" | "p_bow_type" | "p_after_id"> & {
+    p_format: string | null;
+    p_bow_type: string | null;
+    p_after_id: string | null;
+  };
+};
+
 // ラウンドが使うデータベースのスキーマの部分。生成した型(`types/supabase.ts`)の部分集合で、列の定義は手で書かない。
 export type RoundsDbSchema = {
   Functions: Pick<
@@ -26,7 +37,10 @@ export type RoundsDbSchema = {
     | "save_round_as_preset"
     | "record_shots"
     | "clear_shots"
-  > & { create_distance: CreateDistanceWithNullable };
+  > & {
+    create_distance: CreateDistanceWithNullable;
+    rounds_list: RoundsListWithNullable;
+  };
   Tables: {
     rounds: {
       Row: Pick<

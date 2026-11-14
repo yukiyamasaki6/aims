@@ -1,6 +1,8 @@
 import type { DistanceConfigError } from "../domain/distance-config";
 import type { FetchFailure, SignInFailure } from "../domain/fetch-status";
 import type {
+  HistoryDistanceError,
+  HistoryRangeError,
   HistorySortDirection,
   HistorySortKey,
 } from "../domain/history-view-state";
@@ -33,7 +35,8 @@ export const roundsMessages = {
     } satisfies Record<FetchFailure, string>,
     // ホームと履歴
     homeEmpty: "入力中のラウンドはありません",
-    historyEmpty: "条件に一致するラウンドがありません",
+    historyEmpty: "該当するラウンドがありません",
+    historyEnd: "該当するラウンドは以上です",
     historyControlsToggle: "並べ替え・絞り込み",
     historyControlsSort: "並べ替え",
     historySortKey: {
@@ -46,6 +49,31 @@ export const roundsMessages = {
     } satisfies Record<HistorySortDirection, string>,
     historyControlsFilter: "絞り込み",
     historyControlsReset: "条件をリセット",
+    historyFilterPeriod: "期間",
+    historyFilterDateFrom: "開始日",
+    historyFilterDateTo: "終了日",
+    historyFilterScore: "得点の範囲",
+    historyFilterScoreMin: "下限",
+    historyFilterScoreMax: "上限",
+    historyRangeError: {
+      dateInvalid: "日付を正しく入力してください",
+      dateOrder: "開始日は終了日以前にしてください",
+      scoreInvalid: "点数は0以上の整数で入力してください",
+      scoreOrder: "下限は上限以下にしてください",
+    } satisfies Record<HistoryRangeError, string>,
+    historyFilterDistances: "距離の構成",
+    historyFilterDistance: "距離(m)",
+    historyFilterArrowsPerEnd: "1エンドの矢数",
+    historyFilterTotalArrows: "矢の総数",
+    historyFilterDistanceAdd: "距離を追加",
+    historyFilterDistanceRemove: "{index}行目を削除",
+    historyFilterTargetAdd: "的を加える",
+    historyFilterTargetRemove: "的を外す",
+    historyDistanceError: {
+      distanceInvalid: "距離は1〜100の整数で入力してください",
+      arrowsPerEndInvalid: "1エンドの矢数は1〜12の整数で入力してください",
+      totalArrowsInvalid: "矢の総数は1以上の整数で入力してください",
+    } satisfies Record<HistoryDistanceError, string>,
     newRoundLabel: "ラウンドを新規作成",
     roundTotalPoints: "{total}点",
     roundMenuLabel: "ラウンドのメニュー",

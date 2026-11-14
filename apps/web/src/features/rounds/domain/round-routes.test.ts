@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isHistoryReturn,
   originPathOf,
   roundFramePathOf,
   roundIdOfPath,
@@ -148,7 +149,7 @@ describe("roundOriginOf", () => {
 describe("originPathOf", () => {
   it.each([
     ["home", "/rounds"],
-    ["history", "/rounds/history"],
+    ["history", "/rounds/history?return=1"],
   ] as const)("遷移元%sの戻り先は%sである", (origin, expected) => {
     // Given
 
@@ -157,5 +158,37 @@ describe("originPathOf", () => {
 
     // Then
     expect(path).toBe(expected);
+  });
+});
+
+describe("isHistoryReturn", () => {
+  it.each([
+    ["印だけ", "?return=1"],
+    ["先頭の?がない印", "return=1"],
+    ["他のクエリと並ぶ印", "?a=1&return=1"],
+  ])("%sは戻ったと判定する", (_name, search) => {
+    // Given
+
+    // When
+    const returned = isHistoryReturn(search);
+
+    // Then
+    expect(returned).toBe(true);
+  });
+
+  it.each([
+    ["クエリがない", ""],
+    ["印がない", "?a=1"],
+    ["値が違う", "?return=0"],
+    ["空の値", "?return="],
+    ["名前が違う", "?returns=1"],
+  ])("%sは戻ったと判定しない", (_name, search) => {
+    // Given
+
+    // When
+    const returned = isHistoryReturn(search);
+
+    // Then
+    expect(returned).toBe(false);
   });
 });

@@ -14,6 +14,18 @@ describe("createFakeHistoryViewMemory", () => {
         sortDirection: "asc",
         format: "indoor",
         bowType: null,
+        dateFrom: "2026-05-01",
+        dateTo: null,
+        scoreMin: 0,
+        scoreMax: null,
+        distances: [
+          {
+            distance: 50,
+            arrowsPerEnd: 6,
+            totalArrows: null,
+            targetFaceId: null,
+          },
+        ],
       },
       filterOpen: false,
     };
