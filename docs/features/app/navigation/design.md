@@ -65,6 +65,17 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 | 開閉のtransitionを常に付ける | 状態とタイマーを持たず、`transition` のclassだけで済ませるため。枠を別の要素にしたので、回転・窓の変形の切り替えでは動かない。 | 切り替えの動きが利用者に不都合になったとき。 |
 | サインアウトをレフトパネルでなく設定画面に置く | アカウントの操作を設定画面の一か所にまとめ、レフトパネルを移動の項目だけにするため。レフトパネルは下端に「設定」項目を置く。詳細: `app/settings`。 | サインアウトをレフトパネルへ戻すとき。 |
 
+## 表示領域の高さの補償
+
+スタンドアロン(`display-mode: standalone`)かつ`navigator.virtualKeyboard`のある環境(Android Chrome系)では、起動時などに`100dvh`が可視の高さからずれ、画面の下端がはみ出すことがあった。
+そのため`src/hooks/use-app-height.ts`の`useAppHeight`(入口`root-client-entry.tsx`が呼ぶ)が、可視の高さ(`visualViewport.height * scale`、無ければ`innerHeight`)を`--app-height`へpxで書く。`app/layout.tsx`のbodyの高さ(`h-(--app-height)`)と各画面の`h-full`が、これに従う。
+書き直す契機は、マウント時、`window`の`resize`、`visualViewport`の`resize`だけで、直前の値との差が0.5px未満なら書かない。アンマウントで購読を全て解除する。
+ブラウザのタブやiOS Safariでは何もせず、`--app-height`は既定の`100dvh`のままである。iOS Safariはキーボードでの縮み方が変わる恐れがあるため対象にしない。
+
+削った契機: マウントから0.5秒・2秒後の再確認、`pageshow`・`orientationchange`・`visibilitychange`の購読。
+- 理由: 実機でAndroid Chrome系は上記の契機がなくても補償の効果が確認でき、タイマーと購読が増えるだけの複雑さを避けるため。
+- リスク: 通知(`resize`)なしに可視の高さが変わる環境で、値を取りこぼして下端がはみ出す恐れがある。はみ出しが起動直後、復帰直後、向きの変更後に再現したら、削った契機を`use-app-height.ts`へ戻す。
+
 ## 制約と未対応
 
 - 開閉状態は画面遷移やリロードで初期状態へ戻る。

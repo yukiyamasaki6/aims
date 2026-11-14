@@ -51,8 +51,6 @@ import {
   RoundsListStoreProvider,
   RoundWindowProvider,
 } from "@/features/rounds/ui/rounds-context";
-import { createBrowserDiagnosticsSetting } from "@/features/viewport-diagnostics/infrastructure/browser-diagnostics-setting";
-import { ViewportDiagnosticsProvider } from "@/features/viewport-diagnostics/ui/viewport-diagnostics-provider";
 import { useAppHeight } from "@/hooks/use-app-height";
 import { intlConfig } from "@/i18n/messages";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
@@ -248,7 +246,6 @@ function composeApp(router: PageRouter) {
   const records = composeRecords(inputs);
   return {
     localIdentity: inputs.localIdentity,
-    diagnosticsSetting: createBrowserDiagnosticsSetting(),
     session: composeSession(inputs, records),
     roundWindow: records.roundWindow,
     ...composeStores(inputs, records),
@@ -278,9 +275,7 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
           <RoundProceduresProvider procedures={app.procedures}>
             <SessionProvider session={app.session}>
               <SwUpdateActivator activation={app.swUpdate} />
-              <ViewportDiagnosticsProvider setting={app.diagnosticsSetting}>
-                {children}
-              </ViewportDiagnosticsProvider>
+              {children}
             </SessionProvider>
           </RoundProceduresProvider>
         </RoundsListStoreProvider>

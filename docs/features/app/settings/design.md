@@ -3,23 +3,22 @@
 ## 概要
 
 設定画面は`/settings`の1画面で、`(main)`配下に置く(認証の保護とセッション喪失の見張りは他の画面と同じ)。
-分類は縦に並べた区画で表し、今は「アカウント」と「診断」の2つである。分類ごとのURLと、分類の一覧(タブや側面の一覧)は持たない。
+分類は縦に並べた区画で表し、今は「アカウント」の1つである。分類ごとのURLと、分類の一覧(タブや側面の一覧)は持たない。
 サインアウトは認証の部品(`SignOutButton`)を、入口が分類「アカウント」の区画へ渡して置く。
 画面の枠(`/__shell/settings`)をオフライン用に保存し、オフラインでもサインアウトできる。
-「診断」の区画は、入口が表示領域の診断の部品(`DiagnosticsToggle`)を`diagnostics`の枠へ渡して置く(`app/viewport-diagnostics`)。
 レフトパネルは、サインアウトのあった下端に「設定」項目を置く。
 
 ## 画面と状態
 
 | 画面・状態 | 内容 |
 | :--- | :--- |
-| `/settings`(認証済み) | 見出し「設定」と、分類「アカウント」の区画(サインアウト)と、分類「診断」の区画(表示領域の診断の切り替え)を表示する。 |
+| `/settings`(認証済み) | 見出し「設定」と、分類「アカウント」の区画(サインアウト)を表示する。 |
 | `/settings`(未認証) | `proxy.ts`が遷移元付きで`/signin`へ送る。サインインすると`/settings`へ戻る。 |
 | `/settings`(オフライン) | Service Workerが保存済みの枠を返す。未認証の確定は`(main)`の見張りが`/signin`へ移す。 |
 
 ## 構成とデータの流れ
 
-- `src/app/(main)/settings/page.tsx`(入口): クライアントのページ。`useSession`で受け取った手続きの`signOut`で`SignOutButton`を作り、`SettingsScreen`の分類「アカウント」の枠へ渡す。分類「診断」の枠へは`DiagnosticsToggle`を渡す。
+- `src/app/(main)/settings/page.tsx`(入口): クライアントのページ。`useSession`で受け取った手続きの`signOut`で`SignOutButton`を作り、`SettingsScreen`の分類「アカウント」の枠へ渡す。
 - `src/features/settings/ui/settings-screen.tsx`(UI層): 見出しと、分類の区画(見出し付き)を描く。分類ごとの内容は入口が渡す。認証状態は持たない。
 - `src/features/settings/ui/settings-messages.ts`(UI層): 文言の一覧(名前空間`settings`)。
 - `src/routes.ts`(経路表): `SETTINGS_PATH`(`/settings`)と、全ての画面の枠の一覧`FRAME_PATHS`(ラウンドの4画面と`SETTINGS_PATH`)を持つ。
@@ -40,5 +39,5 @@
 
 ## 制約と未対応
 
-- 分類は「アカウント」「診断」の2つで、設定項目はサインアウトと表示領域の診断の切り替えである。
+- 分類は「アカウント」の1つで、設定項目はサインアウトだけである。
 - `/settings`の下に画面はない。`/settings/…`は保護されるが、画面はなく404になる。
