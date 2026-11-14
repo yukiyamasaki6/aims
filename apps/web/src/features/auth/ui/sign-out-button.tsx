@@ -32,8 +32,8 @@ export function SignOutButton({ signOut }: { signOut: Session["signOut"] }) {
     <>
       <Button
         type="button"
-        variant="outline"
-        className="w-full"
+        variant="ghost"
+        size="row"
         onClick={() => setOpen(true)}
       >
         {t("signOut")}

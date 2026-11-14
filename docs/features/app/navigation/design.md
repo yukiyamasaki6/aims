@@ -12,7 +12,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 | 画面・状態 | 内容 |
 | :--- | :--- |
 | `/` | 未認証・認証済みとも、アプリ名、説明文、開始ボタンを持つ紹介画面を表示する。開始ボタンは常に`/signup`へのリンクで、認証済みなら`/signup`の認証済みの転送で`/rounds`(ホーム)へ着く。 |
-| `/rounds` 配下・`/settings`（未認証） | 遷移元のパス付きで `/signin` へリダイレクトする。`/rounds/history`、`/rounds/new`、`/rounds/[id]` も対象である。 |
+| `/rounds` 配下・`/settings` 配下（`/settings/password`を含む。未認証） | 遷移元のパス付きで `/signin` へリダイレクトする。`/rounds/history`、`/rounds/new`、`/rounds/[id]` も対象である。 |
 | ロゴ | レフトパネルのAIMSロゴと、認証画面・`/`・`/offline` の左上のロゴは `/` へ遷移する。 |
 | セッション喪失 | `SIGNED_OUT`（通知は発生元を区別せず届く）と、マウント時の `unauthenticated` で、遷移元のパス付きで `/signin` へ遷移する。明示のサインアウトの実行中の喪失は、サインアウトの判定に委ねる(終えられたら遷移元を付けずに移る。`auth/signout`)。`unknown` では留まる。保存先が空の未認証は、オフラインでもマウント時に `/signin` へ移り、`/offline` が出る。 |
 | レフトパネルのリンク | 「ホーム」項目は `/rounds` へ、「履歴」項目は `/rounds/history` へ、下端の「設定」項目は `/settings` へ遷移し、表示中のビューの項目に `aria-current="page"` が付く。 |

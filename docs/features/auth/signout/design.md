@@ -25,7 +25,11 @@
 
 - `src/app/(main)/layout.tsx`: 入口。入口が渡すセッションの手続きを`useSession`で受け取り、喪失と利用者の不一致の見張りを始める。
 - `src/app/(main)/settings/page.tsx`: 入口。`useSession`で受け取った手続きの`signOut`で`SignOutButton`を作り、設定画面の分類「アカウント」へ渡す(`app/settings`)。
-- `src/features/auth/ui/sign-out-button.tsx`: サインアウトのボタンと確認ダイアログ。実行中の表示とエラーを持ち、手続きの`signOut`を呼ぶ。結果は失敗(`failed`)とそれ以外(`ignored`。完了、実行中のため始めなかった)だけで、失敗のときだけ実行中を解いて失敗の種類の文言(UI層の文言の一覧)を示す。完了しても状態を変えず、遷移で画面ごと捨てられるまで実行中の表示を保つ。
+- `src/features/auth/ui/sign-out-button.tsx`: サインアウトのボタンと確認ダイアログ。
+  ボタンは、設定の項目の枠の中の行(`app/settings`の「画面の作り」)として、`variant="ghost"`と`size="row"`で描く。
+  実行中の表示とエラーを持ち、手続きの`signOut`を呼ぶ。
+  結果は失敗(`failed`)とそれ以外(`ignored`。完了、実行中のため始めなかった)だけで、失敗のときだけ実行中を解いて失敗の種類の文言(UI層の文言の一覧)を示す。
+  完了しても状態を変えず、遷移で画面ごと捨てられるまで実行中の表示を保つ。
 - `src/components/ui/confirm-dialog.tsx`: `BlockingConfirmDialog`。`busy`と`error`を外から受け取る表現だけの部品で、実行中は閉じず、ボタンを無効にして表示する。二重実行の拒否は呼び出し側が行う（サインアウトは集約、プリセット削除は削除側のフック）。`rounds/delete`と共通である。
 - `src/features/auth/application/session.ts`: 手続き。`signOut`（実行中なら何もせず`ignored`、認証サービスに頼む、サインインの状態を読む、判定する、終えられたら遷移する）と、`watch`（喪失の検知と遷移、記録の利用者と違う利用者のサインインの検知と読み込み直し）の順序を持つ。不一致のときは、新しい利用者を端末の識別情報へ書き、読み戻せたときだけ今の場所を読み込み直す。記録の利用者の照合(`RecordUser`の`isRecordUser`)と識別情報の書き込みは、入口が引数で渡す。集約の現在の値を持ち、サインインの状態の読み取りを宣言する(ページ全体の置き換えの約束`PageReplace`は`page-replace.ts`)。見張りの読み込み直しは、サインイン・サインアップの完了が置き換えで済むようになっても残る。起動時の復元での食い違い、確認コードの検証だけで中断した後の`(main)`への移動、別のタブや再表示で届くサインインは、`(main)`の初回の通知でしか検知できないためである。
 - `src/features/auth/ui/session-context.tsx`: `SessionProvider`と`useSession`。入口(`src/app/root-client-entry.tsx`)がアプリで1つ生成したセッションの手続きを、認証が要る画面の集合(`(main)`のレイアウト)と、設定画面のページへ渡す。

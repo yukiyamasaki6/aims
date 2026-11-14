@@ -34,6 +34,21 @@ describe("SettingsScreen", () => {
     ).toBeInTheDocument();
   });
 
+  it("分類「アカウント」の区画の中に、「パスワード変更」の項目を表示する", () => {
+    // Given
+    // When
+    render(<SettingsScreen account={null} diagnostics={null} />, {
+      wrapper: IntlTestProvider,
+    });
+
+    // Then
+    expect(
+      within(accountSection()).getByRole("link", {
+        name: settingsText("changePasswordItem"),
+      }),
+    ).toBeVisible();
+  });
+
   it("渡した子要素を、分類「アカウント」の区画の中にだけ表示する", () => {
     // Given
     // When
@@ -53,7 +68,7 @@ describe("SettingsScreen", () => {
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
-  it("分類の中身を渡さなければ、区画には見出しだけを表示する", () => {
+  it("分類の中身を渡さなければ、区画には見出しと、パスワード変更の項目だけを表示し、ボタンはない", () => {
     // Given
     // When
     render(<SettingsScreen account={null} diagnostics={null} />, {
@@ -63,6 +78,7 @@ describe("SettingsScreen", () => {
     // Then
     const region = accountSection();
     expect(within(region).getAllByRole("heading")).toHaveLength(1);
+    expect(within(region).getAllByRole("link")).toHaveLength(1);
     expect(within(region).queryByRole("button")).toBeNull();
   });
 

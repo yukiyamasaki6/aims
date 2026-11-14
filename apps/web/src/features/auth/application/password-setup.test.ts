@@ -33,6 +33,7 @@ function setup(offline = false) {
   const context: PasswordSetupContext = {
     authenticator,
     purpose: "password-reset",
+    requiresCheck: false,
     clock,
     connectivity,
   };
@@ -258,20 +259,25 @@ describe("パスワード設定の共通の手続き", () => {
   });
 
   describe("パスワードの設定", () => {
-    it("設定できて表示中なら、認証サービスへ入力したパスワードを頼み、続きを行ってよいと返し、実行中を解除しない", async () => {
+    it("設定できて表示中なら、入力したパスワードの設定を頼み、受け付けられた結果と表示中であることと開始の依頼を返し、実行中を解除しない", async () => {
       // Given
       const { context, authenticator, events, viewOf } = setup();
       const view = viewOf(onPasswordStep);
 
       // When
-      const proceed = await applyPassword(
+      const outcome = await applyPassword(
         context,
         { password: "password1" },
         view,
       );
 
       // Then
-      expect(proceed).toBe(true);
+      expect(outcome).toMatchObject({
+        result: accepted,
+        mounted: true,
+        request: { password: "password1" },
+      });
+      expect(outcome?.request.captchaToken ?? null).toBeNull();
       expect(authenticator.setPassword).toHaveBeenCalledExactlyOnceWith(
         "password1",
       );
@@ -279,58 +285,88 @@ describe("パスワード設定の共通の手続き", () => {
       expect(view.observedState.pending).toBe("setPassword");
     });
 
-    it("設定に失敗すれば、失敗を示し、続きを行わず、実行中を解除する", async () => {
+    it("チェックを要する手続きでは、開始の依頼にパスワード設定の段階のトークンを含め、設定の依頼にはトークンを含めない", async () => {
       // Given
       const { context, authenticator, viewOf } = setup();
-      authenticator.setPassword.mockResolvedValue({
-        kind: "failed",
-        failure: { kind: "weak_password" },
+      const checkedContext: PasswordSetupContext = {
+        ...context,
+        requiresCheck: true,
+      };
+      const view = viewOf(
+        passwordSetupReducer(onPasswordStep, {
+          type: "captchaChecked",
+          token: "password-step-token",
+        }),
+      );
+
+      // When
+      const outcome = await applyPassword(
+        checkedContext,
+        { password: "password1" },
+        view,
+      );
+
+      // Then
+      expect(outcome?.request).toEqual({
+        password: "password1",
+        captchaToken: "password-step-token",
       });
+      expect(authenticator.setPassword).toHaveBeenCalledExactlyOnceWith(
+        "password1",
+      );
+    });
+
+    it("設定に失敗すれば、失敗の結果を返し、失敗の表示は呼び出し側に任せ、実行中を解除しない", async () => {
+      // Given
+      const { context, authenticator, events, viewOf } = setup();
+      const failure: AuthFailure = { kind: "weak_password" };
+      authenticator.setPassword.mockResolvedValue({ kind: "failed", failure });
       const view = viewOf(onPasswordStep);
 
       // When
-      const proceed = await applyPassword(
+      const outcome = await applyPassword(
         context,
         { password: "password1" },
         view,
       );
 
       // Then
-      expect(proceed).toBe(false);
-      expect(view.observedState.error).toBe("weak_password");
-      expect(view.observedState.pending).toBeNull();
+      expect(outcome?.result).toEqual({ kind: "failed", failure });
+      expect(outcome?.mounted).toBe(true);
+      expect(events).toEqual([]);
+      expect(view.observedState.error).toBeNull();
     });
 
-    it("パスワードに不備があれば、不備だけを示し、設定しない", async () => {
+    it("パスワードに不備があれば、不備だけを示し、設定せず、結果を返さない", async () => {
       // Given
       const { context, authenticator, events, viewOf } = setup();
 
       const view = viewOf(onPasswordStep);
 
       // When
-      const proceed = await applyPassword(context, { password: "" }, view);
+      const outcome = await applyPassword(context, { password: "" }, view);
 
       // Then
-      expect(proceed).toBe(false);
+      expect(outcome).toBeNull();
       expect(events).toEqual([]);
       expect(view.observedState.fieldErrors.password).toBeDefined();
       expect(authenticator.setPassword).not.toHaveBeenCalled();
     });
 
-    it("実行中なら、何も送らず、設定しない", async () => {
+    it("実行中なら、何も送らず、設定せず、結果を返さない", async () => {
       // Given
       const { context, authenticator, events, viewOf } = setup();
       const running = { ...onPasswordStep, pending: "setPassword" as const };
 
       // When
-      const proceed = await applyPassword(
+      const outcome = await applyPassword(
         context,
         { password: "password1" },
         viewOf(running),
       );
 
       // Then
-      expect(proceed).toBe(false);
+      expect(outcome).toBeNull();
       expect(events).toEqual([]);
       expect(authenticator.setPassword).not.toHaveBeenCalled();
     });
@@ -368,20 +404,20 @@ describe("パスワード設定の共通の手続き", () => {
       expect(view.observedState.pending).toBeNull();
     });
 
-    it("パスワードの設定は、設定を頼まず、続きを行わず、offlineを示す", async () => {
+    it("パスワードの設定は、設定を頼まず、結果を返さず、offlineを示す", async () => {
       // Given
       const { authenticator, context, events, viewOf } = setup(true);
       const view = viewOf(onPasswordStep);
 
       // When
-      const proceed = await applyPassword(
+      const outcome = await applyPassword(
         context,
         { password: "password1" },
         view,
       );
 
       // Then
-      expect(proceed).toBe(false);
+      expect(outcome).toBeNull();
       expect(authenticator.setPassword).not.toHaveBeenCalled();
       expect(events).toEqual([]);
       expect(view.observedState.error).toBe("offline");
@@ -415,9 +451,8 @@ describe("パスワード設定の共通の手続き", () => {
     });
   });
 
-  // 離れた後は、設定の続き(遷移)を行わない。
   describe("画面を離れた後の応答", () => {
-    it("パスワードの設定の待ちで離れたら、結果を反映せず、続きを行わない", async () => {
+    it("パスワードの設定の待ちで離れたら、結果は返すが表示中でないと示し、結果を反映しない", async () => {
       // Given
       const { context, authenticator, events, screen, viewOf } = setup();
       const response = Promise.withResolvers<CallResult>();
@@ -431,10 +466,10 @@ describe("パスワード設定の共通の手続き", () => {
       // When
       screen.mounted = false;
       response.resolve(accepted);
-      const proceed = await running;
+      const outcome = await running;
 
       // Then
-      expect(proceed).toBe(false);
+      expect(outcome).toMatchObject({ result: accepted, mounted: false });
       expect(events).toEqual([]);
     });
   });

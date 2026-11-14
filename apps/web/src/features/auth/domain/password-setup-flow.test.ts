@@ -107,7 +107,20 @@ describe("パスワード設定の流れの遷移", () => {
       expect(next.pending).toBeNull();
       expect(next.error).toBeNull();
       expect(next.fieldErrors).toEqual({});
-      expect(next.captchaToken).toBe("kept");
+    });
+
+    it("コード入力の段階のトークンを消し、パスワード設定の段階へ持ち越さない", () => {
+      // Given
+      const flow = beginVerifyCode(
+        flowWith({ step: "code", captchaToken: "code-step-token" }),
+        { email: "user@example.com", code: "123456", offline: false },
+      ).state;
+
+      // When
+      const next = passwordSetupReducer(flow, { type: "codeConfirmed" });
+
+      // Then
+      expect(next.captchaToken).toBeNull();
     });
   });
 
@@ -124,6 +137,7 @@ describe("パスワード設定の流れの遷移", () => {
         const flow = beginSetPassword(flowWith({ step: "password" }), {
           password: "password1",
           offline: false,
+          requiresCheck: false,
         }).state;
 
         // When
@@ -155,6 +169,47 @@ describe("パスワード設定の流れの遷移", () => {
       expect(next.captchaToken).toBe("unused");
       expect(next.step).toBe("code");
       expect(next.resendCooldown).toBe(12);
+    });
+  });
+
+  describe("パスワード設定の段階の失敗", () => {
+    const passwordStepFlow = () =>
+      beginSetPassword(
+        flowWith({ step: "password", captchaToken: "signup-token" }),
+        { password: "password1", offline: false, requiresCheck: true },
+      ).state;
+
+    it("パスワードの更新の失敗(failed)は、使っていないトークンを保ち、段階に留まる", () => {
+      // Given
+      const flow = passwordStepFlow();
+
+      // When
+      const next = passwordSetupReducer(flow, {
+        type: "failed",
+        failure: { kind: "weak_password" },
+      });
+
+      // Then
+      expect(next.captchaToken).toBe("signup-token");
+      expect(next.step).toBe("password");
+      expect(next.pending).toBeNull();
+    });
+
+    it("パスワードでのサインインの拒否(refused)は、使ったトークンを消費し、段階に留まる", () => {
+      // Given
+      const flow = passwordStepFlow();
+
+      // When
+      const next = passwordSetupReducer(flow, {
+        type: "refused",
+        failure: { kind: "invalid_credentials" },
+      });
+
+      // Then
+      expect(next.captchaToken).toBeNull();
+      expect(next.step).toBe("password");
+      expect(next.error).toBe("invalid_credentials");
+      expect(next.pending).toBeNull();
     });
   });
 
@@ -340,9 +395,36 @@ describe("操作の開始の可否と入力の検証", () => {
       ready: {},
       invalidFlow: {},
       begin: (flow: PasswordSetupFlow) =>
-        beginSetPassword(flow, { password: "password1", offline: false }),
+        beginSetPassword(flow, {
+          password: "password1",
+          offline: false,
+          requiresCheck: false,
+        }),
       invalidBegin: (flow: PasswordSetupFlow) =>
-        beginSetPassword(flow, { password: "", offline: false }),
+        beginSetPassword(flow, {
+          password: "",
+          offline: false,
+          requiresCheck: false,
+        }),
+    },
+    {
+      name: "パスワードの設定(チェックを要する登録)",
+      operation: "setPassword",
+      ownStep: "password",
+      ready: { captchaToken: "token" },
+      invalidFlow: {},
+      begin: (flow: PasswordSetupFlow) =>
+        beginSetPassword(flow, {
+          password: "password1",
+          offline: false,
+          requiresCheck: true,
+        }),
+      invalidBegin: (flow: PasswordSetupFlow) =>
+        beginSetPassword(flow, {
+          password: "",
+          offline: false,
+          requiresCheck: true,
+        }),
     },
   ] as const;
 
@@ -464,6 +546,7 @@ describe("操作の開始の可否と入力の検証", () => {
           beginSetPassword(flowWith({ step: "password", resendCooldown: 17 }), {
             password: "password1",
             offline: false,
+            requiresCheck: false,
           }),
       ],
     ])("%sの開始は、待ち時間を変えない", (_name, begin) => {
@@ -690,6 +773,7 @@ describe("操作の開始の可否と入力の検証", () => {
       const result = beginSetPassword(onPasswordFlow, {
         password: "password1",
         offline: false,
+        requiresCheck: false,
       });
 
       // Then
@@ -705,6 +789,7 @@ describe("操作の開始の可否と入力の検証", () => {
       const result = beginSetPassword(onPasswordFlow, {
         password: "",
         offline: false,
+        requiresCheck: false,
       });
 
       // Then
@@ -712,6 +797,78 @@ describe("操作の開始の可否と入力の検証", () => {
         request: null,
         state: { fieldErrors: { password: "required" } },
       });
+    });
+
+    it("チェックを要するときは、チェックが完了していれば、トークンを依頼に含める", () => {
+      // Given
+      const flow = flowWith({ step: "password", captchaToken: "token" });
+
+      // When
+      const result = beginSetPassword(flow, {
+        password: "password1",
+        offline: false,
+        requiresCheck: true,
+      });
+
+      // Then
+      expect(result.request).toEqual({
+        password: "password1",
+        captchaToken: "token",
+      });
+    });
+
+    it("チェックを要するときは、チェックが未完了なら、チェック未完了を示して開始しない", () => {
+      // Given
+      const flow = flowWith({ step: "password", captchaToken: null });
+
+      // When
+      const result = beginSetPassword(flow, {
+        password: "password1",
+        offline: false,
+        requiresCheck: true,
+      });
+
+      // Then
+      expect(result.request).toBeNull();
+      expect(result.state).toMatchObject({
+        pending: null,
+        fieldErrors: { captcha: "incomplete" },
+      });
+    });
+
+    it("チェックを要するときは、パスワードの不備とチェック未完了を全て示す", () => {
+      // Given
+      const flow = flowWith({ step: "password", captchaToken: null });
+
+      // When
+      const result = beginSetPassword(flow, {
+        password: "",
+        offline: false,
+        requiresCheck: true,
+      });
+
+      // Then
+      expect(result.state.fieldErrors).toEqual({
+        password: "required",
+        captcha: "incomplete",
+      });
+    });
+
+    it("チェックを要しないときは、チェックが未完了でも開始し、トークンを依頼に含めない", () => {
+      // Given
+      const flow = flowWith({ step: "password", captchaToken: null });
+
+      // When
+      const result = beginSetPassword(flow, {
+        password: "password1",
+        offline: false,
+        requiresCheck: false,
+      });
+
+      // Then
+      expect(result.request).toMatchObject({ password: "password1" });
+      expect(result.request?.captchaToken ?? null).toBeNull();
+      expect(result.state.pending).toBe("setPassword");
     });
   });
 });
@@ -848,6 +1005,7 @@ describe("オフラインの判定", () => {
       const result = beginSetPassword(flow, {
         password: "password1",
         offline: true,
+        requiresCheck: false,
       });
 
       // Then
@@ -867,6 +1025,7 @@ describe("オフラインの判定", () => {
       const result = beginSetPassword(flow, {
         password: "パスワード1",
         offline: true,
+        requiresCheck: false,
       });
 
       // Then
@@ -875,6 +1034,41 @@ describe("オフラインの判定", () => {
         error: null,
         fieldErrors: { password: "invalidRule" },
       });
+    });
+
+    it("チェックを要し、チェックが未完了でも、パスワードが正しくてオフラインなら、offlineを示してチェック未完了を示さない", () => {
+      // Given
+      const flow = offlineFlow({ step: "password", captchaToken: null });
+
+      // When
+      const result = beginSetPassword(flow, {
+        password: "password1",
+        offline: true,
+        requiresCheck: true,
+      });
+
+      // Then
+      expect(result.request).toBeNull();
+      expect(result.state).toMatchObject({
+        error: "offline",
+        fieldErrors: {},
+        pending: null,
+      });
+    });
+
+    it("チェックを要し、パスワードに不備があってオフラインなら、パスワードの不備だけを示す", () => {
+      // Given
+      const flow = offlineFlow({ step: "password", captchaToken: null });
+
+      // When
+      const result = beginSetPassword(flow, {
+        password: "",
+        offline: true,
+        requiresCheck: true,
+      });
+
+      // Then
+      expect(result.state.fieldErrors).toEqual({ password: "required" });
     });
   });
 });

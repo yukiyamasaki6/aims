@@ -1,11 +1,15 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { PROXY_PATH, settleInflight } from "./inflight";
+import {
+  AUTH_COOKIE,
+  encodeStoredSession,
+  readStoredSessionCookie,
+} from "./stored-session";
 
 // セッションの更新の重なりを、決まった順序で起こすためのヘルパー。
 // ブラウザがセッションを更新している通信の間に、別の書き手(proxy.tsのサーバー側の更新)が保存先のCookieを書き換えると、
 // auth-jsは自分の更新結果を捨て、保存先には別の書き手の有効なセッションが残る。
 
-const AUTH_COOKIE = "sb-localhost-auth-token";
 const TOKEN_API = "**/auth/v1/token*";
 // 別の書き手として重ねる要求だけを、Cookieを差し替える対象から外す印。
 const OVERLAP_MARK = "e2e-session-overlap";
@@ -14,19 +18,9 @@ const OVERLAP_MARK = "e2e-session-overlap";
 // 重ねる時より前にproxy.tsがサーバー側で更新してCookieを新しくすると、ブラウザが更新しなくなる。
 // そのため、proxy.tsへの要求では期限を書き換える前のCookieを送ってサーバー側で更新させず、応答のSet-Cookieも除く。
 async function expireStoredSession(context: BrowserContext) {
-  const cookies = (await context.cookies()).filter(
-    (c) => c.name === AUTH_COOKIE,
-  );
-  // 分割されたCookie(`.0`、`.1`…)は扱わない。テストのユーザーのセッションは分割の長さに収まる。
-  if (cookies.length !== 1) throw new Error("no single stored session");
-  const [stored] = cookies;
-  const session = JSON.parse(
-    Buffer.from(stored.value.replace(/^base64-/, ""), "base64url").toString(
-      "utf8",
-    ),
-  );
+  const { cookie: stored, session } = await readStoredSessionCookie(context);
   session.expires_at = Math.floor(Date.now() / 1000) - 10;
-  const expired = `base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}`;
+  const expired = encodeStoredSession(session);
   // route以降に始まる要求はSet-Cookieを除かれるが、それより前に送った要求の応答には、有効なセッションのSet-Cookieが残っている。
   // それらが期限の書き換えの後に届くと期限を元に戻し、ブラウザが更新を始めなくなるため、終わってから書き換える。
   // Service Workerを通る要求も対象にするため、contextで扱う。

@@ -4,7 +4,12 @@ import { Serwist } from "serwist";
 import { precacheGuard } from "@/features/offline-pwa/infrastructure/precache-guard";
 import { createRuntimeCaching } from "@/features/offline-pwa/infrastructure/runtime-caching";
 import { roundFramePathOf } from "@/features/rounds/domain/round-routes";
-import { OFFLINE_PATH, SETTINGS_PATH, shellUrlOf } from "@/routes";
+import {
+  CHANGE_PASSWORD_PATH,
+  OFFLINE_PATH,
+  SETTINGS_PATH,
+  shellUrlOf,
+} from "@/routes";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -28,7 +33,9 @@ const serwist: Serwist = new Serwist({
     frameUrlOf: (pathname) => {
       const framePath =
         roundFramePathOf(pathname) ??
-        (pathname === SETTINGS_PATH ? SETTINGS_PATH : null);
+        (pathname === SETTINGS_PATH || pathname === CHANGE_PASSWORD_PATH
+          ? pathname
+          : null);
       return framePath === null ? null : shellUrlOf(framePath);
     },
     // serwistは生成の後に参照する(ハンドラは生成の後にだけ呼ばれる)。

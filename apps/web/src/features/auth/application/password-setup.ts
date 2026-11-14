@@ -6,8 +6,9 @@ import {
   beginVerifyCode,
   type PasswordSetupEvent,
   type PasswordSetupFlow,
+  type SetPasswordRequest,
 } from "../domain/password-setup-flow";
-import { failureOf } from "./call-result";
+import { type CallResult, failureOf } from "./call-result";
 import type {
   CodePurpose,
   PasswordSetupAuthenticator,
@@ -24,13 +25,16 @@ export type PasswordSetupView = ScreenView<
 
 // 画面が呼ぶ操作。
 export type PasswordSetup = {
+  // パスワード設定の段階でも、セキュリティチェックを要するか。画面は、これが真のときだけウィジェットを描く。
+  requiresCheck: boolean;
   sendCode(input: { email: string }, view: PasswordSetupView): Promise<void>;
   verifyCode(
     input: { email: string; code: string },
     view: PasswordSetupView,
   ): Promise<void>;
+  // email: 設定の後のサインインに使う(サインアップだけが使う)。
   setPassword(
-    input: { password: string },
+    input: { email: string; password: string },
     view: PasswordSetupView,
   ): Promise<void>;
   // 再送の待ちを1秒進める出来事を、1秒後に1回送る予約。返す関数で取り消す。
@@ -46,6 +50,8 @@ export type PasswordSetupContext = {
   purpose: CodePurpose;
   clock: Clock;
   connectivity: OfflineReader;
+  // パスワード設定の段階でもチェックを要するか。持ち主は手続きで、集約と画面へは、ここから渡す。
+  requiresCheck: boolean;
 };
 
 // 再送の待ちの1秒の予約(業務の時間)。
@@ -99,26 +105,30 @@ export async function verifyCode(
   );
 }
 
+// パスワード設定の依頼の結果。
+// result: 設定の結果(受け付けられた、または失敗)。
+// mounted: 応答の後も画面が表示中か。
+// request: 開始の依頼(パスワードと、チェックを要するときのトークン)。設定の後のサインインに使う。
+export type PasswordApplication = {
+  result: CallResult;
+  mounted: boolean;
+  request: SetPasswordRequest;
+};
+
 // パスワードの設定の依頼。
-// 設定に成功し、画面がまだ表示中のときだけ、trueを返す(続きを行ってよい)。
-// 失敗は示してfalseを返す。送信中に画面を離れたときは、状態を変えずにfalseを返す。
-// 成功時は実行中を解除しない。続きの動作が終わる前に再び押され、二重に設定されるのを防ぐため。
+// 開始できなかったとき(実行中、入力の不備、オフライン、チェック未完了)は、頼まずにnullを返す。
+// 結果の扱いは呼び出し側が決める(失敗の表示、続きの動作)。成功しても実行中を解除しない。
+// 続きの動作が終わる前に再び押され、二重に設定されるのを防ぐため。
 export async function applyPassword(
-  { authenticator, connectivity }: PasswordSetupContext,
+  { authenticator, connectivity, requiresCheck }: PasswordSetupContext,
   input: { password: string },
   view: PasswordSetupView,
-): Promise<boolean> {
+): Promise<PasswordApplication | null> {
   const offline = connectivity.isOffline();
   const request = view.begin((flow) =>
-    beginSetPassword(flow, { ...input, offline }),
+    beginSetPassword(flow, { ...input, offline, requiresCheck }),
   );
-  if (!request) return false;
+  if (!request) return null;
   const result = await authenticator.setPassword(request.password);
-  if (!view.isMounted()) return false;
-  const failure = failureOf(result);
-  if (failure) {
-    view.dispatch({ type: "failed", failure });
-    return false;
-  }
-  return true;
+  return { result, mounted: view.isMounted(), request };
 }

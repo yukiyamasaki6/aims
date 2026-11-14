@@ -123,14 +123,42 @@ export function beginVerifyCode(
   });
 }
 
+// パスワードの設定の依頼の内容。captchaTokenは、チェックを要する手続き(requiresCheck)だけが持つ。
+export type SetPasswordRequest = {
+  password: string;
+  captchaToken: string | null;
+};
+
+// パスワードの設定。判定の順序は、入力 → オフライン → チェック。
+// requiresCheckが真(サインアップ)のときだけ、チェック未完了を不備とし、トークンを依頼に含める。
+// チェック未完了は、オンラインのときだけ不備にする(オフラインでは原因を取り違えるため示さない)。
 export function beginSetPassword(
   flow: PasswordSetupFlow,
-  input: { password: string; offline: boolean },
-): Start<PasswordSetupFlow, { password: string }> {
+  input: { password: string; offline: boolean; requiresCheck: boolean },
+): Start<PasswordSetupFlow, SetPasswordRequest> {
   return begin(flow, "setPassword", input.offline, () => {
     const password = validateNewPassword(input.password);
-    if (password) return { ok: false, fieldErrors: { password } };
-    return { ok: true, request: { password: input.password } };
+    const { captchaToken } = flow;
+    const captchaMissing =
+      input.requiresCheck &&
+      !input.offline &&
+      !isCaptchaCompleted(captchaToken);
+    if (password || captchaMissing) {
+      return {
+        ok: false,
+        fieldErrors: {
+          ...(password && { password }),
+          ...(captchaMissing && { captcha: "incomplete" }),
+        },
+      };
+    }
+    return {
+      ok: true,
+      request: {
+        password: input.password,
+        captchaToken: input.requiresCheck ? captchaToken : null,
+      },
+    };
   });
 }
 
@@ -178,7 +206,9 @@ type Settlement = Extract<
 // 操作の結果。実行中を解除し、結果を反映する。
 // 失敗は理由に差し替える。
 // 実行中は`error`・`fieldErrors`が空であること(`begin`が開始で空にし、実行中に変えるのは結果だけ)を前提とし、以前のエラーはここでは消さない。
-// セキュリティチェックのトークンは、コードの送付の成功(codeSent)も失敗(refused)も使ったため消費する。確認とパスワードの設定の失敗(failed)はトークンを使わない。
+// セキュリティチェックのトークンは、コードの送付の成功(codeSent)も失敗(refused)も使ったため消費する。
+// 確認の成功(codeConfirmed)は、コード入力の段階のトークンを持ち越さないため消す(パスワード設定の段階のウィジェットが取り直す)。
+// パスワードの設定の失敗(failed)はトークンを使わない。サインアップの設定の後のサインインの失敗は、使ったため消費する(refused)。
 function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
   switch (event.type) {
     case "codeSent":
@@ -193,6 +223,7 @@ function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
       return {
         ...flow,
         step: "password",
+        captchaToken: null,
         pending: null,
       };
     case "failed":

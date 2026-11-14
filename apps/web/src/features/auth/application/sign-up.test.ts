@@ -8,31 +8,48 @@ import {
   type PasswordSetupEvent,
   passwordSetupReducer,
 } from "../domain/password-setup-flow";
+import type { Credentials } from "../domain/sign-in-flow";
 import type { CallResult } from "./call-result";
 import type { PasswordSetupAuthenticator } from "./password-setup-authenticator";
 import { screenHarness } from "./screen-view-test-helpers";
+import type { SignInAuthenticator } from "./sign-in";
 import { createSignUp } from "./sign-up";
 
 const email = "user@example.com";
 const accepted: CallResult = { kind: "accepted" };
 
-function setup() {
+function setup(offline = false) {
+  // 認証サービスへの頼みごとの順序(呼ばれた順)。
+  const calls: string[] = [];
   const authenticator = {
     sendCode: vi.fn(async (): Promise<CallResult> => accepted),
     verifyCode: vi.fn(async (): Promise<CallResult> => accepted),
-    setPassword: vi.fn(async (): Promise<CallResult> => accepted),
-  } satisfies PasswordSetupAuthenticator;
+    setPassword: vi.fn(async (): Promise<CallResult> => {
+      calls.push("setPassword");
+      return accepted;
+    }),
+    signIn: vi.fn(async (_credentials: Credentials): Promise<CallResult> => {
+      calls.push("signIn");
+      return accepted;
+    }),
+    signOutOthers: vi.fn(async (): Promise<CallResult> => {
+      calls.push("signOutOthers");
+      return accepted;
+    }),
+  } satisfies PasswordSetupAuthenticator &
+    SignInAuthenticator & { signOutOthers(): Promise<CallResult> };
   const pageReplace = { replace: vi.fn<(path: string) => void>() };
   const signUp = createSignUp({
     authenticator,
     pageReplace,
     clock: createManualClock(),
-    connectivity: createFakeConnectivity(),
+    connectivity: createFakeConnectivity(offline),
   });
   return {
     signUp,
     authenticator,
     pageReplace,
+    calls,
     ...screenHarness<
       ReturnType<typeof passwordSetupReducer>,
       PasswordSetupEvent
@@ -62,6 +79,16 @@ const resendable = passwordSetupReducer(
 const readyToResend = { ...resendable, resendCooldown: 0 };
 const onPasswordStep = passwordSetupReducer(onCodeStep, {
   type: "codeConfirmed",
+});
+// パスワード設定の段階のウィジェットが、取り直したトークンを渡した後。
+const readyToSetPassword = passwordSetupReducer(onPasswordStep, {
+  type: "captchaChecked",
+  token: "password-step-token",
+});
+const input = { email, password: "password1" };
+const failed = (failure: AuthFailure): CallResult => ({
+  kind: "failed",
+  failure,
 });
 
 describe("サインアップの手続き", () => {
@@ -184,18 +211,33 @@ describe("サインアップの手続き", () => {
   });
 
   describe("パスワードの設定", () => {
-    it("設定できれば、ラウンド一覧へ遷移し、実行中を解除しない", async () => {
+    it("設定できれば、パスワードの設定、パスワードでのサインイン、他のセッションの終了の順に頼み、終了の後にラウンド一覧へ遷移し、実行中を解除しない", async () => {
       // Given
-      const { signUp, authenticator, pageReplace, events, viewOf } = setup();
-      const view = viewOf(onPasswordStep);
+      const { signUp, authenticator, pageReplace, calls, events, viewOf } =
+        setup();
+      const view = viewOf(readyToSetPassword);
+      const callsAtReplace: string[] = [];
+      pageReplace.replace.mockImplementation(() => {
+        callsAtReplace.push(...calls);
+      });
 
       // When
-      await signUp.setPassword({ password: "password1" }, view);
+      await signUp.setPassword(input, view);
 
       // Then
+      expect(callsAtReplace).toEqual([
+        "setPassword",
+        "signIn",
+        "signOutOthers",
+      ]);
       expect(authenticator.setPassword).toHaveBeenCalledExactlyOnceWith(
         "password1",
       );
+      expect(authenticator.signIn).toHaveBeenCalledExactlyOnceWith({
+        email,
+        password: "password1",
+        captchaToken: "password-step-token",
+      });
       expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
       expect(events).toEqual([]);
       expect(view.observedState.pending).toBe("setPassword");
@@ -204,12 +246,11 @@ describe("サインアップの手続き", () => {
     it("弱いパスワードで拒否された後の成功では、遷移の時点でエラーは消えており、実行中のままである", async () => {
       // Given
       const { signUp, authenticator, pageReplace, events, viewOf } = setup();
-      authenticator.setPassword.mockResolvedValueOnce({
-        kind: "failed",
-        failure: { kind: "weak_password" },
-      });
-      const view = viewOf(onPasswordStep);
-      await signUp.setPassword({ password: "password1" }, view);
+      authenticator.setPassword.mockResolvedValueOnce(
+        failed({ kind: "weak_password" }),
+      );
+      const view = viewOf(readyToSetPassword);
+      await signUp.setPassword(input, view);
       const seen: {
         events: string[];
         error: string | null;
@@ -224,7 +265,7 @@ describe("サインアップの手続き", () => {
       });
 
       // When
-      await signUp.setPassword({ password: "password1" }, view);
+      await signUp.setPassword(input, view);
 
       // Then
       expect(seen).toEqual([
@@ -236,18 +277,170 @@ describe("サインアップの手続き", () => {
       ]);
     });
 
-    it("同じタスクで続けて2回呼んでも、2回目は実行中を見て拒否され、設定と遷移は1回になる", async () => {
+    it("パスワードの設定が同じパスワード以外の理由で失敗したら、理由を示して止まり、サインインも他のセッションの終了も頼まず、トークンを保つ", async () => {
+      // Given
+      const { signUp, authenticator, pageReplace, events, resetCheck, viewOf } =
+        setup();
+      const failure: AuthFailure = { kind: "weak_password" };
+      authenticator.setPassword.mockResolvedValue(failed(failure));
+      const view = viewOf(readyToSetPassword);
+
+      // When
+      await signUp.setPassword(input, view);
+
+      // Then
+      expect(events).toEqual([{ type: "failed", failure }]);
+      expect(view.observedState.error).toBe("weak_password");
+      expect(view.observedState.pending).toBeNull();
+      expect(view.observedState.captchaToken).toBe("password-step-token");
+      expect(authenticator.signIn).not.toHaveBeenCalled();
+      expect(authenticator.signOutOthers).not.toHaveBeenCalled();
+      expect(pageReplace.replace).not.toHaveBeenCalled();
+      expect(resetCheck).not.toHaveBeenCalled();
+    });
+
+    it("パスワードの設定が同じパスワードの拒否なら、設定済みとして表示せずにサインインへ進み、完了する(サインインの失敗の後の再試行)", async () => {
+      // Given
+      const { signUp, authenticator, pageReplace, calls, events, viewOf } =
+        setup();
+      authenticator.setPassword.mockResolvedValue(
+        failed({ kind: "same_password" }),
+      );
+      const view = viewOf(readyToSetPassword);
+
+      // When
+      await signUp.setPassword(input, view);
+
+      // Then
+      expect(events).toEqual([]);
+      expect(view.observedState.error).toBeNull();
+      expect(calls).toEqual(["signIn", "signOutOthers"]);
+      expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
+    });
+
+    it("パスワードでのサインインが失敗したら、理由を示してこの段階に留まり、他のセッションの終了を頼まず、使ったトークンを消費してチェックをやり直させる", async () => {
+      // Given
+      const { signUp, authenticator, pageReplace, events, resetCheck, viewOf } =
+        setup();
+      const failure: AuthFailure = { kind: "unreachable" };
+      authenticator.signIn.mockResolvedValue(failed(failure));
+      const view = viewOf(readyToSetPassword);
+
+      // When
+      await signUp.setPassword(input, view);
+
+      // Then
+      expect(events).toEqual([{ type: "refused", failure }]);
+      expect(view.observedState.error).toBe("unreachable");
+      expect(view.observedState.step).toBe("password");
+      expect(view.observedState.pending).toBeNull();
+      expect(view.observedState.captchaToken).toBeNull();
+      expect(resetCheck).toHaveBeenCalledOnce();
+      expect(authenticator.signOutOthers).not.toHaveBeenCalled();
+      expect(pageReplace.replace).not.toHaveBeenCalled();
+    });
+
+    it("サインインの失敗の後は、チェックを取り直して再送信すると、パスワードの設定から行い直して完了する", async () => {
       // Given
       const { signUp, authenticator, pageReplace, viewOf } = setup();
+      authenticator.signIn.mockResolvedValueOnce(
+        failed({ kind: "unreachable" }),
+      );
+      const view = viewOf(readyToSetPassword);
+      await signUp.setPassword(input, view);
+      view.dispatch({ type: "captchaChecked", token: "reissued-token" });
+
+      // When
+      await signUp.setPassword(input, view);
+
+      // Then
+      expect(authenticator.setPassword).toHaveBeenCalledTimes(2);
+      expect(authenticator.signIn).toHaveBeenLastCalledWith({
+        email,
+        password: "password1",
+        captchaToken: "reissued-token",
+      });
+      expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
+    });
+
+    it("他のセッションの終了が終わるまでは遷移せず、終わってから遷移する", async () => {
+      // Given
+      const { signUp, authenticator, pageReplace, viewOf } = setup();
+      const response = Promise.withResolvers<CallResult>();
+      authenticator.signOutOthers.mockReturnValue(response.promise);
+      const running = signUp.setPassword(input, viewOf(readyToSetPassword));
+      await vi.waitFor(() =>
+        expect(authenticator.signOutOthers).toHaveBeenCalledOnce(),
+      );
+      const replacedBefore = pageReplace.replace.mock.calls.length;
+
+      // When
+      response.resolve(accepted);
+      await running;
+
+      // Then
+      expect(replacedBefore).toBe(0);
+      expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
+    });
+
+    it("他のセッションの終了が失敗しても、示さずに遷移する", async () => {
+      // Given
+      const { signUp, authenticator, pageReplace, events, viewOf } = setup();
+      authenticator.signOutOthers.mockResolvedValue(failed(UNREACHABLE));
+      const view = viewOf(readyToSetPassword);
+
+      // When
+      await signUp.setPassword(input, view);
+
+      // Then
+      expect(events).toEqual([]);
+      expect(view.observedState.error).toBeNull();
+      expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
+    });
+
+    it("パスワード設定の段階のチェックが未完了なら、チェック未完了を示し、パスワードを設定しない", async () => {
+      // Given
+      const { signUp, authenticator, events, viewOf } = setup();
       const view = viewOf(onPasswordStep);
 
       // When
-      const first = signUp.setPassword({ password: "password1" }, view);
-      const second = signUp.setPassword({ password: "password1" }, view);
+      await signUp.setPassword(input, view);
+
+      // Then
+      expect(view.observedState.fieldErrors).toEqual({
+        captcha: "incomplete",
+      });
+      expect(events).toEqual([]);
+      expect(authenticator.setPassword).not.toHaveBeenCalled();
+    });
+
+    it("端末がオフラインなら、チェックが未完了でも、チェック未完了を示さずにオフラインを示し、何も頼まない", async () => {
+      // Given
+      const { signUp, authenticator, viewOf } = setup(true);
+      const view = viewOf(onPasswordStep);
+
+      // When
+      await signUp.setPassword(input, view);
+
+      // Then
+      expect(view.observedState.error).toBe("offline");
+      expect(view.observedState.fieldErrors).toEqual({});
+      expect(authenticator.setPassword).not.toHaveBeenCalled();
+    });
+
+    it("同じタスクで続けて2回呼んでも、2回目は実行中を見て拒否され、設定と遷移は1回になる", async () => {
+      // Given
+      const { signUp, authenticator, pageReplace, viewOf } = setup();
+      const view = viewOf(readyToSetPassword);
+
+      // When
+      const first = signUp.setPassword(input, view);
+      const second = signUp.setPassword(input, view);
       await Promise.all([first, second]);
 
       // Then
       expect(authenticator.setPassword).toHaveBeenCalledOnce();
+      expect(authenticator.signIn).toHaveBeenCalledOnce();
       expect(pageReplace.replace).toHaveBeenCalledOnce();
     });
   });
@@ -288,18 +481,14 @@ describe("サインアップの手続き", () => {
     });
   });
 
-  // 設定の待ちで離れた後は、結果を反映せず、遷移しない。
   describe("画面を離れた後の応答", () => {
-    it("パスワードの設定の待ちで離れたら、結果を反映せず、遷移しない", async () => {
+    it("パスワードの設定の待ちで離れて、設定が成功しても、サインインと他のセッションの終了は進め、遷移だけしない", async () => {
       // Given
       const { signUp, authenticator, pageReplace, events, screen, viewOf } =
         setup();
       const response = Promise.withResolvers<CallResult>();
       authenticator.setPassword.mockReturnValue(response.promise);
-      const running = signUp.setPassword(
-        { password: "password1" },
-        viewOf(onPasswordStep),
-      );
+      const running = signUp.setPassword(input, viewOf(readyToSetPassword));
 
       // When
       screen.mounted = false;
@@ -307,8 +496,45 @@ describe("サインアップの手続き", () => {
       await running;
 
       // Then
+      expect(authenticator.signIn).toHaveBeenCalledOnce();
+      expect(authenticator.signOutOthers).toHaveBeenCalledOnce();
       expect(events).toEqual([]);
       expect(pageReplace.replace).not.toHaveBeenCalled();
+    });
+
+    it("サインインの待ちで離れても、他のセッションの終了は進め、遷移だけしない", async () => {
+      // Given
+      const { signUp, authenticator, pageReplace, screen, viewOf } = setup();
+      const response = Promise.withResolvers<CallResult>();
+      authenticator.signIn.mockReturnValue(response.promise);
+      const running = signUp.setPassword(input, viewOf(readyToSetPassword));
+      await vi.waitFor(() => expect(authenticator.signIn).toHaveBeenCalled());
+
+      // When
+      screen.mounted = false;
+      response.resolve(accepted);
+      await running;
+
+      // Then
+      expect(authenticator.signOutOthers).toHaveBeenCalledOnce();
+      expect(pageReplace.replace).not.toHaveBeenCalled();
+    });
+
+    it("パスワードの設定の待ちで離れて、設定が失敗したら、何も表示せず、サインインも頼まない", async () => {
+      // Given
+      const { signUp, authenticator, events, screen, viewOf } = setup();
+      const response = Promise.withResolvers<CallResult>();
+      authenticator.setPassword.mockReturnValue(response.promise);
+      const running = signUp.setPassword(input, viewOf(readyToSetPassword));
+
+      // When
+      screen.mounted = false;
+      response.resolve(failed({ kind: "weak_password" }));
+      await running;
+
+      // Then
+      expect(events).toEqual([]);
+      expect(authenticator.signIn).not.toHaveBeenCalled();
     });
   });
 
@@ -352,9 +578,16 @@ describe("サインアップの手続き", () => {
         { email: "new@example.com", code: "123456" },
         view,
       );
-      await signUp.setPassword({ password: "password1" }, view);
+      view.dispatch({ type: "captchaChecked", token: "password-step-token" });
+      await signUp.setPassword(
+        { email: "new@example.com", password: "password1" },
+        view,
+      );
       const afterWeak = view.observedState;
-      await signUp.setPassword({ password: "password1" }, view);
+      await signUp.setPassword(
+        { email: "new@example.com", password: "password1" },
+        view,
+      );
 
       // Then
       expect(afterRefused.error).toBe("rate_limited");
@@ -370,6 +603,11 @@ describe("サインアップの手続き", () => {
       expect(afterWeak.step).toBe("password");
       expect(afterWeak.pending).toBeNull();
       expect(resetCheck).toHaveBeenCalledTimes(2);
+      expect(authenticator.signIn).toHaveBeenCalledExactlyOnceWith({
+        email: "new@example.com",
+        password: "password1",
+        captchaToken: "password-step-token",
+      });
       expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
     });
   });

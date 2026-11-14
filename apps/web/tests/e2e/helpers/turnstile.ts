@@ -17,6 +17,8 @@ import { expect, type Page } from "@playwright/test";
 // コンテナへ挿入し、枠が利用者に見えているかをテストが確かめられるようにする。
 // callbackを呼んだ回数をwindow.e2eTurnstileTokenCountに、reset()を呼んだ回数を
 // window.e2eTurnstileResetCountに数える(どちらもページを読み込み直すと0に戻る)。
+// window.e2eTurnstileReissueOnResetをテスト側がpage.addInitScript()で真にすると、
+// reset()の後に最後に描いたウィジェットのcallbackへ新しいトークンを渡す(チェックの取り直しの再現)。
 // テストは、waitForTurnstileTokenでトークンの受け取りを待ち、expectTurnstileResetで
 // チェックのやり直しの依頼を確かめる。
 const DUMMY_TOKEN = "mock-turnstile-token";
@@ -37,9 +39,12 @@ export async function mockTurnstile(page: Page): Promise<void> {
             window.e2eTurnstileTokenCount++;
             options.callback("${DUMMY_TOKEN}");
           }
+          // 最後に描いたウィジェットのoptions。resetはoptionsを持たないため保持する。
+          var lastOptions = null;
           window.turnstile = {
             render: function (container, options) {
               window.e2eTurnstileRenderCount++;
+              lastOptions = options;
               var widget = document.createElement("div");
               widget.setAttribute("data-turnstile-widget", "");
               widget.style.width = "300px";
@@ -69,7 +74,19 @@ export async function mockTurnstile(page: Page): Promise<void> {
               }
               return "mock-widget-id-" + window.e2eTurnstileRenderCount;
             },
-            reset: function () { window.e2eTurnstileResetCount++; },
+            // window.e2eTurnstileReissueOnResetを真にすると、resetの後に新しいトークンを
+            // 非同期で渡す(画面がトークンを消した後に届く)。既定ではトークンを発行しない。
+            reset: function () {
+              window.e2eTurnstileResetCount++;
+              if (
+                window.e2eTurnstileReissueOnReset &&
+                lastOptions &&
+                typeof lastOptions.callback === "function"
+              ) {
+                var options = lastOptions;
+                setTimeout(function () { emitToken(options); }, 0);
+              }
+            },
             remove: function () {},
             execute: function () {},
             isExpired: function () { return false; },

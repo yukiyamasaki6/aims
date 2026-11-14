@@ -25,6 +25,8 @@ const auth = vi.hoisted(() => ({
   signInWithOtp: vi.fn(),
   verifyOtp: vi.fn(),
   updateUser: vi.fn(),
+  signInWithPassword: vi.fn(),
+  signOut: vi.fn(),
 }));
 const connection = vi.hoisted(() => ({
   createBrowserClient: vi.fn(() => ({ auth })),
@@ -124,6 +126,10 @@ async function advanceToPasswordStep(user: User) {
   await user.type(codeInput(), "123456");
   await user.click(verifyButton());
   await screen.findByRole("heading", { name: authText("signUpPasswordTitle") });
+  // パスワード設定の段階のウィジェットが、新しいトークンを発行する。
+  await user.click(widgetButton());
+  auth.signInWithPassword.mockResolvedValue({ error: null });
+  auth.signOut.mockResolvedValue({ error: null });
 }
 
 // 応答済みのモックの結果を、実際のマクロタスク境界まで進めて画面へ反映させる。フェイクタイマー下でも進むよう、node:timersを使う。
@@ -199,11 +205,13 @@ describe("サインアップ画面の入口", () => {
     expect(widget.siteKey).toBe("");
   });
 
-  it("3つの段階を最後まで通すと、入口が得た接続とサーバー関数で認証し、ラウンド一覧へ遷移する", async () => {
+  it("3つの段階を最後まで通すと、入口が得た接続とサーバー関数で、パスワードの設定、サインイン、他のセッションの終了を行い、ラウンド一覧へ遷移する", async () => {
     // Given
     auth.signInWithOtp.mockResolvedValue({ error: null });
     auth.verifyOtp.mockResolvedValue({ error: null });
     auth.updateUser.mockResolvedValue({ error: null });
+    auth.signInWithPassword.mockResolvedValue({ error: null });
+    auth.signOut.mockResolvedValue({ error: null });
     const user = userEvent.setup();
     render(<SignUpPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user, "new@example.com");
@@ -213,12 +221,17 @@ describe("サインアップ画面の入口", () => {
     await screen.findByRole("heading", {
       name: authText("signUpPasswordTitle"),
     });
+    await user.click(widgetButton());
     await user.type(passwordInput(), "password123");
 
     // When
     await user.click(setPasswordButton());
 
     // Then
+    // 遷移の時点で、設定、サインイン、他のセッションの終了が済んでいる。
+    await vi.waitFor(() =>
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH),
+    );
     expect(connection.createBrowserClient).toHaveBeenCalled();
     expect(auth.signInWithOtp).toHaveBeenCalledExactlyOnceWith({
       email: "new@example.com",
@@ -232,8 +245,13 @@ describe("サインアップ画面の入口", () => {
     expect(auth.updateUser).toHaveBeenCalledExactlyOnceWith({
       password: "password123",
     });
-    expect(page.replace).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
-    expect(widget.resets).toBe(1);
+    // コード入力の段階のトークンでなく、パスワード設定の段階のウィジェットが発行したトークンを使う。
+    expect(auth.signInWithPassword).toHaveBeenCalledExactlyOnceWith({
+      email: "new@example.com",
+      password: "password123",
+      options: { captchaToken: "captcha-token-2" },
+    });
+    expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "others" });
   });
 
   it("コードの送信でSDKが未知のエラーを返したときは、固定の文言を示し、認証サービスの文言を出さない", async () => {
@@ -272,8 +290,11 @@ describe("サインアップ画面の入口", () => {
     await act(async () => deferred.resolve({ error: null }));
 
     // Then
+    await vi.waitFor(() =>
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH),
+    );
     expect(auth.updateUser).toHaveBeenCalledOnce();
-    expect(page.replace).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
+    expect(auth.signInWithPassword).toHaveBeenCalledOnce();
   });
 
   it("パスワードの設定の応答待ちで画面を離れたら、遷移しない", async () => {
@@ -291,6 +312,8 @@ describe("サインアップ画面の入口", () => {
     await act(async () => deferred.resolve({ error: null }));
 
     // Then
+    // 設定が成功したため、画面を離れても、他のセッションの終了まで進む。
+    await vi.waitFor(() => expect(auth.signOut).toHaveBeenCalledOnce());
     expect(auth.updateUser).toHaveBeenCalledOnce();
     expect(page.replace).not.toHaveBeenCalled();
   });

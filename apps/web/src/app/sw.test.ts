@@ -97,6 +97,8 @@ describe("sw", () => {
         ["/rounds/abc", "/__shell/rounds/_"],
         ["/settings", "/__shell/settings"],
         ["/settings?tab=1#top", "/__shell/settings"],
+        ["/settings/password", "/__shell/settings/password"],
+        ["/settings/password?tab=1#top", "/__shell/settings/password"],
       ])("%sはプリキャッシュの%sを返す", async (url, frameUrl) => {
         // Given
         const frame = new Response("frame");
@@ -253,6 +255,7 @@ describe("sw", () => {
     it.each([
       "/__shell/rounds",
       "/__shell/settings",
+      "/__shell/settings/password",
       "/_next/static/chunks/main.js",
       "/offline",
     ])("%sは保存する", async (url) => {
