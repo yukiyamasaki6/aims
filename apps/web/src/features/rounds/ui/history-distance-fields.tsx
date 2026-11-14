@@ -22,6 +22,13 @@ import { useOptionLabels } from "./use-option-labels";
 type KeyedRow = { key: number; draft: HistoryDistanceDraftRow };
 type RowError = { row: number; error: HistoryDistanceError };
 type NumericField = "distance" | "arrowsPerEnd" | "totalArrows";
+// 反映する値。距離の構成なら行の配列、距離単位の距離の行なら行(指定なしは null)。
+type DistanceChange =
+  | { distances: HistoryDistanceRow[] }
+  | { distanceRow: HistoryDistanceRow | null };
+
+const CONFIG_TEST_ID = "history-filter-distance";
+const ROW_TEST_ID = "history-filter-distance-row";
 
 const NUMERIC_FIELDS: { field: NumericField; error: HistoryDistanceError }[] = [
   { field: "distance", error: "distanceInvalid" },
@@ -218,6 +225,7 @@ function RowInput({
 
 // 距離の構成の1行。3つの入力と、的の指定、行の削除、行ごとのエラー。
 function DistanceRow({
+  testIdBase,
   index,
   draft,
   errors,
@@ -228,6 +236,7 @@ function DistanceRow({
   onCommit,
   onRemove,
 }: {
+  testIdBase: string;
   index: number;
   draft: HistoryDistanceDraftRow;
   errors: readonly HistoryDistanceError[];
@@ -239,7 +248,7 @@ function DistanceRow({
   onRemove: () => void;
 }) {
   const t = useTranslations("rounds");
-  const prefix = `history-filter-distance-${index}`;
+  const prefix = `${testIdBase}-${index}`;
   const labels: Record<NumericField, string> = {
     distance: t("historyFilterDistance"),
     arrowsPerEnd: t("historyFilterArrowsPerEnd"),
@@ -284,7 +293,7 @@ function DistanceRow({
           key={error}
           role="alert"
           className="text-destructive text-sm"
-          data-testid={`history-filter-distance-error-${index}-${error}`}
+          data-testid={`${testIdBase}-error-${index}-${error}`}
         >
           {t(`historyDistanceError.${error}`)}
         </p>
@@ -303,14 +312,14 @@ function useSavedTargetFaces(): TargetFaceOption[] {
   return targetFaces;
 }
 
-// 行の下書きと、まとめた検証・反映。反映するのは、全ての行が正しく、かつ現在の条件と違うときだけである。
+// 行の下書きと、まとめた検証・反映。反映するのは、全ての行が正しく、かつ現在の値と違うときだけである。
 function useDistanceDrafts(
-  condition: HistoryCondition,
-  onApply: (change: { distances: HistoryDistanceRow[] }) => void,
+  current: readonly HistoryDistanceRow[],
+  onApply: (distances: HistoryDistanceRow[]) => void,
 ) {
-  const nextKey = useRef(condition.distances.length);
+  const nextKey = useRef(current.length);
   const [rows, setRows] = useState<KeyedRow[]>(() =>
-    condition.distances.map((row, key) => ({ key, draft: draftOf(row) })),
+    current.map((row, key) => ({ key, draft: draftOf(row) })),
   );
   const [errors, setErrors] = useState<readonly RowError[]>([]);
 
@@ -321,8 +330,8 @@ function useDistanceDrafts(
       return;
     }
     setErrors([]);
-    if (!isSameDistances(result.distances, condition.distances)) {
-      onApply({ distances: result.distances });
+    if (!isSameDistances(result.distances, current)) {
+      onApply(result.distances);
     }
   }
 
@@ -355,28 +364,37 @@ function useDistanceDrafts(
   return { rows, errors, commit: () => commit(rows), update, add, remove };
 }
 
-// 距離の構成の入力。数値の入力を離れたときかEnter、行の削除、的の選択・外すで反映し、行の追加では反映しない。不正なときは反映せず、行ごとにエラーを出して入力した文字を残す。
+// 距離の入力。`single`でないときは距離の構成(行の数に上限なし)、`single`のときは距離単位の距離の行(行の上限は1)。数値の入力を離れたときかEnter、行の削除、的の選択・外すで反映し、行の追加では反映しない。不正なときは反映せず、行ごとにエラーを出して入力した文字を残す。
 export function HistoryDistanceFields({
   condition,
   onApply,
+  single = false,
 }: {
   condition: HistoryCondition;
-  onApply: (change: { distances: HistoryDistanceRow[] }) => void;
+  onApply: (change: DistanceChange) => void;
+  single?: boolean;
 }) {
   const t = useTranslations("rounds");
   const targetFaces = useSavedTargetFaces();
   const { rows, errors, commit, update, add, remove } = useDistanceDrafts(
-    condition,
-    onApply,
+    single
+      ? condition.distanceRow === null
+        ? []
+        : [condition.distanceRow]
+      : condition.distances,
+    (distances) =>
+      onApply(single ? { distanceRow: distances[0] ?? null } : { distances }),
   );
+  const testIdBase = single ? ROW_TEST_ID : CONFIG_TEST_ID;
   return (
     <div className="flex flex-col gap-2">
       <span className="text-muted-foreground text-sm">
-        {t("historyFilterDistances")}
+        {t(single ? "historyFilterDistanceRow" : "historyFilterDistances")}
       </span>
       {rows.map(({ key, draft }, index) => (
         <DistanceRow
           key={key}
+          testIdBase={testIdBase}
           index={index}
           draft={draft}
           errors={errors.filter((e) => e.row === index).map((e) => e.error)}
@@ -388,16 +406,18 @@ export function HistoryDistanceFields({
           onRemove={() => remove(key)}
         />
       ))}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="self-start"
-        data-testid="history-filter-distance-add"
-        onClick={add}
-      >
-        {t("historyFilterDistanceAdd")}
-      </Button>
+      {!(single && rows.length >= 1) && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          data-testid={`${testIdBase}-add`}
+          onClick={add}
+        >
+          {t("historyFilterDistanceAdd")}
+        </Button>
+      )}
     </div>
   );
 }

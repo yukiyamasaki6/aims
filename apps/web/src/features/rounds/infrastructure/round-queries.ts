@@ -4,10 +4,13 @@ import type {
   DbResponse,
 } from "@/lib/supabase/contract/database";
 import type { RoundQueries } from "../application/round-fetching";
-import type { HistoryCondition } from "../domain/history-view-state";
+import type {
+  HistoryCondition,
+  HistoryDistanceRow,
+} from "../domain/history-view-state";
 import type { PresetRecord } from "../domain/preset";
 import { newestById } from "../domain/round-base";
-import type { ServerRoundsPage } from "../domain/round-list";
+import type { ServerHistoryPage } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { TargetFaceRecord } from "../domain/target-face";
 import { failureOfResponses } from "./db-response-outcome";
@@ -32,13 +35,19 @@ function chunkIds(ids: readonly string[]): string[][] {
   return chunks;
 }
 
-// 履歴の関数の戻り値({ rounds: [{ id, name, round_date, total }], has_more })を、ページの形に写す。
-function pageOfResponse(data: unknown): ServerRoundsPage {
-  const { rounds, has_more: hasMore } = data as {
-    rounds: ServerRoundsPage["rounds"];
+// 履歴の関数の戻り値を、ページの形に写す。ラウンド単位は({ rounds: [{ id, name, round_date, total }], has_more })、距離単位は({ distances: [{ id, round_id, name, round_date, number, distance, is_marked, total }], has_more })。
+function pageOfResponse(
+  data: unknown,
+  unit: HistoryCondition["unit"],
+): ServerHistoryPage {
+  const body = data as {
+    rounds: Extract<ServerHistoryPage, { rounds: unknown }>["rounds"];
+    distances: Extract<ServerHistoryPage, { distances: unknown }>["distances"];
     has_more: boolean;
   };
-  return { rounds, hasMore };
+  return unit === "distance"
+    ? { distances: body.distances, hasMore: body.has_more }
+    : { rounds: body.rounds, hasMore: body.has_more };
 }
 
 // 期間と得点の範囲の引数。指定があるものだけ送る(指定が全くなければ旧い版と同じ6引数)。
@@ -51,17 +60,26 @@ function rangeArgsOf(condition: HistoryCondition) {
   };
 }
 
+// 距離の行の引数の形(distance、arrows_per_end、total_arrows、target_face_id)。
+function distanceRowArgOf(row: HistoryDistanceRow) {
+  return {
+    distance: row.distance,
+    arrows_per_end: row.arrowsPerEnd,
+    total_arrows: row.totalArrows,
+    target_face_id: row.targetFaceId,
+  };
+}
+
 // 距離の構成の引数。行が1つ以上のときだけ送る。
 function distancesArgOf(condition: HistoryCondition) {
   if (condition.distances.length === 0) return {};
-  return {
-    p_distances: condition.distances.map((row) => ({
-      distance: row.distance,
-      arrows_per_end: row.arrowsPerEnd,
-      total_arrows: row.totalArrows,
-      target_face_id: row.targetFaceId,
-    })),
-  };
+  return { p_distances: condition.distances.map(distanceRowArgOf) };
+}
+
+// 距離単位の距離の行の引数。行があるときだけ送る。
+function distanceArgOf(condition: HistoryCondition) {
+  if (condition.distanceRow === null) return {};
+  return { p_distance: distanceRowArgOf(condition.distanceRow) };
 }
 
 function toTargetFaces(rows: unknown): TargetFaceRecord[] {
@@ -169,10 +187,10 @@ export function createRoundQueries(
         },
       };
     },
-    // 履歴の1ページ。条件の適用(絞り込み、並び、合計点)とページの切り出しは、履歴の関数(rounds_list)がサーバーで行う。
+    // 履歴の1ページ。条件の適用(絞り込み、並び、合計点・小計)とページの切り出しは、履歴の関数がサーバーで行う。ラウンド単位はrounds_list、距離単位はdistances_list。
     // 取得できる行はRLSでユーザーが属するラウンドに限るため、利用者で絞らない。
     async roundsList({ condition, after, size }) {
-      const response = await database.rpc("rounds_list", {
+      const args = {
         p_sort_key: condition.sortKey,
         p_sort_direction: condition.sortDirection,
         p_format: condition.format,
@@ -181,10 +199,20 @@ export function createRoundQueries(
         p_limit: size,
         ...rangeArgsOf(condition),
         ...distancesArgOf(condition),
-      });
+      };
+      const response =
+        condition.unit === "distance"
+          ? await database.rpc("distances_list", {
+              ...args,
+              ...distanceArgOf(condition),
+            })
+          : await database.rpc("rounds_list", args);
       const failure = failureOfResponses([response]);
       if (failure) return failure;
-      return { status: "ok", data: pageOfResponse(response.data) };
+      return {
+        status: "ok",
+        data: pageOfResponse(response.data, condition.unit),
+      };
     },
     // preset_roundsのRLSは認証済みの全員に全行を見せるため、他人の個人プリセットを除くクエリの絞りが必須である。
     async presets(userId) {

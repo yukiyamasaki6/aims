@@ -61,6 +61,34 @@ function page(
   };
 }
 
+// 距離単位の1ページ。距離のID(`d-…`)と属するラウンドのIDを区別できるようにする。
+function distancePage(
+  ids: string[],
+  overrides: Partial<LoadedRoundsList> = {},
+): LoadedRoundsList {
+  return {
+    items: ids.map((id, index) => ({
+      id,
+      roundId: `round-of-${id}`,
+      name: id,
+      roundDate: "2026-09-15",
+      number: index + 1,
+      distance: 50,
+      isMarked: true,
+      total: 0,
+    })),
+    hasMore: false,
+    after: ids.at(-1) ?? null,
+    deleted: new Set(),
+    ...overrides,
+  };
+}
+
+const distanceUnitCondition: HistoryCondition = {
+  ...DEFAULT_HISTORY_CONDITION,
+  unit: "distance",
+};
+
 const ok = (data: LoadedRoundsList): FetchResult<LoadedRoundsList> => ({
   status: "ok",
   data,
@@ -254,6 +282,74 @@ describe("useHistoryPages", () => {
       expect(result.current.view).toEqual({ status: "loading" });
       await waitFor(() => expect(result.current.view.status).toBe("ok"));
       expect(loadList).toHaveBeenLastCalledWith(rangeCondition, null, 16);
+    });
+
+    it("単位だけを変えた条件でも、表示済みを捨てて取得中にし、新しい条件で先頭から取得し直す", async () => {
+      // Given
+      const next = Promise.withResolvers<FetchResult<LoadedRoundsList>>();
+      const { result, rerender, loadList } = setup(undefined, {
+        loads: [ok(page(["a"])), next.promise],
+      });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+
+      // When
+      rerender({ condition: distanceUnitCondition });
+
+      // Then
+      expect(result.current.view).toEqual({ status: "loading" });
+      expect(loadList).toHaveBeenLastCalledWith(
+        distanceUnitCondition,
+        null,
+        16,
+      );
+      const second = distancePage(["d-1"]);
+      await act(async () => next.resolve(ok(second)));
+      expect(result.current.view).toEqual({ status: "ok", data: second });
+    });
+
+    it("距離の行だけを変えた条件(単位が距離)でも、表示済みを捨てて、その条件で先頭から取得し直す", async () => {
+      // Given
+      const { result, rerender, loadList } = setup(
+        { condition: distanceUnitCondition },
+        { loads: [ok(distancePage(["d-1"])), ok(distancePage(["d-2"]))] },
+      );
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      const rowCondition: HistoryCondition = {
+        ...distanceUnitCondition,
+        distanceRow: distanceRow(50),
+      };
+
+      // When
+      rerender({ condition: rowCondition });
+
+      // Then
+      expect(result.current.view).toEqual({ status: "loading" });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      expect(loadList).toHaveBeenLastCalledWith(rowCondition, null, 16);
+    });
+
+    it("距離の行の中身が同じでオブジェクトだけを作り直した条件を渡し直しても、取得し直さず表示を保つ", async () => {
+      // Given
+      const first = distancePage(["d-1"]);
+      const { result, rerender, loadList } = setup(
+        {
+          condition: {
+            ...distanceUnitCondition,
+            distanceRow: distanceRow(50),
+          },
+        },
+        { loads: [ok(first)] },
+      );
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+
+      // When
+      rerender({
+        condition: { ...distanceUnitCondition, distanceRow: distanceRow(50) },
+      });
+
+      // Then
+      expect(loadList).toHaveBeenCalledTimes(1);
+      expect(result.current.view).toEqual({ status: "ok", data: first });
     });
 
     it("値が同じで参照だけが違う条件を渡し直しても、取得し直さず表示を保つ", async () => {
@@ -484,6 +580,35 @@ describe("useHistoryPages", () => {
       await act(async () => next.resolve(ok(page(["c"]))));
       expect(result.current.more).toEqual({ status: "idle" });
       expect(itemIds()).toEqual(["a", "b", "c"]);
+    });
+
+    it("距離単位の続きの取得は、前のページの最後の項目の距離のID(属するラウンドのIDでない)を起点にする", async () => {
+      // Given
+      const next = Promise.withResolvers<FetchResult<LoadedRoundsList>>();
+      const { result, loadList, intersection, attachTail, itemIds } = setup(
+        { condition: distanceUnitCondition },
+        {
+          loads: [
+            ok(distancePage(["d-1", "d-2"], { hasMore: true })),
+            next.promise,
+          ],
+        },
+      );
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      attachTail();
+
+      // When
+      act(() => intersection.intersect());
+      act(() => intersection.intersect());
+
+      // Then
+      expect(loadList).toHaveBeenLastCalledWith(
+        distanceUnitCondition,
+        "d-2",
+        16,
+      );
+      await act(async () => next.resolve(ok(distancePage(["d-3"]))));
+      expect(itemIds()).toEqual(["d-1", "d-2", "d-3"]);
     });
 
     it("成功した後も末尾が近ければ、続けて取得し、続きがなくなると止まる", async () => {
@@ -787,6 +912,30 @@ describe("useHistoryPages", () => {
         data: page(["a", "b"], { deleted: new Set(["d1", "d2"]) }),
       });
       expect(window.history.replaceState).not.toHaveBeenCalled();
+    });
+
+    it("距離単位の表示済みも記憶し、印のあるURLで開くと、取得せずに復元する", async () => {
+      // Given
+      const shown = distancePage(["d-1", "d-2"], { hasMore: true });
+      const first = setup(
+        { condition: distanceUnitCondition },
+        { loads: [ok(shown)] },
+      );
+      await waitFor(() => expect(first.result.current.view.status).toBe("ok"));
+      first.unmount();
+      const stored = first.procedures.historyPagesMemory.read();
+      fakeSearchParams.set("?return=1");
+
+      // When
+      const { result, loadList } = setup(
+        { condition: distanceUnitCondition },
+        { stored: stored ?? undefined },
+      );
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+
+      // Then
+      expect(loadList).not.toHaveBeenCalled();
+      expect(result.current.view).toEqual({ status: "ok", data: shown });
     });
 
     it("記憶したスクロールの位置は、一覧が描かれたときに戻す", async () => {

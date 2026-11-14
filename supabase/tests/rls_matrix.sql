@@ -618,7 +618,7 @@ cross join (select role_name from rls_role where kind = 'target') as r
 where p.pronamespace = 'public'::regnamespace;
 
 -- 期待値の方針:
---   RPC、履歴の取得（rounds_list）、SELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
+--   RPC、履歴の取得（rounds_list、distances_list）と、それが読むラウンドの条件の関数（history_rounds）、SELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
 --   distance_config_over_limit: SECURITY INVOKERのsave_round_as_presetが呼ぶ純関数のため、authenticatedだけtrue。anonはfalse。
 --   is_round_editor、shot_fits: RPC（SECURITY DEFINER）の内部だけが呼ぶため、どちらもfalse。
 --   トリガー関数（handle_new_user, set_updated_at）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
@@ -640,8 +640,12 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.disable_round(uuid,uuid)',                                                 'authenticated', true),
   ('public.distance_config_over_limit(numeric,numeric,numeric)',                     'anon',          false),
   ('public.distance_config_over_limit(numeric,numeric,numeric)',                     'authenticated', true),
+  ('public.distances_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb,jsonb)', 'anon',          false),
+  ('public.distances_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb,jsonb)', 'authenticated', true),
   ('public.handle_new_user()',                                                        'anon',          false),
   ('public.handle_new_user()',                                                        'authenticated', false),
+  ('public.history_rounds(text,text,date,date,jsonb)',                                'anon',          false),
+  ('public.history_rounds(text,text,date,date,jsonb)',                                'authenticated', true),
   ('public.is_round_editor(uuid)',                                                    'anon',          false),
   ('public.is_round_editor(uuid)',                                                    'authenticated', false),
   ('public.is_round_member(uuid)',                                                    'anon',          false),

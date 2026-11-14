@@ -9,6 +9,10 @@ import {
 export const HISTORY_SORT_KEYS = ["date", "score"] as const;
 export type HistorySortKey = (typeof HISTORY_SORT_KEYS)[number];
 
+// 一覧の単位。ラウンド単位は完了したラウンドを、距離単位は完了したラウンドの距離を1件ずつ出す。
+export const HISTORY_UNITS = ["round", "distance"] as const;
+export type HistoryUnit = (typeof HISTORY_UNITS)[number];
+
 export const HISTORY_SORT_DIRECTIONS = ["asc", "desc"] as const;
 export type HistorySortDirection = (typeof HISTORY_SORT_DIRECTIONS)[number];
 
@@ -28,13 +32,15 @@ export type HistoryDistanceRow = {
   targetFaceId: string | null;
 };
 
-// 履歴の条件。並べ替えの基準は1つ、種別と弓種はそれぞれ1つ(null は指定なし)。期間と得点の範囲、距離の構成は反映済みの値(距離の構成は空の配列が指定なし)。
+// 履歴の条件。単位は`round`か`distance`。並べ替えの基準は1つ、種別と弓種はそれぞれ1つ(null は指定なし)。期間と得点の範囲、距離の構成、距離の行は反映済みの値(距離の構成は空の配列、距離の行は null が指定なし)。距離の行は、単位が`distance`のときだけ適用する。
 export type HistoryCondition = HistoryRange & {
+  unit: HistoryUnit;
   sortKey: HistorySortKey;
   sortDirection: HistorySortDirection;
   format: FormatOption | null;
   bowType: BowTypeOption | null;
   distances: HistoryDistanceRow[];
+  distanceRow: HistoryDistanceRow | null;
 };
 
 // 期間と得点の範囲の入力途中の文字列(欄の部品が持つ下書き)。
@@ -85,6 +91,7 @@ export type HistoryViewState = {
 };
 
 export const DEFAULT_HISTORY_CONDITION: HistoryCondition = {
+  unit: "round",
   sortKey: "date",
   sortDirection: "desc",
   format: null,
@@ -94,6 +101,7 @@ export const DEFAULT_HISTORY_CONDITION: HistoryCondition = {
   scoreMin: null,
   scoreMax: null,
   distances: [],
+  distanceRow: null,
 };
 
 export const DEFAULT_HISTORY_VIEW_STATE: HistoryViewState = {
@@ -311,6 +319,7 @@ function historyDistancesOfStored(value: unknown): HistoryDistanceRow[] {
 function historyConditionOf(raw: unknown): HistoryCondition {
   if (!isRecord(raw)) return DEFAULT_HISTORY_CONDITION;
   return {
+    unit: oneOf(HISTORY_UNITS, raw.unit, DEFAULT_HISTORY_CONDITION.unit),
     sortKey: oneOf(
       HISTORY_SORT_KEYS,
       raw.sortKey,
@@ -325,6 +334,7 @@ function historyConditionOf(raw: unknown): HistoryCondition {
     bowType: nullableOneOf(BOW_TYPE_OPTIONS, raw.bowType),
     ...historyRangeOfStored(raw),
     distances: historyDistancesOfStored(raw.distances),
+    distanceRow: storedDistanceRowOf(raw.distanceRow),
   };
 }
 

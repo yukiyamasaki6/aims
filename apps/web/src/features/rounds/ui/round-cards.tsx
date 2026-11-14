@@ -2,7 +2,7 @@ import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { roundPath } from "@/routes";
-import type { RoundListItem } from "../domain/round-list";
+import type { DistanceListItem, RoundListItem } from "../domain/round-list";
 import type { RoundOrigin } from "../domain/round-routes";
 import {
   DropdownMenu,
@@ -74,6 +74,56 @@ export function RoundCards({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// 距離の表示。距離が判明していれば`{distance}m`、無印は「Unmarked」を前に置き、距離が無ければ「Unmarked」だけにする。
+function useDistanceText() {
+  const t = useTranslations("rounds");
+  return ({ distance, isMarked }: DistanceListItem): string => {
+    if (distance === null) return t("distanceUnmarked");
+    const text = { distance: String(distance) };
+    return isMarked
+      ? t("historyDistanceMarked", text)
+      : t("historyDistanceUnmarkedLength", text);
+  };
+}
+
+// 距離単位のカード。ラウンドのカードと同じ枠と高さで、ラウンドの名前、実施日と射つ順の番号と距離、小計を出す。カードからそのラウンドの詳細へ移る。削除のメニューは置かない。
+export function DistanceCards({
+  distances,
+  origin,
+}: {
+  distances: DistanceListItem[];
+  origin: RoundOrigin;
+}) {
+  const t = useTranslations("rounds");
+  const distanceText = useDistanceText();
+  return (
+    <ul className="flex flex-col gap-3">
+      {distances.map((item) => (
+        <li key={item.id}>
+          <Link
+            href={roundPath(item.roundId, origin)}
+            className="flex items-center justify-between gap-3 rounded-xl border bg-card p-4 text-card-foreground shadow-sm transition-colors hover:bg-muted/60"
+          >
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="truncate font-medium">{item.name}</span>
+              <span className="truncate text-muted-foreground text-sm">
+                {t("historyDistanceLine", {
+                  date: item.roundDate,
+                  number: String(item.number),
+                  distance: distanceText(item),
+                })}
+              </span>
+            </span>
+            <span className="shrink-0 text-lg font-semibold">
+              {t("distanceSubtotal", { total: String(item.total) })}
+            </span>
+          </Link>
         </li>
       ))}
     </ul>

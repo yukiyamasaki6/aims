@@ -2,10 +2,16 @@
 
 import { useTranslations } from "next-intl";
 import { Suspense, useLayoutEffect, useRef } from "react";
+import type { HistoryUnit } from "../domain/history-view-state";
+import {
+  type HistoryListItem,
+  isDistanceListItem,
+  type RoundListItem,
+} from "../domain/round-list";
 import { historyView } from "../domain/rounds-list-view";
 import { FetchState } from "./fetch-state";
 import { HistoryControls } from "./history-controls";
-import { RoundCards, RoundCardsSkeleton } from "./round-cards";
+import { DistanceCards, RoundCards, RoundCardsSkeleton } from "./round-cards";
 import { RoundDeleteDialog, useRoundDelete } from "./round-delete";
 import { useRoundProcedures } from "./rounds-context";
 import { type MoreStatus, useHistoryPages } from "./use-history-pages";
@@ -58,6 +64,27 @@ function HistoryTail({
   );
 }
 
+// 履歴のカード。単位がラウンドならラウンドのカード(削除のメニュー付き)、距離なら距離のカード(メニューなし)。
+function HistoryCards({
+  unit,
+  items,
+  onDelete,
+}: {
+  unit: HistoryUnit | undefined;
+  items: HistoryListItem[];
+  onDelete: (round: RoundListItem) => void;
+}) {
+  if (unit === "distance") {
+    return (
+      <DistanceCards
+        distances={items.filter(isDistanceListItem)}
+        origin="history"
+      />
+    );
+  }
+  return <RoundCards rounds={items} origin="history" onDelete={onDelete} />;
+}
+
 function RoundsHistoryScreen() {
   const t = useTranslations("rounds");
   const { historyViewMemory } = useRoundProcedures();
@@ -99,9 +126,9 @@ function RoundsHistoryScreen() {
         <p className="text-muted-foreground text-sm">{t("historyEmpty")}</p>
       ) : (
         <>
-          <RoundCards
-            rounds={rounds}
-            origin="history"
+          <HistoryCards
+            unit={condition?.unit}
+            items={rounds}
             onDelete={requestDelete}
           />
           <HistoryTail

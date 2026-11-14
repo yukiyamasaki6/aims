@@ -812,6 +812,7 @@ describe("fetchRoundsList", () => {
     // Given
     const { fetching, queries } = setup();
     const scoreCondition: HistoryCondition = {
+      unit: "round",
       sortKey: "score",
       sortDirection: "asc",
       format: "indoor",
@@ -821,6 +822,7 @@ describe("fetchRoundsList", () => {
       scoreMin: 0,
       scoreMax: 600,
       distances: [],
+      distanceRow: null,
     };
 
     // When
