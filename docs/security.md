@@ -49,4 +49,4 @@
 存在しない距離への操作は、認可より前に`MISSING`で効かないと返す。距離IDは端末が作る推測できないUUIDで、他のラウンドの情報は漏れない。存在する距離への権限の無い呼び出しは`PT403`で拒否する。
 履歴の取得の関数`rounds_list`・`distances_list`と、それらが対象のラウンドとして読む`history_rounds`は、呼び出し元の権限で動く(`SECURITY INVOKER`)読み取り専用の関数で、認可はSELECTのRLSに従う。実行権限は`authenticated`だけが持つ。引数は検証せず、返るのは呼び出し元が属するラウンドだけである。
 `history_rounds`だけは、呼び出し元へ展開させるため`SET search_path`を付けず、本文の表と関数の名前を修飾する。`SECURITY INVOKER`の読み取り専用で、`search_path`を変えられても権限は上がらない。
-`shot_fits`(矢が距離の構成で有効かの判定)は、`PUBLIC`・`anon`・`authenticated`の実行権限を持たない内部関数である。
+`shot_fits`(矢がラウンド構成で有効かの判定)は、`PUBLIC`・`anon`・`authenticated`の実行権限を持たない内部関数である。

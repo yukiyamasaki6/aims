@@ -14,9 +14,13 @@ type CreateDistanceWithNullable = Omit<CreateDistance, "Args"> & {
   };
 };
 
-// 履歴の取得は、SQL側が種別・弓種・起点にnullを受け付ける(指定なし、先頭のページ)が、生成した型は文字列で出力する。
+// 履歴の取得は、SQL側が種別・弓種・得点の向き・起点にnullを受け付ける(指定なし、先頭のページ)が、生成した型は文字列で出力する。
 type NullableHistoryArgs<F extends { Args: object }> = Omit<F, "Args"> & {
-  Args: Omit<F["Args"], "p_format" | "p_bow_type" | "p_after_id"> & {
+  Args: Omit<
+    F["Args"],
+    "p_format" | "p_bow_type" | "p_score_direction" | "p_after_id"
+  > & {
+    p_score_direction: string | null;
     p_format: string | null;
     p_bow_type: string | null;
     p_after_id: string | null;

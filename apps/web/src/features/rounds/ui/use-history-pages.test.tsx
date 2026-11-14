@@ -31,14 +31,13 @@ vi.mock("next/navigation", async () => {
 const RETURN_URL = "/rounds/history?return=1";
 const scoreCondition: HistoryCondition = {
   ...DEFAULT_HISTORY_CONDITION,
-  sortKey: "score",
+  scoreDirection: "desc",
 };
 
 function distanceRow(distance: number) {
   return {
     distance,
     arrowsPerEnd: null,
-    totalArrows: null,
     targetFaceId: null,
   };
 }
@@ -261,6 +260,26 @@ describe("useHistoryPages", () => {
       const second = page(["b"]);
       await act(async () => next.resolve(ok(second)));
       expect(result.current.view).toEqual({ status: "ok", data: second });
+    });
+
+    it("日付の向きだけを変えた条件でも、表示済みを捨てて、その条件で先頭から取得し直す", async () => {
+      // Given
+      const next = Promise.withResolvers<FetchResult<LoadedRoundsList>>();
+      const { result, rerender, loadList } = setup(undefined, {
+        loads: [ok(page(["a"])), next.promise],
+      });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      const ascCondition: HistoryCondition = {
+        ...DEFAULT_HISTORY_CONDITION,
+        dateDirection: "asc",
+      };
+
+      // When
+      rerender({ condition: ascCondition });
+
+      // Then
+      expect(result.current.view).toEqual({ status: "loading" });
+      expect(loadList).toHaveBeenLastCalledWith(ascCondition, null, 16);
     });
 
     it("期間と得点の範囲だけを変えた条件でも、表示済みを捨てて、その条件で先頭から取得し直す", async () => {

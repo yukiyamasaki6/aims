@@ -692,16 +692,16 @@ export type Database = {
         Args: {
           p_after_id: string;
           p_bow_type: string;
+          p_date_direction: string;
           p_date_from?: string;
           p_date_to?: string;
           p_distance?: Json;
           p_distances?: Json;
           p_format: string;
           p_limit: number;
+          p_score_direction: string;
           p_score_max?: number;
           p_score_min?: number;
-          p_sort_direction: string;
-          p_sort_key: string;
         };
         Returns: Json;
       };
@@ -739,15 +739,15 @@ export type Database = {
         Args: {
           p_after_id: string;
           p_bow_type: string;
+          p_date_direction: string;
           p_date_from?: string;
           p_date_to?: string;
           p_distances?: Json;
           p_format: string;
           p_limit: number;
+          p_score_direction: string;
           p_score_max?: number;
           p_score_min?: number;
-          p_sort_direction: string;
-          p_sort_key: string;
         };
         Returns: Json;
       };

@@ -60,12 +60,11 @@ function rangeArgsOf(condition: HistoryCondition) {
   };
 }
 
-// 距離の行の引数の形(distance、arrows_per_end、total_arrows、target_face_id)。
+// 距離の行の引数の形(distance、arrows_per_end、target_face_id)。
 function distanceRowArgOf(row: HistoryDistanceRow) {
   return {
     distance: row.distance,
     arrows_per_end: row.arrowsPerEnd,
-    total_arrows: row.totalArrows,
     target_face_id: row.targetFaceId,
   };
 }
@@ -191,8 +190,8 @@ export function createRoundQueries(
     // 取得できる行はRLSでユーザーが属するラウンドに限るため、利用者で絞らない。
     async roundsList({ condition, after, size }) {
       const args = {
-        p_sort_key: condition.sortKey,
-        p_sort_direction: condition.sortDirection,
+        p_date_direction: condition.dateDirection,
+        p_score_direction: condition.scoreDirection,
         p_format: condition.format,
         p_bow_type: condition.bowType,
         p_after_id: after,

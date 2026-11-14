@@ -131,7 +131,7 @@ describe("取得の問い合わせ", () => {
     ]);
   });
 
-  it("履歴の取得は、RPCの名前と引数のキー(基準・向き・種別・弓種・起点・件数)でSDKへ届き、応答はokの種類とページになって返る", async () => {
+  it("履歴の取得は、RPCの名前と引数のキー(日付の向き・得点の向き・種別・弓種・起点・件数)でSDKへ届き、応答はokの種類とページになって返る", async () => {
     // Given
     const { database, rpc } = fakeSdk({
       data: { rounds: [], has_more: false },
@@ -148,8 +148,8 @@ describe("取得の問い合わせ", () => {
 
     // Then
     expect(rpc).toHaveBeenCalledExactlyOnceWith("rounds_list", {
-      p_sort_key: "date",
-      p_sort_direction: "desc",
+      p_date_direction: "desc",
+      p_score_direction: null,
       p_format: null,
       p_bow_type: null,
       p_after_id: null,

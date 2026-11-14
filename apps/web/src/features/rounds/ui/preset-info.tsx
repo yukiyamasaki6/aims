@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import type { TargetFaceView } from "../domain/target-face";
+import { TargetSlot } from "./history-target-selection";
 import { TargetFaceInfo } from "./target-face-info";
 import { useOptionLabels } from "./use-option-labels";
 
@@ -19,9 +20,12 @@ function distanceLabel(
 }
 
 // 距離1件分の情報表示（Marked/距離・的情報・エンド構成）。プリセット選択・
-// ラウンド詳細の距離一覧で共通して使う。左にMarked/距離とエンド構成を縦に、
+// ラウンド詳細の距離一覧、履歴の絞り込む距離の要約で共通して使う。左にMarked/距離とエンド構成を縦に、
 // 右に的情報を置く1行で、幅375pxでも横にあふれない。的情報は左側のすぐ右に
 // 詰め、左側の最小幅で、行をまたいで的情報の左端をそろえる。
+// 履歴の要約だけが、1エンドの矢数・総エンド数・的を持たない(null)。矢数がnullなら
+// エンド構成の行を出さず、総エンド数がnullなら矢数だけを出し、的がnullなら
+// 同じ寸法の領域に「指定なし」を出す。
 export function DistanceInfo({
   distance,
   isMarked,
@@ -33,9 +37,9 @@ export function DistanceInfo({
   distance: number | null;
   isMarked: boolean;
   format: string;
-  face: TargetFaceView;
-  arrowsPerEnd: number;
-  totalEnds: number;
+  face: TargetFaceView | null;
+  arrowsPerEnd: number | null;
+  totalEnds: number | null;
 }) {
   const t = useTranslations("rounds");
   return (
@@ -48,14 +52,28 @@ export function DistanceInfo({
             format,
           )}
         </span>
-        <span>
-          {t("distanceEnds", {
-            arrowsPerEnd: String(arrowsPerEnd),
-            totalEnds: String(totalEnds),
-          })}
-        </span>
+        {arrowsPerEnd !== null && (
+          <span>
+            {totalEnds === null
+              ? t("distanceArrowsPerEnd", {
+                  arrowsPerEnd: String(arrowsPerEnd),
+                })
+              : t("distanceEnds", {
+                  arrowsPerEnd: String(arrowsPerEnd),
+                  totalEnds: String(totalEnds),
+                })}
+          </span>
+        )}
       </div>
-      <TargetFaceInfo face={face} />
+      {face === null ? (
+        <TargetSlot>
+          <span className="text-muted-foreground">
+            {t("historyFilterNone")}
+          </span>
+        </TargetSlot>
+      ) : (
+        <TargetFaceInfo face={face} />
+      )}
     </div>
   );
 }

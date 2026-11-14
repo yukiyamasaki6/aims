@@ -117,3 +117,83 @@ describe("DistanceInfo(的の状態)", () => {
     expect(container).toHaveTextContent(roundsText("targetFaceMissing"));
   });
 });
+
+describe("DistanceInfo(矢数・総エンド数・的が空の要約)", () => {
+  function renderWith(props: {
+    arrowsPerEnd: number | null;
+    totalEnds: number | null;
+    face: "missing" | null;
+  }) {
+    return render(
+      <DistanceInfo
+        distance={50}
+        isMarked={true}
+        format="outdoor"
+        {...props}
+      />,
+      { wrapper: IntlTestProvider },
+    );
+  }
+
+  it("矢数だけがあれば、距離と「N本」だけを出し、エンド数は出さない", () => {
+    const { container } = renderWith({
+      arrowsPerEnd: 6,
+      totalEnds: null,
+      face: null,
+    });
+
+    expect(screen.getByText("50m")).toBeInTheDocument();
+    expect(container).toHaveTextContent(
+      roundsText("distanceArrowsPerEnd", { arrowsPerEnd: "6" }),
+    );
+    expect(container).not.toHaveTextContent(
+      roundsText("distanceEnds", { arrowsPerEnd: "6", totalEnds: "6" }),
+    );
+  });
+
+  it("矢数が空なら、総エンド数が空でも、距離だけを出し、本数・エンドの行を出さない", () => {
+    const { container } = renderWith({
+      arrowsPerEnd: null,
+      totalEnds: null,
+      face: null,
+    });
+
+    expect(screen.getByText("50m")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(
+      roundsText("distanceArrowsPerEnd", { arrowsPerEnd: "6" }),
+    );
+    expect(container).not.toHaveTextContent("エンド");
+  });
+
+  it("矢数と総エンド数が両方あれば、従来の「N本×Mエンド」を出す", () => {
+    const { container } = renderWith({
+      arrowsPerEnd: 6,
+      totalEnds: 6,
+      face: "missing",
+    });
+
+    expect(container).toHaveTextContent(
+      roundsText("distanceEnds", { arrowsPerEnd: "6", totalEnds: "6" }),
+    );
+  });
+
+  it("的が空なら「指定なし」を出し、的が見つからない表示とは区別する", () => {
+    const empty = renderWith({ arrowsPerEnd: 6, totalEnds: null, face: null });
+    const emptyText = empty.container.textContent;
+    empty.unmount();
+    const missing = renderWith({
+      arrowsPerEnd: 6,
+      totalEnds: null,
+      face: "missing",
+    });
+
+    expect(emptyText).toContain(roundsText("historyFilterNone"));
+    expect(emptyText).not.toContain(roundsText("targetFaceMissing"));
+    expect(missing.container).toHaveTextContent(
+      roundsText("targetFaceMissing"),
+    );
+    expect(missing.container).not.toHaveTextContent(
+      roundsText("historyFilterNone"),
+    );
+  });
+});
