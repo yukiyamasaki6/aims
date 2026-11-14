@@ -53,6 +53,7 @@ describe("loadList", () => {
     const tab = createTestRounds();
     tab.fetching.fetchRoundsList.mockImplementation(ok);
     const condition: HistoryCondition = {
+      unit: "round",
       sortKey: "score",
       sortDirection: "asc",
       format: "indoor",
@@ -62,6 +63,7 @@ describe("loadList", () => {
       scoreMin: 0,
       scoreMax: 600,
       distances: [],
+      distanceRow: null,
     };
 
     // When

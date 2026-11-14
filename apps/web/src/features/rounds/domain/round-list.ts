@@ -26,6 +26,47 @@ export type ServerRoundsPage = {
   hasMore: boolean;
 };
 
+// 距離単位の履歴の関数(distances_list)が返す1件。距離のID、属するラウンドのID・名前・実施日、射つ順の番号、距離、無印か、小計。行の列は生成型(distances、rounds)から導き、番号と小計だけを足す。
+type ServerDistanceSummary = Pick<
+  Tables<"distances">,
+  "id" | "round_id" | "distance" | "is_marked"
+> &
+  Pick<Tables<"rounds">, "name" | "round_date"> & {
+    number: number;
+    total: number;
+  };
+
+// 距離単位の履歴の関数が返す1ページ。
+type ServerDistancesPage = {
+  distances: ServerDistanceSummary[];
+  hasMore: boolean;
+};
+
+// 履歴の取得の1ページ。単位がラウンドなら`rounds`、距離なら`distances`を持つ。
+export type ServerHistoryPage = ServerRoundsPage | ServerDistancesPage;
+
+// 距離単位の1件。`id`は距離のID、`total`は小計で、`roundId`は属するラウンドのID。
+export type DistanceListItem = RoundListItem & {
+  roundId: string;
+  number: number;
+  distance: number | null;
+  isMarked: boolean;
+};
+
+// 履歴の1件。ラウンド単位はラウンド、距離単位は距離。
+export type HistoryListItem = RoundListItem | DistanceListItem;
+
+export function isDistanceListItem(
+  item: HistoryListItem,
+): item is DistanceListItem {
+  return "roundId" in item;
+}
+
+// 項目が属するラウンドのID。端末の除外はこのIDで行う。
+export function roundIdOfItem(item: HistoryListItem): string {
+  return isDistanceListItem(item) ? item.roundId : item.id;
+}
+
 // 端末の記録だけから求めた、入力中のラウンド。削除済みのラウンドは入らない。
 export type LocalRoundsList = {
   inProgress: RoundListItem[];
@@ -33,7 +74,7 @@ export type LocalRoundsList = {
 
 // 1ページの材料。items はサーバーが返した順(端末の列は重ねていない。入力中も含む)、hasMore は続きの有無、after は続きの起点(返した最後のラウンドのID。除外の前の行)。
 export type RoundsPage = {
-  items: RoundListItem[];
+  items: HistoryListItem[];
   hasMore: boolean;
   after: string | null;
 };
@@ -52,13 +93,26 @@ export function roundListItemOf(summary: ServerRoundSummary): RoundListItem {
   };
 }
 
-// 履歴の関数が返した1ページを、材料の1ページにする。
-export function roundsPageOf(page: ServerRoundsPage): RoundsPage {
+function distanceListItemOf(summary: ServerDistanceSummary): DistanceListItem {
   return {
-    items: page.rounds.map(roundListItemOf),
-    hasMore: page.hasMore,
-    after: page.rounds.at(-1)?.id ?? null,
+    id: summary.id,
+    roundId: summary.round_id,
+    name: summary.name,
+    roundDate: summary.round_date,
+    number: summary.number,
+    distance: summary.distance,
+    isMarked: summary.is_marked,
+    total: summary.total,
   };
+}
+
+// 履歴の関数が返した1ページを、材料の1ページにする。続きの起点は、返した最後の項目のID(距離単位では距離のID)。
+export function roundsPageOf(page: ServerHistoryPage): RoundsPage {
+  const items =
+    "distances" in page
+      ? page.distances.map(distanceListItemOf)
+      : page.rounds.map(roundListItemOf);
+  return { items, hasMore: page.hasMore, after: items.at(-1)?.id ?? null };
 }
 
 // 取得済みの一覧に次のページを連結する。IDが重なる項目は先の方を残す(他の端末での変更で境界がずれても、同じラウンドを2回出さない)。削除済みIDは和をとり、続きの有無と起点は次のページのものにする。

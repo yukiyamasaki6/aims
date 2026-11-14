@@ -10,6 +10,7 @@ describe("createFakeHistoryViewMemory", () => {
     // Given
     const written: HistoryViewState = {
       condition: {
+        unit: "distance",
         sortKey: "score",
         sortDirection: "asc",
         format: "indoor",
@@ -26,6 +27,12 @@ describe("createFakeHistoryViewMemory", () => {
             targetFaceId: null,
           },
         ],
+        distanceRow: {
+          distance: 30,
+          arrowsPerEnd: 3,
+          totalArrows: null,
+          targetFaceId: null,
+        },
       },
       filterOpen: false,
     };

@@ -45,6 +45,7 @@ type Responses = {
   target_faces: DbResponse;
   preset_rounds?: DbResponse;
   rounds_list?: DbResponse;
+  distances_list?: DbResponse;
 };
 
 // データベースの境界を、表ごとの応答を返し、受けた問い合わせを記録するゲートウェイで模す。
@@ -66,10 +67,14 @@ function makeDatabase(responses: Responses) {
       throw new Error("取得は削除を使わない");
     },
     async rpc(name, args) {
-      if (name !== "rounds_list")
+      if (name !== "rounds_list" && name !== "distances_list")
         throw new Error("取得は履歴以外のRPCを使わない");
       rpcCalls.push({ name, args: args as Record<string, unknown> });
       // 応答の型は呼び出しごとの生成型で、ここでは値だけを返す。
+      if (name === "distances_list") {
+        return (responses.distances_list ??
+          ok({ distances: [], has_more: false })) as never;
+      }
       return (responses.rounds_list ??
         ok({ rounds: [], has_more: false })) as never;
     },
@@ -459,6 +464,7 @@ describe("targetFaces", () => {
 describe("roundsList", () => {
   const noFaces = ok(null);
   const condition: HistoryCondition = {
+    unit: "round",
     sortKey: "score",
     sortDirection: "asc",
     format: "indoor",
@@ -468,6 +474,7 @@ describe("roundsList", () => {
     scoreMin: 0,
     scoreMax: 600,
     distances: [],
+    distanceRow: null,
   };
   const request = { condition, after: "round-9", size: 25 };
 
@@ -712,6 +719,177 @@ describe("roundsList", () => {
 
     // Then
     expect(database.rpcCalls).toHaveLength(1);
+  });
+});
+
+describe("roundsList: 距離単位", () => {
+  const noFaces = ok(null);
+  const rowArg = {
+    distance: 50,
+    arrows_per_end: 6,
+    total_arrows: 36,
+    target_face_id: "a1000000-0000-0000-0000-000000000001",
+  };
+  const distanceRow = {
+    distance: 50,
+    arrowsPerEnd: 6,
+    totalArrows: 36,
+    targetFaceId: "a1000000-0000-0000-0000-000000000001",
+  };
+  const distanceCondition: HistoryCondition = {
+    unit: "distance",
+    sortKey: "score",
+    sortDirection: "asc",
+    format: "indoor",
+    bowType: "compound",
+    dateFrom: "2026-05-01",
+    dateTo: "2026-05-31",
+    scoreMin: 0,
+    scoreMax: 600,
+    distances: [],
+    distanceRow: null,
+  };
+  const request = { condition: distanceCondition, after: "d-9", size: 25 };
+
+  it("単位が距離なら、distances_listを1回のrpcで呼び、rounds_listは呼ばず、他の条件と続きの起点(距離のID)と件数を、rounds_listと同じ名前で写す", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+
+    // When
+    await database.createQueries().roundsList(request);
+
+    // Then
+    expect(database.queries).toHaveLength(0);
+    expect(database.rpcCalls).toEqual([
+      {
+        name: "distances_list",
+        args: {
+          p_sort_key: "score",
+          p_sort_direction: "asc",
+          p_format: "indoor",
+          p_bow_type: "compound",
+          p_after_id: "d-9",
+          p_limit: 25,
+          p_date_from: "2026-05-01",
+          p_date_to: "2026-05-31",
+          p_score_min: 0,
+          p_score_max: 600,
+        },
+      },
+    ]);
+  });
+
+  it("距離の行が指定ありなら、p_distanceに1つのオブジェクトで送る", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+
+    // When
+    await database.createQueries().roundsList({
+      ...request,
+      condition: { ...distanceCondition, distanceRow },
+    });
+
+    // Then
+    expect(database.rpcCalls[0]?.args).toMatchObject({ p_distance: rowArg });
+  });
+
+  it("距離の行が指定なしなら、p_distanceを含めない", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+
+    // When
+    await database.createQueries().roundsList(request);
+
+    // Then
+    expect(database.rpcCalls[0]?.args).not.toHaveProperty("p_distance");
+  });
+
+  it("距離の構成と距離の行の両方があれば、p_distancesとp_distanceを共存させて送る", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+    const distances = [{ ...distanceRow, distance: 30 }];
+
+    // When
+    await database.createQueries().roundsList({
+      ...request,
+      condition: { ...distanceCondition, distances, distanceRow },
+    });
+
+    // Then
+    expect(database.rpcCalls[0]?.args).toMatchObject({
+      p_distances: [{ ...rowArg, distance: 30 }],
+      p_distance: rowArg,
+    });
+  });
+
+  it("単位がラウンドなら、距離の行が条件に残っていても、rounds_listの引数に含めず、distances_listを呼ばない", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+
+    // When
+    await database.createQueries().roundsList({
+      ...request,
+      condition: { ...distanceCondition, unit: "round", distanceRow },
+    });
+
+    // Then
+    expect(database.rpcCalls).toHaveLength(1);
+    expect(database.rpcCalls[0]?.name).toBe("rounds_list");
+    expect(database.rpcCalls[0]?.args).not.toHaveProperty("p_distance");
+  });
+
+  it("応答の距離の行と続きの有無(has_more)を、ページにして返す", async () => {
+    // Given
+    const distances = [
+      {
+        id: "d-1",
+        round_id: "round-1",
+        name: "午前練習",
+        round_date: "2026-09-15",
+        number: 1,
+        distance: 50,
+        is_marked: true,
+        total: 300,
+      },
+    ];
+    const database = makeDatabase({
+      rounds: ok([]),
+      target_faces: noFaces,
+      distances_list: ok({ distances, has_more: true }),
+    });
+
+    // When
+    const response = await database.createQueries().roundsList(request);
+
+    // Then
+    expect(response).toEqual({
+      status: "ok",
+      data: { distances, hasMore: true },
+    });
+  });
+
+  it("通信失敗(status 0)はcomm-failure、エラー応答はfailedの種類で返し、どちらも再試行せず1回だけ呼ぶ", async () => {
+    // Given
+    const comm = makeDatabase({
+      rounds: ok([]),
+      target_faces: noFaces,
+      distances_list: failed(0),
+    });
+    const errored = makeDatabase({
+      rounds: ok([]),
+      target_faces: noFaces,
+      distances_list: failed(500, { message: "x" }),
+    });
+
+    // When
+    const first = await comm.createQueries().roundsList(request);
+    const second = await errored.createQueries().roundsList(request);
+
+    // Then
+    expect(first).toEqual({ status: "comm-failure" });
+    expect(second).toEqual({ status: "failed" });
+    expect(comm.rpcCalls).toHaveLength(1);
+    expect(errored.rpcCalls).toHaveLength(1);
   });
 });
 

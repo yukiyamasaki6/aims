@@ -14,11 +14,9 @@ type CreateDistanceWithNullable = Omit<CreateDistance, "Args"> & {
   };
 };
 
-type RoundsList = Full["Functions"]["rounds_list"];
-
 // 履歴の取得は、SQL側が種別・弓種・起点にnullを受け付ける(指定なし、先頭のページ)が、生成した型は文字列で出力する。
-type RoundsListWithNullable = Omit<RoundsList, "Args"> & {
-  Args: Omit<RoundsList["Args"], "p_format" | "p_bow_type" | "p_after_id"> & {
+type NullableHistoryArgs<F extends { Args: object }> = Omit<F, "Args"> & {
+  Args: Omit<F["Args"], "p_format" | "p_bow_type" | "p_after_id"> & {
     p_format: string | null;
     p_bow_type: string | null;
     p_after_id: string | null;
@@ -39,7 +37,8 @@ export type RoundsDbSchema = {
     | "clear_shots"
   > & {
     create_distance: CreateDistanceWithNullable;
-    rounds_list: RoundsListWithNullable;
+    rounds_list: NullableHistoryArgs<Full["Functions"]["rounds_list"]>;
+    distances_list: NullableHistoryArgs<Full["Functions"]["distances_list"]>;
   };
   Tables: {
     rounds: {

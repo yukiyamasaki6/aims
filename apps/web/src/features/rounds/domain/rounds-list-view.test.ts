@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FetchView } from "./fetch-status";
 import { DEFAULT_HISTORY_CONDITION } from "./history-view-state";
 import type {
+  DistanceListItem,
   LoadedRoundsList,
   LocalRoundsList,
   RoundListItem,
@@ -10,6 +11,20 @@ import { historyView, homeView } from "./rounds-list-view";
 
 function item(id: string, roundDate = "2026-09-15", total = 0): RoundListItem {
   return { id, name: id, roundDate, total };
+}
+
+function distanceItem(
+  id: string,
+  roundId: string,
+  number: number,
+): DistanceListItem {
+  return {
+    ...item(id),
+    roundId,
+    number,
+    distance: 50,
+    isMarked: true,
+  };
 }
 
 const ids = (rounds: RoundListItem[] | null | undefined) =>
@@ -161,6 +176,46 @@ describe("historyView", () => {
     // Then
     expect(more.hasMore).toBe(true);
     expect(last.hasMore).toBe(false);
+  });
+
+  it("距離単位では、端末の入力中・削除済み・この画面で削除したラウンドに属する距離を全て除き、他のラウンドの距離と並びは残す", () => {
+    // Given
+    const items = [
+      distanceItem("d-1", "r-keep", 1),
+      distanceItem("d-2", "p1", 1),
+      distanceItem("d-3", "r-deleted", 1),
+      distanceItem("d-4", "r-removed", 1),
+      distanceItem("d-5", "r-keep", 2),
+      distanceItem("d-6", "p1", 2),
+    ];
+    const local: LocalRoundsList = { inProgress: [item("p1")] };
+
+    // When
+    const view = historyView(
+      loaded({ items, deleted: new Set(["r-deleted"]) }),
+      local,
+      new Set(["r-removed"]),
+      DEFAULT_HISTORY_CONDITION,
+    );
+
+    // Then
+    expect(ids(view.rounds)).toEqual(["d-1", "d-5"]);
+  });
+
+  it("距離単位で、除いた結果が0件でも続きがあれば、0件の配列と続きの有無を返す", () => {
+    // Given
+    const local: LocalRoundsList = { inProgress: [item("p1")] };
+
+    // When
+    const view = historyView(
+      loaded({ items: [distanceItem("d-1", "p1", 1)], hasMore: true }),
+      local,
+      new Set(),
+      DEFAULT_HISTORY_CONDITION,
+    );
+
+    // Then
+    expect(view).toEqual({ rounds: [], hasMore: true, rest: null });
   });
 
   it("除いた結果が0件でも、続きがあれば0件の配列と続きの有無を返す(空とは区別できる)", () => {

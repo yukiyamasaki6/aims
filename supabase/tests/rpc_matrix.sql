@@ -853,7 +853,9 @@ insert into rpc_helper (sig, reason) values
   ('is_round_member(uuid)', 'RLSポリシーが使うSTABLEな判定ヘルパーで、書き込みRPCではない'),
   ('is_round_editor(uuid)', 'RPCの権限チェックが使うSTABLEな判定ヘルパーで、書き込みRPCではない'),
   ('distance_config_over_limit(numeric,numeric,numeric)', '上限超過を判定する純関数で、save_round_as_presetが呼ぶ。書き込みRPCではない'),
-  ('rounds_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb)', '履歴を読むSTABLEな取得の関数で、書き込みRPCではない。権限はrls_matrix.sql、振る舞いはrounds_list.sqlで確認する');
+  ('rounds_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb)', '履歴を読むSTABLEな取得の関数で、書き込みRPCではない。権限はrls_matrix.sql、振る舞いはrounds_list.sqlで確認する'),
+  ('distances_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb,jsonb)', '距離単位の履歴を読むSTABLEな取得の関数で、書き込みRPCではない。権限はrls_matrix.sqlで確認する'),
+  ('history_rounds(text,text,date,date,jsonb)', 'rounds_listとdistances_listが対象のラウンドとして読むSTABLEな関数で、書き込みRPCではない。権限はrls_matrix.sqlで確認する');
 
 -- トリガー関数は直接呼べないため対象外。
 create temp view rpc_target as

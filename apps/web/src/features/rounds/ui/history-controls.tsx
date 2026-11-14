@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   HISTORY_SORT_DIRECTIONS,
   HISTORY_SORT_KEYS,
+  HISTORY_UNITS,
   type HistoryCondition,
   type HistoryViewState,
 } from "../domain/history-view-state";
@@ -88,7 +89,7 @@ function FilterGroup<T extends string>({
   );
 }
 
-// 絞り込みの区画。種別、弓種、期間、得点の範囲、距離の構成。
+// 絞り込みの区画。種別、弓種、期間、得点の範囲、距離単位の距離の行(単位が距離のときだけ)、距離の構成。
 function HistoryFilters({
   condition,
   changeCondition,
@@ -121,12 +122,66 @@ function HistoryFilters({
         condition={condition}
         onApply={changeCondition}
       />
+      {condition.unit === "distance" && (
+        <HistoryDistanceFields
+          key={`distance-row-${resetCount}`}
+          condition={condition}
+          onApply={changeCondition}
+          single
+        />
+      )}
       <HistoryDistanceFields
         key={`distance-${resetCount}`}
         condition={condition}
         onApply={changeCondition}
       />
     </Section>
+  );
+}
+
+// 単位の切替と並べ替えの区画。
+function HistoryOrdering({
+  condition,
+  changeCondition,
+}: {
+  condition: HistoryCondition;
+  changeCondition: HistoryViewControls["changeCondition"];
+}) {
+  const t = useTranslations("rounds");
+  return (
+    <>
+      <Section label={t("historyControlsUnit")}>
+        <OptionGroup
+          options={HISTORY_UNITS.map((value) => ({
+            value,
+            label: t(`historyUnit.${value}`),
+          }))}
+          current={condition.unit}
+          testIdPrefix="history-unit"
+          onChange={(unit) => changeCondition({ unit })}
+        />
+      </Section>
+      <Section label={t("historyControlsSort")}>
+        <OptionGroup
+          options={HISTORY_SORT_KEYS.map((value) => ({
+            value,
+            label: t(`historySortKey.${value}`),
+          }))}
+          current={condition.sortKey}
+          testIdPrefix="history-sort-key"
+          onChange={(sortKey) => changeCondition({ sortKey })}
+        />
+        <OptionGroup
+          options={HISTORY_SORT_DIRECTIONS.map((value) => ({
+            value,
+            label: t(`historySortDirection.${value}`),
+          }))}
+          current={condition.sortDirection}
+          testIdPrefix="history-sort-direction"
+          onChange={(sortDirection) => changeCondition({ sortDirection })}
+        />
+      </Section>
+    </>
   );
 }
 
@@ -158,26 +213,10 @@ export function HistoryControls({
       </Button>
       {filterOpen && (
         <div className="flex flex-col gap-4" data-testid="history-controls">
-          <Section label={t("historyControlsSort")}>
-            <OptionGroup
-              options={HISTORY_SORT_KEYS.map((value) => ({
-                value,
-                label: t(`historySortKey.${value}`),
-              }))}
-              current={condition.sortKey}
-              testIdPrefix="history-sort-key"
-              onChange={(sortKey) => changeCondition({ sortKey })}
-            />
-            <OptionGroup
-              options={HISTORY_SORT_DIRECTIONS.map((value) => ({
-                value,
-                label: t(`historySortDirection.${value}`),
-              }))}
-              current={condition.sortDirection}
-              testIdPrefix="history-sort-direction"
-              onChange={(sortDirection) => changeCondition({ sortDirection })}
-            />
-          </Section>
+          <HistoryOrdering
+            condition={condition}
+            changeCondition={changeCondition}
+          />
           <HistoryFilters
             condition={condition}
             changeCondition={changeCondition}

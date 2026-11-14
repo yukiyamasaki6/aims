@@ -36,7 +36,13 @@ export async function addRound(
       arrowsPerEnd: number;
       targetFaceId?: string;
     }[];
-    shots?: { scoreStr: string; scoreInt: number }[];
+    // 矢は1本ずつ記録する。distanceIndexとendNumberを省くと、最初の距離の1エンドに置く。
+    shots?: {
+      scoreStr: string;
+      scoreInt: number;
+      distanceIndex?: number;
+      endNumber?: number;
+    }[];
   } = {},
 ): Promise<string> {
   const roundId = await createRound({

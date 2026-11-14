@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   appendRoundsList,
+  type DistanceListItem,
   deletedRoundIdsOf,
   historyPageSizeOf,
   type LoadedRoundsList,
   localRoundsList,
   type RoundListItem,
+  roundIdOfItem,
   roundListItemOf,
   roundsPageOf,
   type ServerRoundSummary,
@@ -207,6 +209,107 @@ describe("roundsPageOf", () => {
   });
 });
 
+describe("roundsPageOf: 距離単位", () => {
+  const summary = (id: string, roundId: string, distance: number | null) => ({
+    id,
+    round_id: roundId,
+    name: `${roundId}の名前`,
+    round_date: "2026-09-16",
+    number: 1,
+    distance,
+    is_marked: distance !== null,
+    total: 300,
+  });
+
+  it("サーバーの応答の列を画面の名前へ写し、距離がnullならnullのまま写す", () => {
+    // Given
+    const page = {
+      distances: [summary("d-1", "r-1", 50), summary("d-2", "r-1", null)],
+      hasMore: true,
+    };
+
+    // When
+    const result = roundsPageOf(page);
+
+    // Then
+    expect(result.items).toEqual([
+      {
+        id: "d-1",
+        roundId: "r-1",
+        name: "r-1の名前",
+        roundDate: "2026-09-16",
+        number: 1,
+        distance: 50,
+        isMarked: true,
+        total: 300,
+      },
+      {
+        id: "d-2",
+        roundId: "r-1",
+        name: "r-1の名前",
+        roundDate: "2026-09-16",
+        number: 1,
+        distance: null,
+        isMarked: false,
+        total: 300,
+      },
+    ]);
+  });
+
+  it("サーバーの順のまま項目にし、続きの起点を、返した最後の距離のID(ラウンドのIDでない)にする", () => {
+    // Given
+    const page = {
+      distances: [summary("d-9", "r-2", 30), summary("d-3", "r-1", 50)],
+      hasMore: true,
+    };
+
+    // When
+    const result = roundsPageOf(page);
+
+    // Then
+    expect(result.items.map((item) => item.id)).toEqual(["d-9", "d-3"]);
+    expect(result.hasMore).toBe(true);
+    expect(result.after).toBe("d-3");
+  });
+
+  it("空のページは、起点をnullにする", () => {
+    // Given
+    const page = { distances: [], hasMore: false };
+
+    // When
+    const result = roundsPageOf(page);
+
+    // Then
+    expect(result).toEqual({ items: [], hasMore: false, after: null });
+  });
+});
+
+describe("roundIdOfItem", () => {
+  it("距離単位の項目は属するラウンドのID、ラウンド単位の項目は自身のIDを返す", () => {
+    // Given
+    const roundItem: RoundListItem = {
+      id: "r-1",
+      name: "n",
+      roundDate: "2026-09-16",
+      total: 1,
+    };
+    const distanceItem: DistanceListItem = {
+      ...roundItem,
+      id: "d-1",
+      roundId: "r-2",
+      number: 1,
+      distance: 50,
+      isMarked: true,
+    };
+
+    // When
+    const ids = [roundIdOfItem(roundItem), roundIdOfItem(distanceItem)];
+
+    // Then
+    expect(ids).toEqual(["r-1", "r-2"]);
+  });
+});
+
 describe("appendRoundsList", () => {
   const entry = (id: string): RoundListItem => ({
     id,
@@ -266,6 +369,31 @@ describe("appendRoundsList", () => {
     expect(result.hasMore).toBe(false);
     expect(result.after).toBe("b");
     expect([...result.deleted].sort()).toEqual(["x", "y"]);
+  });
+
+  it("距離単位では、距離のIDが重なる項目は先に出た方を残し、同じラウンドの別の距離は残す", () => {
+    // Given
+    const distance = (id: string, roundId: string): DistanceListItem => ({
+      ...entry(id),
+      roundId,
+      number: 1,
+      distance: 50,
+      isMarked: true,
+    });
+    const current: LoadedRoundsList = {
+      ...loaded([]),
+      items: [distance("d-1", "r-1"), distance("d-2", "r-1")],
+    };
+    const next: LoadedRoundsList = {
+      ...loaded([]),
+      items: [distance("d-2", "r-1"), distance("d-3", "r-1")],
+    };
+
+    // When
+    const result = appendRoundsList(current, next);
+
+    // Then
+    expect(result.items.map((item) => item.id)).toEqual(["d-1", "d-2", "d-3"]);
   });
 
   it("空のページを連結しても、取得済みの項目は変わらない", () => {

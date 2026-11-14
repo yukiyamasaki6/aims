@@ -568,6 +568,7 @@ describe("historyDistancesOf", () => {
 describe("historyViewStateOf", () => {
   const stored: HistoryViewState = {
     condition: {
+      unit: "distance",
       sortKey: "score",
       sortDirection: "asc",
       format: "indoor",
@@ -585,6 +586,12 @@ describe("historyViewStateOf", () => {
         },
         distanceRowOf(30),
       ],
+      distanceRow: {
+        distance: 50,
+        arrowsPerEnd: 6,
+        totalArrows: 36,
+        targetFaceId: TARGET_FACE_ID,
+      },
     },
     filterOpen: false,
   };
@@ -725,6 +732,176 @@ describe("historyViewStateOf", () => {
     expect(DEFAULT_HISTORY_VIEW_STATE.condition.distances).toEqual([]);
   });
 
+  const validRow = {
+    distance: 50,
+    arrowsPerEnd: 6,
+    totalArrows: 36,
+    targetFaceId: TARGET_FACE_ID,
+  };
+
+  it("既定の条件は、単位がラウンドで、距離の行が指定なしである", () => {
+    // Given
+
+    // When
+    const condition = DEFAULT_HISTORY_CONDITION;
+
+    // Then
+    expect(condition.unit).toBe("round");
+    expect(condition.distanceRow).toBeNull();
+    expect(DEFAULT_HISTORY_VIEW_STATE.condition.unit).toBe("round");
+    expect(DEFAULT_HISTORY_VIEW_STATE.condition.distanceRow).toBeNull();
+  });
+
+  it("単位がラウンドの保存値も、距離の行を条件に残す", () => {
+    // Given
+    const raw = {
+      condition: { ...stored.condition, unit: "round" },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition.unit).toBe("round");
+    expect(state.condition.distanceRow).toEqual(stored.condition.distanceRow);
+  });
+
+  it.each([
+    ["未知の値", "length"],
+    ["数値", 1],
+    ["null", null],
+    ["空の文字列", ""],
+    ["項目が無い", undefined],
+  ])(
+    "単位が%sなら、ラウンドにし、他の項目は保存値のままにする",
+    (_name, unit) => {
+      // Given
+      const raw = {
+        condition: { ...stored.condition, unit },
+        filterOpen: false,
+      };
+
+      // When
+      const state = historyViewStateOf(raw);
+
+      // Then
+      expect(state).toEqual({
+        condition: { ...stored.condition, unit: "round" },
+        filterOpen: false,
+      });
+    },
+  );
+
+  it("保存値に距離の行の項目が無ければ、指定なし(null)にし、他の項目は保存値のままにする", () => {
+    // Given
+    const { distanceRow, ...legacyCondition } = stored.condition;
+    const raw = { condition: legacyCondition, filterOpen: false };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state).toEqual({
+      condition: { ...stored.condition, distanceRow: null },
+      filterOpen: false,
+    });
+  });
+
+  it("距離だけの距離の行(他の項目がnull)は、そのまま状態にする", () => {
+    // Given
+    const distanceOnly = {
+      distance: 50,
+      arrowsPerEnd: null,
+      totalArrows: null,
+      targetFaceId: null,
+    };
+    const raw = {
+      condition: { ...stored.condition, distanceRow: distanceOnly },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition.distanceRow).toEqual(distanceOnly);
+  });
+
+  it.each([
+    ["距離が文字列", { ...validRow, distance: "50" }],
+    ["距離が0", { ...validRow, distance: 0 }],
+    ["距離が101", { ...validRow, distance: 101 }],
+    ["距離が小数", { ...validRow, distance: 50.5 }],
+    ["1エンドの矢数が13", { ...validRow, arrowsPerEnd: 13 }],
+    ["矢の総数が0", { ...validRow, totalArrows: 0 }],
+    ["的のIDがUUIDの形でない", { ...validRow, targetFaceId: "face-1" }],
+    ["距離の項目が無い", { ...validRow, distance: undefined }],
+    ["配列", [validRow]],
+    ["文字列", "50"],
+  ])(
+    "距離の行が%sなら、距離の行だけを指定なしにし、他の項目は保存値のままにする",
+    (_name, brokenRow) => {
+      // Given
+      const raw = {
+        condition: { ...stored.condition, distanceRow: brokenRow },
+        filterOpen: false,
+      };
+
+      // When
+      const state = historyViewStateOf(raw);
+
+      // Then
+      expect(state).toEqual({
+        condition: { ...stored.condition, distanceRow: null },
+        filterOpen: false,
+      });
+    },
+  );
+
+  it("単位・距離の構成・距離の行・期間の組の壊れは、互いに独立して直る", () => {
+    // Given
+    const raw = {
+      condition: {
+        ...stored.condition,
+        unit: "length",
+        distances: "broken",
+        distanceRow: { ...validRow, distance: 0 },
+        dateFrom: "2026-06-01",
+        dateTo: "2026-05-01",
+      },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition).toEqual({
+      ...stored.condition,
+      unit: "round",
+      distances: [],
+      distanceRow: null,
+      dateFrom: null,
+      dateTo: null,
+    });
+  });
+
+  it("距離の構成だけが壊れても、距離の行は保存値のままにする", () => {
+    // Given
+    const raw = {
+      condition: { ...stored.condition, distances: "broken" },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition.distanceRow).toEqual(stored.condition.distanceRow);
+    expect(state.condition.unit).toBe("distance");
+  });
+
   it("保存値に距離の構成の項目が無ければ、空の配列にし、他の項目は保存値のままにする", () => {
     // Given
     const { distances, ...legacyCondition } = stored.condition;
@@ -763,13 +940,6 @@ describe("historyViewStateOf", () => {
       });
     },
   );
-
-  const validRow = {
-    distance: 50,
-    arrowsPerEnd: 6,
-    totalArrows: 36,
-    targetFaceId: TARGET_FACE_ID,
-  };
 
   it.each([
     ["距離が文字列", { ...validRow, distance: "50" }],

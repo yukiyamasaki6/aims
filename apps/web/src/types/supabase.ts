@@ -688,6 +688,50 @@ export type Database = {
         };
         Returns: boolean;
       };
+      distances_list: {
+        Args: {
+          p_after_id: string;
+          p_bow_type: string;
+          p_date_from?: string;
+          p_date_to?: string;
+          p_distance?: Json;
+          p_distances?: Json;
+          p_format: string;
+          p_limit: number;
+          p_score_max?: number;
+          p_score_min?: number;
+          p_sort_direction: string;
+          p_sort_key: string;
+        };
+        Returns: Json;
+      };
+      history_rounds: {
+        Args: {
+          p_bow_type: string;
+          p_date_from: string;
+          p_date_to: string;
+          p_distances: Json;
+          p_format: string;
+        };
+        Returns: {
+          bow_type: string;
+          created_at: string;
+          disabled_at: string | null;
+          format: string;
+          id: string;
+          name: string;
+          revision: number;
+          round_date: string;
+          status: string;
+          updated_at: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "rounds";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
       record_shots: { Args: { p_shots: Json }; Returns: Json };

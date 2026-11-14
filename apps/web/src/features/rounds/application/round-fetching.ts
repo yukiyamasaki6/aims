@@ -7,7 +7,7 @@ import type { RoundBaseRecord } from "../domain/round-base";
 import {
   type RoundsPage,
   roundsPageOf,
-  type ServerRoundsPage,
+  type ServerHistoryPage,
 } from "../domain/round-list";
 import { baseOfServerRound, type ServerRound } from "../domain/round-tables";
 import {
@@ -43,10 +43,10 @@ export type RoundQueries = {
   targetFaces(userId: string): Promise<QueryOutcome<TargetFaceRecord[]>>;
   // 個人(owner_idが自分)と公式(owner_idがnull)を1回で得る。
   presets(userId: string): Promise<QueryOutcome<PresetRecord[]>>;
-  // 完了と記録された削除されていないラウンドを、条件で絞り並べた1ページとして得る。`after`は続きの起点のID(先頭のページはnull)、`size`は件数。
+  // 完了と記録された削除されていないラウンド(条件の単位が距離なら、その距離)を、条件で絞り並べた1ページとして得る。`after`は続きの起点のID(先頭のページはnull。距離単位では距離のID)、`size`は件数。
   roundsList(
     request: RoundsListRequest,
-  ): Promise<QueryOutcome<ServerRoundsPage>>;
+  ): Promise<QueryOutcome<ServerHistoryPage>>;
 };
 
 // `startedAt`は取得の開始時刻、`userId`は取得に使ったセッションの利用者。端末へ保存するベースの記録に付ける。

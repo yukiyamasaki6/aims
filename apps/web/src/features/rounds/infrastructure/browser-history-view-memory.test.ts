@@ -7,6 +7,7 @@ import { createBrowserHistoryViewMemory } from "./browser-history-view-memory";
 
 const saved: HistoryViewState = {
   condition: {
+    unit: "distance",
     sortKey: "score",
     sortDirection: "asc",
     format: "indoor",
@@ -29,6 +30,12 @@ const saved: HistoryViewState = {
         targetFaceId: null,
       },
     ],
+    distanceRow: {
+      distance: 30,
+      arrowsPerEnd: 3,
+      totalArrows: null,
+      targetFaceId: null,
+    },
   },
   filterOpen: false,
 };
@@ -58,6 +65,28 @@ describe("createBrowserHistoryViewMemory", () => {
 
       // Then
       expect(state).toEqual(saved);
+    });
+
+    it("単位と距離の行の項目が無い旧い保存値(配備前にタブへ保存されたもの)は、単位をラウンド、距離の行を指定なしにし、他の項目は保存値のままにして返す", () => {
+      // Given
+      const { unit, distanceRow, ...legacyCondition } = saved.condition;
+      window.sessionStorage.setItem(
+        "aims:history-view",
+        JSON.stringify({
+          userId: "user-1",
+          state: { condition: legacyCondition, filterOpen: false },
+        }),
+      );
+      const memory = createBrowserHistoryViewMemory(identityReader);
+
+      // When
+      const state = memory.read();
+
+      // Then
+      expect(state).toEqual({
+        condition: { ...saved.condition, unit: "round", distanceRow: null },
+        filterOpen: false,
+      });
     });
 
     it("期間と得点の範囲と距離の構成の項目が無い旧い保存値は、範囲を指定なし、距離の構成を空の配列にし、他の項目は保存値のままにして返す", () => {

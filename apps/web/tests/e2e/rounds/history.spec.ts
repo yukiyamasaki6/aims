@@ -49,6 +49,58 @@ function trackRoundsListRequests(page: Page) {
   };
 }
 
+// 履歴の関数の呼び出しを、ラウンド単位(rounds_list)と距離単位(distances_list)に分けて数える。
+function trackHistoryRpcRequests(page: Page) {
+  const bodies: { name: string; afterId: string | null }[] = [];
+  page.on("request", (request) => {
+    const name = /\/rpc\/(rounds_list|distances_list)/.exec(request.url())?.[1];
+    if (request.method() === "POST" && name) {
+      bodies.push({ name, afterId: request.postDataJSON().p_after_id });
+    }
+  });
+  const count = (name: string) =>
+    bodies.filter((body) => body.name === name).length;
+  return {
+    rounds: () => count("rounds_list"),
+    distances: () => count("distances_list"),
+    all: () => bodies.length,
+  };
+}
+
+function escapeRegExp(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// 距離単位のカードの表示(ラウンドの名前、実施日と射つ順の番号と距離、小計)を照合する式。
+function distanceCard(
+  name: string,
+  date: string,
+  number: number,
+  distance: number,
+  total: number,
+) {
+  const line = roundsText("historyDistanceLine", {
+    date,
+    number: String(number),
+    distance: roundsText("historyDistanceMarked", {
+      distance: String(distance),
+    }),
+  });
+  const subtotal = roundsText("distanceSubtotal", { total: String(total) });
+  return new RegExp(
+    `${escapeRegExp(name)}.*${escapeRegExp(line)}.*${escapeRegExp(subtotal)}`,
+  );
+}
+
+// 屋外の形(各距離6エンド×6射)の距離の行。
+function outdoorDistances(...distances: number[]) {
+  return distances.map((distance) => ({
+    distance,
+    totalEnds: 6,
+    arrowsPerEnd: 6,
+  }));
+}
+
 // 完了したラウンドを、実施日が1日ずつ違う`count`件作る(名前の番号が大きいほど新しい)。1ページを越える件数を作るため、準備を並列の束に分ける。
 async function addCompletedRounds(
   credentials: Credentials,
@@ -452,6 +504,180 @@ test.describe("履歴", () => {
     ]);
   });
 
+  test("距離単位に切り替えると、完了したラウンドの距離が小計付きで1件ずつ表示され、得点順と距離の行・得点の範囲で絞り込める", async ({
+    page,
+  }) => {
+    const credentials = await signInFreshUser(page, "e2e-history");
+    // 距離ごとの小計は、距離に置いた1本の矢の点である。ラウンドの合計点(13、14、2)とは違う値にする。
+    await addRound(credentials, "五十から三十", "2026-05-01", {
+      completed: true,
+      distances: outdoorDistances(50, 30),
+      shots: [
+        { scoreStr: "9", scoreInt: 9, distanceIndex: 0 },
+        { scoreStr: "4", scoreInt: 4, distanceIndex: 1 },
+      ],
+    });
+    await addRound(credentials, "七十から五十", "2026-05-02", {
+      completed: true,
+      distances: outdoorDistances(70, 50),
+      shots: [
+        { scoreStr: "6", scoreInt: 6, distanceIndex: 0 },
+        { scoreStr: "8", scoreInt: 8, distanceIndex: 1 },
+      ],
+    });
+    await addRound(credentials, "五十だけ", "2026-05-03", {
+      completed: true,
+      distances: outdoorDistances(50),
+      shots: [{ scoreStr: "2", scoreInt: 2 }],
+    });
+    await addRound(credentials, "入力中の五十", "2026-05-04", {
+      distances: outdoorDistances(50),
+      shots: [{ scoreStr: "10", scoreInt: 10 }],
+    });
+    const requests = trackHistoryRpcRequests(page);
+    const cards = page.getByRole("listitem");
+
+    // 履歴を開いてラウンド単位の表示を確かめ、距離単位へ切り替える。
+    await page.goto("/rounds/history");
+    await expect(cards).toHaveText([
+      /五十だけ/,
+      /七十から五十/,
+      /五十から三十/,
+    ]);
+    await page.getByTestId("history-unit-distance").click();
+    await expect(cards).toHaveText([
+      distanceCard("五十だけ", "2026-05-03", 1, 50, 2),
+      distanceCard("七十から五十", "2026-05-02", 1, 70, 6),
+      distanceCard("七十から五十", "2026-05-02", 2, 50, 8),
+      distanceCard("五十から三十", "2026-05-01", 1, 50, 9),
+      distanceCard("五十から三十", "2026-05-01", 2, 30, 4),
+    ]);
+    expect(requests.distances()).toBe(1);
+    expect(requests.rounds()).toBe(1);
+
+    // 得点の高い順に並べ替えると、小計の大きい順に並ぶ。
+    await page.getByTestId("history-sort-key-score").click();
+    await expect(cards).toHaveText([
+      distanceCard("五十から三十", "2026-05-01", 1, 50, 9),
+      distanceCard("七十から五十", "2026-05-02", 2, 50, 8),
+      distanceCard("七十から五十", "2026-05-02", 1, 70, 6),
+      distanceCard("五十から三十", "2026-05-01", 2, 30, 4),
+      distanceCard("五十だけ", "2026-05-03", 1, 50, 2),
+    ]);
+
+    // 距離の行に50mを指定すると、ラウンドの構成によらず50mの距離だけが表示される。
+    await page.getByTestId("history-filter-distance-row-add").click();
+    const rowInput = page.getByTestId("history-filter-distance-row-0-distance");
+    await rowInput.fill("50");
+    await rowInput.press("Enter");
+    await expect(cards).toHaveText([
+      distanceCard("五十から三十", "2026-05-01", 1, 50, 9),
+      distanceCard("七十から五十", "2026-05-02", 2, 50, 8),
+      distanceCard("五十だけ", "2026-05-03", 1, 50, 2),
+    ]);
+
+    // 得点の範囲を8点以上9点以下にすると、小計が範囲に入る50mの距離だけが表示される。ラウンドの合計点では絞られない。
+    for (const [field, value] of [
+      ["scoreMin", "8"],
+      ["scoreMax", "9"],
+    ]) {
+      await page.getByTestId(`history-filter-${field}`).fill(value);
+      await page.getByTestId(`history-filter-${field}`).press("Enter");
+    }
+    await expect(cards).toHaveText([
+      distanceCard("五十から三十", "2026-05-01", 1, 50, 9),
+      distanceCard("七十から五十", "2026-05-02", 2, 50, 8),
+    ]);
+    expect(requests.rounds()).toBe(1);
+  });
+
+  test("距離単位の条件は、再読み込みと詳細からの戻りで保たれ、取得し直さず、リセットでラウンド単位に戻る", async ({
+    page,
+  }) => {
+    const credentials = await signInFreshUser(page, "e2e-history");
+    await addRound(credentials, "五十から三十", "2026-05-01", {
+      completed: true,
+      distances: outdoorDistances(50, 30),
+    });
+    const roundId = await addRound(credentials, "七十から五十", "2026-05-02", {
+      completed: true,
+      distances: outdoorDistances(70, 50),
+    });
+    const requests = trackHistoryRpcRequests(page);
+    const cards = page.getByRole("listitem");
+    const unitDistance = page.getByTestId("history-unit-distance");
+    const expectedCards = [
+      distanceCard("七十から五十", "2026-05-02", 2, 50, 0),
+      distanceCard("五十から三十", "2026-05-01", 1, 50, 0),
+    ];
+
+    // 距離単位に切り替えて、距離の行を50mにする。
+    await page.goto("/rounds/history");
+    await unitDistance.click();
+    await page.getByTestId("history-filter-distance-row-add").click();
+    const rowInput = page.getByTestId("history-filter-distance-row-0-distance");
+    await rowInput.fill("50");
+    await rowInput.press("Enter");
+    await expect(cards).toHaveText(expectedCards);
+
+    // 再読み込みしても、単位と距離の行が保たれる。
+    await page.reload();
+    await expect(cards).toHaveText(expectedCards);
+    await expect(unitDistance).toHaveAttribute("aria-pressed", "true");
+    await expect(rowInput).toHaveValue("50");
+
+    // 件を押して詳細へ移り、戻るリンクで履歴へ戻ると、同じ表示が取得し直されずに残る。
+    await cards.first().click();
+    await waitForHydration(page);
+    await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}`));
+    await page.waitForLoadState("networkidle");
+    const before = requests.all();
+    await page.getByRole("link", { name: roundsText("back") }).click();
+    await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
+    await expect(cards).toHaveText(expectedCards);
+    await expect(unitDistance).toHaveAttribute("aria-pressed", "true");
+    expect(requests.all()).toBe(before);
+
+    // リセットすると、ラウンド単位で指定なしに戻り、2件がラウンドのカードで表示される。
+    await page.getByTestId("history-controls-reset").click();
+    await expect(cards).toHaveText([/七十から五十/, /五十から三十/]);
+    await expect(page.getByTestId("history-unit-round")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.getByTestId("history-filter-distance-row-0")).toHaveCount(
+      0,
+    );
+  });
+
+  test("距離単位のカードを押すと、複数の距離を持つラウンドの2番目の距離でも、そのラウンドの詳細へ移り、戻るリンクで履歴へ戻る", async ({
+    page,
+  }) => {
+    const credentials = await signInFreshUser(page, "e2e-history");
+    const roundId = await addRound(credentials, "七十から五十", "2026-05-02", {
+      completed: true,
+      distances: outdoorDistances(70, 50),
+    });
+    await page.goto("/rounds/history");
+    await page.getByTestId("history-unit-distance").click();
+    const secondDistance = page.getByRole("link").filter({
+      hasText: distanceCard("七十から五十", "2026-05-02", 2, 50, 0),
+    });
+
+    // 2番目の距離のカードを押して、そのラウンドの詳細へ移る。
+    await secondDistance.click();
+    await waitForHydration(page);
+    await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}`));
+    await expect(page.getByTestId("round-config-summary")).toContainText(
+      "七十から五十",
+    );
+
+    // 戻るリンクで履歴へ戻る。
+    await page.getByRole("link", { name: roundsText("back") }).click();
+    await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
+    await expect(secondDistance).toBeVisible();
+  });
+
   test("オフラインで入力を完了するとホームから消えて履歴にも出ず、オンラインに戻って同期された後に履歴を開くと1件だけ表示される", async ({
     page,
     context,
@@ -522,6 +748,44 @@ test.describe("履歴", () => {
       await expect(cards).toHaveCount(25);
       const texts = await cards.allTextContents();
       expect(new Set(texts).size).toBe(25);
+    });
+
+    test("距離単位でも、1ページを越える件は、末尾までスクロールすると続きが距離ごとに重複なく表示され、最後に以上の文言が表示される", async ({
+      page,
+    }) => {
+      const credentials = await signInFreshUser(page, "e2e-history");
+      // 4距離のラウンド6件で24件。1ページは最小の10件のため、ページの境界が同じラウンドの距離の途中に来る。
+      const names = Array.from({ length: 6 }, (_, i) => `距離ページ-${i}`);
+      await Promise.all(
+        names.map((name, i) =>
+          addRound(
+            credentials,
+            name,
+            `2026-04-${String(1 + i).padStart(2, "0")}`,
+            {
+              completed: true,
+              distances: outdoorDistances(70, 60, 50, 30),
+            },
+          ),
+        ),
+      );
+      const cards = page.getByRole("listitem");
+
+      // 距離単位で履歴を開くと、最初は全件でなく一部だけが表示される。
+      await page.goto("/rounds/history");
+      await page.getByTestId("history-unit-distance").click();
+      await expect(cards.first()).toBeVisible();
+      expect(await cards.count()).toBeLessThan(24);
+      await expect(page.getByText(roundsText("historyEnd"))).toHaveCount(0);
+
+      // 末尾までスクロールすると、続きが取得されて24件が重複なく並び、以上の文言が出る。
+      await scrollToHistoryEnd(page);
+      await expect(cards).toHaveCount(24);
+      const texts = await cards.allTextContents();
+      expect(new Set(texts).size).toBe(24);
+      for (const name of names) {
+        await expect(cards.filter({ hasText: name })).toHaveCount(4);
+      }
     });
 
     test("後ろのページにある条件に一致するラウンドも、得点順に並べて種別で絞り込むと先頭側に表示され、条件を変えるたびに先頭から取得し直される", async ({

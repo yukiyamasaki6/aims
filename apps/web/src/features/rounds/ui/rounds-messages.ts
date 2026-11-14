@@ -5,6 +5,7 @@ import type {
   HistoryRangeError,
   HistorySortDirection,
   HistorySortKey,
+  HistoryUnit,
 } from "../domain/history-view-state";
 import type { RoundConfigError } from "../domain/round-config";
 import type { BowTypeOption, FormatOption } from "../domain/round-constants";
@@ -38,6 +39,11 @@ export const roundsMessages = {
     historyEmpty: "該当するラウンドがありません",
     historyEnd: "該当するラウンドは以上です",
     historyControlsToggle: "並べ替え・絞り込み",
+    historyControlsUnit: "一覧の単位",
+    historyUnit: {
+      round: "ラウンド",
+      distance: "距離",
+    } satisfies Record<HistoryUnit, string>,
     historyControlsSort: "並べ替え",
     historySortKey: {
       date: "日付",
@@ -62,6 +68,7 @@ export const roundsMessages = {
       scoreOrder: "下限は上限以下にしてください",
     } satisfies Record<HistoryRangeError, string>,
     historyFilterDistances: "距離の構成",
+    historyFilterDistanceRow: "絞り込む距離",
     historyFilterDistance: "距離(m)",
     historyFilterArrowsPerEnd: "1エンドの矢数",
     historyFilterTotalArrows: "矢の総数",
@@ -74,6 +81,9 @@ export const roundsMessages = {
       arrowsPerEndInvalid: "1エンドの矢数は1〜12の整数で入力してください",
       totalArrowsInvalid: "矢の総数は1以上の整数で入力してください",
     } satisfies Record<HistoryDistanceError, string>,
+    historyDistanceLine: "{date} / 距離{number} {distance}",
+    historyDistanceMarked: "{distance}m",
+    historyDistanceUnmarkedLength: "Unmarked {distance}m",
     newRoundLabel: "ラウンドを新規作成",
     roundTotalPoints: "{total}点",
     roundMenuLabel: "ラウンドのメニュー",
