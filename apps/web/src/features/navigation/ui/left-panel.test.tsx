@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ScreenFrame } from "@/components/screen-frame";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { LeftPanel } from "./left-panel";
@@ -14,6 +15,17 @@ vi.mock("next/navigation", () => ({ usePathname: () => nav.pathname }));
 beforeEach(() => {
   nav.pathname = "/rounds";
 });
+
+// ドロワーの開き口はScreenFrameが置くため、ヘッダー枠を描く子を持たせる。
+function PanelWithFrame() {
+  return (
+    <LeftPanel>
+      <ScreenFrame title="ホーム">
+        <p>本文</p>
+      </ScreenFrame>
+    </LeftPanel>
+  );
+}
 
 function toggleButton(kind: "Collapse" | "Expand") {
   return screen.getByRole("button", {
@@ -53,12 +65,129 @@ function drag(element: Element, fromX: number, toX: number) {
 }
 
 describe("LeftPanel", () => {
+  describe("ドロワーのフォーカス", () => {
+    it("メニューボタンで開くと、フォーカスがドロワー内の最初のボタン(閉じる)へ移る", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+
+      // When
+      await user.click(openMenuButton());
+
+      // Then
+      expect(closeMenuButtons()[1]).toHaveFocus();
+      expect(drawerPanel()).toContainElement(
+        document.activeElement as HTMLElement,
+      );
+    });
+
+    it("閉じるボタンで閉じると、フォーカスがメニューボタンへ戻る", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+      await user.click(openMenuButton());
+
+      // When
+      await user.click(closeMenuButtons()[1]);
+
+      // Then
+      expect(openMenuButton()).toHaveFocus();
+    });
+
+    it("ドロワーの項目を押して閉じると、フォーカスがメニューボタンへ戻る", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+      await user.click(openMenuButton());
+
+      // When
+      await user.click(
+        screen.getAllByRole("link", {
+          name: navigationText("leftPanelHome"),
+        })[0],
+      );
+
+      // Then
+      expect(openMenuButton()).toHaveFocus();
+    });
+
+    it("閉じるとき、フォーカスがドロワーの外の別の要素にあれば、メニューボタンへ奪わない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(
+        <>
+          <input aria-label="外の入力" />
+          <PanelWithFrame />
+        </>,
+        { wrapper: IntlTestProvider },
+      );
+      await user.click(openMenuButton());
+      const outside = screen.getByLabelText("外の入力");
+      outside.focus();
+
+      // When
+      await user.click(drawerBackdrop());
+
+      // Then
+      expect(closeMenuButtons()).toHaveLength(1);
+      expect(openMenuButton()).not.toHaveFocus();
+    });
+
+    it("開いていない間は、フォーカスをメニューボタンへ移さない", () => {
+      // Given
+      // When
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+
+      // Then
+      expect(openMenuButton()).not.toHaveFocus();
+      expect(document.body).toHaveFocus();
+    });
+  });
+
+  describe("ヘッダーのメニューボタン", () => {
+    it("子がScreenFrameを描くと、メニューを開くボタンが1つ出て、押すとドロワーが展開される", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+      expect(closeMenuButtons()).toHaveLength(1);
+
+      // When
+      await user.click(openMenuButton());
+
+      // Then
+      expect(
+        screen.getAllByRole("button", {
+          name: navigationText("leftPanelOpenMenu"),
+        }),
+      ).toHaveLength(1);
+      expect(closeMenuButtons()).toHaveLength(2);
+    });
+
+    it("子がScreenFrameを持たないと、メニューを開くボタンは出ない", () => {
+      // Given
+      // When
+      render(
+        <LeftPanel>
+          <p>本文</p>
+        </LeftPanel>,
+        { wrapper: IntlTestProvider },
+      );
+
+      // Then
+      expect(
+        screen.queryByRole("button", {
+          name: navigationText("leftPanelOpenMenu"),
+        }),
+      ).toBeNull();
+    });
+  });
+
   describe("狭い画面のメニュー", () => {
     // 閉じるボタン（X）と背景は常時DOM上にある。背景は閉じている間aria-hiddenなので、役割で見える閉じるボタンの件数で開閉を判定する。
     it("パネル内の閉じるボタンを押すと閉じる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />, {
+      render(<PanelWithFrame />, {
         wrapper: IntlTestProvider,
       });
       await user.click(openMenuButton());
@@ -77,7 +206,7 @@ describe("LeftPanel", () => {
       async (origin) => {
         // Given
         const user = userEvent.setup();
-        render(<LeftPanel />, { wrapper: IntlTestProvider });
+        render(<PanelWithFrame />, { wrapper: IntlTestProvider });
         await user.click(openMenuButton());
         const panel = drawerPanel();
         const backdrop = drawerBackdrop();
@@ -104,7 +233,7 @@ describe("LeftPanel", () => {
     it("短いドラッグではパネルと背景が元に戻る", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />, { wrapper: IntlTestProvider });
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
       await user.click(openMenuButton());
       const panel = drawerPanel();
       const backdrop = drawerBackdrop();
@@ -133,7 +262,7 @@ describe("LeftPanel", () => {
     it("操作前は、列のボタンが格納するで、ドロワーの背景は出ない", () => {
       // Given
       // When
-      render(<LeftPanel />, {
+      render(<PanelWithFrame />, {
         wrapper: IntlTestProvider,
       });
 
@@ -145,7 +274,7 @@ describe("LeftPanel", () => {
     it("列のボタンで格納すると、ボタンが開くになり、ドロワーは開かない", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />, {
+      render(<PanelWithFrame />, {
         wrapper: IntlTestProvider,
       });
 
@@ -160,7 +289,7 @@ describe("LeftPanel", () => {
     it("列のボタンで格納した後に展開すると、ボタンが格納するになり、ドロワーは開かない", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />, {
+      render(<PanelWithFrame />, {
         wrapper: IntlTestProvider,
       });
       await user.click(toggleButton("Collapse"));
@@ -176,7 +305,7 @@ describe("LeftPanel", () => {
     it("ハンバーガーで開いた後に背景を押すと、ドロワーが閉じる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />, {
+      render(<PanelWithFrame />, {
         wrapper: IntlTestProvider,
       });
       await user.click(openMenuButton());
@@ -194,7 +323,7 @@ describe("LeftPanel", () => {
     it("ハンバーガーでドロワーを開くと、背景が出て、列のボタンは操作前のままである", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />, {
+      render(<PanelWithFrame />, {
         wrapper: IntlTestProvider,
       });
 
@@ -230,7 +359,7 @@ describe("LeftPanel", () => {
     it("ホーム・履歴・設定の項目を2つの枠に表示し、個人の項目は表示しない", () => {
       // Given
       // When
-      render(<LeftPanel />, { wrapper: IntlTestProvider });
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
 
       // Then
       expect(
@@ -252,7 +381,7 @@ describe("LeftPanel", () => {
     it("設定の項目は、各枠でホーム・履歴より後に置かれる", () => {
       // Given
       // When
-      render(<LeftPanel />, { wrapper: IntlTestProvider });
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
 
       // Then
       const names = [
@@ -270,7 +399,7 @@ describe("LeftPanel", () => {
     it("サインアウトのボタンは表示しない", () => {
       // Given
       // When
-      render(<LeftPanel />, { wrapper: IntlTestProvider });
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
 
       // Then
       expect(
@@ -289,7 +418,7 @@ describe("LeftPanel", () => {
         nav.pathname = pathname;
 
         // When
-        render(<LeftPanel />, { wrapper: IntlTestProvider });
+        render(<PanelWithFrame />, { wrapper: IntlTestProvider });
 
         // Then
         const currentLinks = screen.getAllByRole("link", { current: "page" });
@@ -307,7 +436,7 @@ describe("LeftPanel", () => {
         nav.pathname = pathname;
 
         // When
-        render(<LeftPanel />, { wrapper: IntlTestProvider });
+        render(<PanelWithFrame />, { wrapper: IntlTestProvider });
 
         // Then
         expect(screen.queryByRole("link", { current: "page" })).toBeNull();
@@ -317,7 +446,7 @@ describe("LeftPanel", () => {
     it("ハンバーガーでドロワーを開き、ホームの項目を押すと、ドロワーが閉じる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />, { wrapper: IntlTestProvider });
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
       await user.click(openMenuButton());
 
       // When
@@ -330,7 +459,7 @@ describe("LeftPanel", () => {
     it("ハンバーガーでドロワーを開き、設定の項目を押すと、ドロワーが閉じる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />, { wrapper: IntlTestProvider });
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
       await user.click(openMenuButton());
 
       // When
@@ -343,7 +472,7 @@ describe("LeftPanel", () => {
     it("列のボタンで格納した後に設定の項目を押しても、列のボタンは開くのまま変わらない", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />, { wrapper: IntlTestProvider });
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
       await user.click(toggleButton("Collapse"));
 
       // When
@@ -356,7 +485,7 @@ describe("LeftPanel", () => {
     it("Tabを押し進めると、設定の項目へフォーカスが届く", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />, { wrapper: IntlTestProvider });
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
 
       // When
       for (let i = 0; i < 20 && document.activeElement !== settingsLink(); i++)
@@ -369,7 +498,7 @@ describe("LeftPanel", () => {
     it("列のボタンで格納した後に履歴の項目を押しても、列のボタンは開くのまま変わらない", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />, { wrapper: IntlTestProvider });
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
       await user.click(toggleButton("Collapse"));
 
       // When

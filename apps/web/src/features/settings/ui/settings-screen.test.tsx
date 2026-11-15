@@ -32,6 +32,24 @@ describe("SettingsScreen", () => {
     expect(screen.getAllByRole("heading")).toHaveLength(2);
   });
 
+  it("見出し「設定」はヘッダーの中に1つだけあり、本文には重ねて出さない", () => {
+    // Given
+    // When
+    render(<SettingsScreen account={null} />, {
+      wrapper: IntlTestProvider,
+    });
+
+    // Then
+    const heading = screen.getByRole("heading", {
+      level: 1,
+      name: settingsText("title"),
+    });
+    expect(heading.closest("header")).not.toBeNull();
+    expect(
+      within(screen.getByRole("main")).queryByText(settingsText("title")),
+    ).toBeNull();
+  });
+
   it("分類「アカウント」の区画の中に、「メールアドレス変更」と「パスワード変更」の項目を表示する", () => {
     // Given
     // When

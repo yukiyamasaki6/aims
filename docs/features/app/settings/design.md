@@ -13,13 +13,13 @@
 
 | 画面・状態 | 内容 |
 | :--- | :--- |
-| `/settings`(認証済み) | 見出し「設定」と、分類「アカウント」の区画(メールアドレス変更とパスワード変更の項目、サインアウト)を表示する。 |
+| `/settings`(認証済み) | 共用のヘッダーの現在地「設定」(`app/navigation`)と、本文に分類「アカウント」の区画(メールアドレス変更とパスワード変更の項目、サインアウト)を表示する。 |
 | `/settings`(未認証) | `proxy.ts`が遷移元付きで`/signin`へ送る。サインインすると`/settings`へ戻る。 |
 | `/settings`(オフライン) | Service Workerが保存済みの枠を返す。未認証の確定は`(main)`の見張りが`/signin`へ移す。 |
 
 ## 画面の作り
 
-- 画面は左寄せで、`main`は`mx-auto flex min-h-full max-w-xl flex-col gap-8 p-8`、見出しは`h1`の`text-2xl font-semibold`である(変更しない)。
+- 画面は左寄せで、共用のヘッダー枠(`ScreenFrame`)の本文領域に、設定画面が持つスクロールの入れ物(`h-full overflow-y-auto`)と、その中の`main`(`mx-auto flex min-h-full max-w-xl flex-col gap-8 p-8`)を置く。画面の見出し「設定」は、本文の`h1`でなく、ヘッダーの現在地(`h1`)として出す。
 - 分類の区画は`flex flex-col gap-2`である。
   分類の見出しは`h2`のまま、`text-sm font-medium text-muted-foreground`にして、灰色で小さく表示し、項目より目立たせない。
 - 項目は、1つのまとまった枠に見えるように並べる。
@@ -54,7 +54,7 @@
 
 - `src/app/(main)/settings/page.tsx`(入口): クライアントのページ。`useSession`で受け取った手続きの`signOut`で`SignOutButton`を作り、`SettingsScreen`の分類「アカウント」の枠へ渡す。
 - `src/components/ui/button.tsx`(共有の画面部品): 大きさの種類に`row`を足す。
-- `src/features/settings/ui/settings-screen.tsx`(UI層): 見出しと、分類の区画(見出し付き)と、項目の枠を描く。分類の内容は入口が渡す。
+- `src/features/settings/ui/settings-screen.tsx`(UI層): 共用のヘッダー枠(`components/screen-frame.tsx`)に現在地「設定」を入れ、本文に分類の区画(見出し付き)と、項目の枠を描く。分類の内容は入口が渡す。
   行は、「メールアドレス変更」「パスワード変更」のリンクと、入口が渡す`account`(サインアウトの行)を並べる。
   先頭・末尾の角丸は、子の位置を当てる並べる`div`のクラスで付け、行の数が増えても崩れない。
   `account`は、流れの中に行となる要素を1つだけ描く(確認ダイアログはポータルで、流れに要素を足さない)。「メールアドレス変更」「パスワード変更」の項目は、経路表の`CHANGE_EMAIL_PATH`、`CHANGE_PASSWORD_PATH`へのリンクとしてここで描く(認証の部品を要さない)。認証の部品(サインアウト)は入口が渡す。認証状態は持たない。

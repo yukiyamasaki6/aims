@@ -1,9 +1,10 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
+import { SETTINGS_PATH } from "@/routes";
 import type { CallResult } from "../application/call-result";
 import { createChangePassword } from "../application/change-password";
 import { createFakeChangePasswordAuthenticator } from "../application/change-password-test-helpers";
@@ -62,6 +63,24 @@ describe("パスワード変更画面の部品", () => {
     expect(
       submitButton().closest("form")?.querySelectorAll("input"),
     ).toHaveLength(2);
+  });
+
+  it("見出しはヘッダーにあり本文にレベル1の見出しは無く、戻るは設定画面へのリンクである", () => {
+    // Given
+
+    // When
+    setup();
+
+    // Then
+    const heading = screen.getByRole("heading", {
+      level: 1,
+      name: authText("changePasswordTitle"),
+    });
+    expect(heading.closest("header")).not.toBeNull();
+    expect(within(screen.getByRole("main")).queryByRole("heading")).toBeNull();
+    expect(
+      screen.getByRole("link", { name: authText("back") }),
+    ).toHaveAttribute("href", SETTINGS_PATH);
   });
 
   it("現在のパスワードの欄にはcurrent-password、新しいパスワードの欄にはnew-passwordのautocompleteを付ける", () => {
@@ -185,6 +204,29 @@ describe("パスワード変更画面の部品", () => {
     // Then
     expect(submitButton()).toHaveAttribute("aria-disabled", "true");
     await act(async () => response.resolve(accepted));
+  });
+
+  it("処理中は、ヘッダーの戻るがリンクでなく押せず、処理が終わるとリンクに戻る", async () => {
+    // Given
+    const { authenticator } = setup();
+    const response = Promise.withResolvers<CallResult>();
+    authenticator.updatePassword.mockReturnValue(response.promise);
+    const user = userEvent.setup();
+    await fill(user);
+
+    // When
+    await user.click(submitButton());
+
+    // Then
+    expect(screen.queryByRole("link", { name: authText("back") })).toBeNull();
+    expect(screen.getByText(authText("back"))).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await act(async () => response.resolve(accepted));
+    expect(
+      await screen.findByRole("link", { name: authText("back") }),
+    ).toHaveAttribute("href", SETTINGS_PATH);
   });
 
   it("処理を始めると、以前のエラーの表示が消える", async () => {

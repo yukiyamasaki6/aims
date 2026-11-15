@@ -12,6 +12,7 @@ import {
 import { authMethodOf, readStoredTokens } from "../helpers/stored-session";
 
 const authText = translatorFor("auth");
+const settingsText = translatorFor("settings");
 
 const ORIGINAL_PASSWORD = "password-original1";
 const NEW_PASSWORD = "password-changed1";
@@ -72,6 +73,24 @@ test("現在のパスワードと新しいパスワードを入力して変更�
   );
   await page.goto("/rounds");
   await expect(page).toHaveURL(/\/rounds/);
+});
+
+test("ヘッダーの戻るのリンクを押すと、設定画面へ移動する", async ({ page }) => {
+  await signUpAndSignIn(page, {
+    email: newEmail(),
+    password: ORIGINAL_PASSWORD,
+  });
+  await openChangePassword(page);
+
+  await page
+    .locator("header")
+    .getByRole("link", { name: authText("back") })
+    .click();
+
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(
+    page.getByRole("heading", { name: settingsText("title") }),
+  ).toBeVisible();
 });
 
 test("別の端末でサインインしているとき、この端末がパスワードを変更すると、この端末はサインインしたままで、別の端末は期限が切れた後にサインイン画面へ移動する", async ({

@@ -18,7 +18,7 @@
 | --- | --- | --- |
 | 初期 | 現在のパスワード、新しいパスワード(どちらも表示切替つき)、変更 | 送信で処理中 |
 | 検証エラー | 未入力・規則違反を欄ごとに表示する | 再送信 |
-| 処理中 | 変更ボタンを`aria-disabled`にする。以前のエラーと完了の表示は開始で消す | 成功で完了、失敗でエラー |
+| 処理中 | 変更ボタンを`aria-disabled`にし、ヘッダーの戻る(設定へ)を押せなくする。以前のエラーと完了の表示は開始で消す | 成功で完了、失敗でエラー |
 | オフライン | 入力に不備が無いとき、オフラインの文言を全体のエラーに表示する。更新しない | 再送信 |
 | 失敗(通信の断を含む) | 理由を表示し、入力値を保つ | 再送信 |
 | 完了 | 完了の文言を表示する。入力値を消す。この端末はサインイン済みのまま、画面に留まる | 再送信 |
@@ -26,9 +26,10 @@
 - 現在のパスワードの誤り(`current_password_invalid`)は、「現在のパスワードが正しくありません。」で示す。
   サインインの`invalid_credentials`とは別の種類である。
   同じパスワードの拒否(`same_password`)も別の種類で示す。
-- 画面の作りは、認証の画面と同じにする(中央寄せ、`max-w-sm`、見出し`h1`は`font-heading text-2xl leading-snug font-medium`)。
+- 画面の名称(パスワード変更)と設定画面へ戻るリンク(`SettingsBackLink`。`auth/change-email`)は、共用のヘッダー(`ScreenFrame`。`app/navigation`)に置き、本文に見出しと戻るを置かない。戻るは`submitting`の間は押せない。
+- 本文の作りは、認証の画面と同じにする(中央寄せ、`max-w-sm`)。
   `main`は`mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8`で、画面の上下中央にそろえる。
-  `(main)`のレイアウトの本文の領域(`min-h-0 min-w-0 flex-1 overflow-y-auto`)の中に置くため、`min-h-full`で領域の高さいっぱいに広げ、`justify-center`で上下中央にする。
+  共用のヘッダー枠の本文領域(スクロールしない枠)の中に、画面が持つスクロールの入れ物(`h-full overflow-y-auto`)を置き、その中で`min-h-full`により入れ物の高さいっぱいに広げ、`justify-center`で上下中央にする。
   内容が領域より高いときは、`min-h-full`により`main`が伸びて領域がスクロールし、上端が切れない。
   認証のレイアウト(`app/(auth)/layout.tsx`)は、ロゴの分(`mt-14`、`h-[calc(100dvh-3.5rem)]`)を持つため使わず、同じ中央寄せを画面の`main`に持たせる。
   エラーと完了の文言は、`text-center text-sm`で、エラーは`text-destructive`である。
@@ -56,7 +57,7 @@
 - `src/app/(main)/settings/password/page.tsx`: 入口。
   認証の実装、`Connectivity`、手続きを生成して画面へ渡す。サイトキーは要らない。
 - `src/features/auth/ui/change-password-form.tsx`: 画面。
-  状態を`useScreenView`で持ち、完了で入力欄を作り直して消す。文言は`ui/auth-messages.ts`から得る。
+  共用のヘッダー枠に現在地と`SettingsBackLink`(`disabled`は`submitting`)を入れる。状態を`useScreenView`で持ち、完了で入力欄を作り直して消す。文言は`ui/auth-messages.ts`から得る。
 - `src/features/auth/application/change-password.ts`: 手続きと、約束(`ChangePasswordAuthenticator.updatePassword({ currentPassword, newPassword })`)。状態を持たない。
   `createChangePassword({ authenticator, connectivity })`が`ChangePassword`(`submit(input, view)`)を返す。
 - `src/features/auth/domain/change-password-flow.ts`: 集約。開始の命令(`beginChangePassword`)が、送信中、入力の判定、オフラインの判定の順を守る。

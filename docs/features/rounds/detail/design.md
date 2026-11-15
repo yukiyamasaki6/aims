@@ -16,7 +16,7 @@
 
 | 領域 | 内容 | 固定表示 |
 | :--- | :--- | :--- |
-| 戻る行 | 「戻る」リンク、プリセット保存、ラウンドのメニュー | スクロール領域の外の上端 |
+| ヘッダー | 「戻る」リンク、プリセット保存、ラウンドのメニュー(幅768px未満では左端にメニューボタン。`app/navigation`) | 共用のヘッダー枠(スクロール領域の外の上端) |
 | ラウンドの結果 | 合計。条件を満たすときだけ最高点数・X数、または最高点数・次点数を併記 | 領域の上端 |
 | 距離の結果 | 距離ごとの合計と、最高点数・X数、または最高点数・次点数 | 距離の範囲内で、領域の上端のラウンドの結果の下 |
 | エンド | 各矢の点数(射順不明の矢は点数の高い順。`rounds/score-entry`)、エンドの小計 | なし |
@@ -25,8 +25,8 @@
 
 | 状態 | 表示 | 判定 |
 | :--- | :--- | :--- |
-| 取得中 | 「戻る」の行と読み込み中の表示 | 取得が完了していない(読み込みの開始から10秒まで) |
-| 見つからない | 「ラウンドが見つかりません。」と「戻る」リンク。存在しない・権限なし・論理削除済み・端末の列に削除がある・他の端末で削除された・作成が破棄された・UUIDでないIDを区別しない。URLは詳細のまま | ラウンドが得られない |
+| 取得中 | ヘッダー(「戻る」だけ)と読み込み中の表示 | 取得が完了していない(読み込みの開始から10秒まで) |
+| 見つからない | 「ラウンドが見つかりません。」とヘッダーの「戻る」リンク。存在しない・権限なし・論理削除済み・端末の列に削除がある・他の端末で削除された・作成が破棄された・UUIDでないIDを区別しない。URLは詳細のまま | ラウンドが得られない |
 | 端末のベースで表示 | ラウンドの内容(オンラインと同じ) | 端末が保持するラウンドで、的の一覧の保存分がある(取得の完了を待たずに開き、取得は同期が続ける。取得に失敗しても次の契機まで保存済みの表示が続く) |
 | オフライン | 「ネットワークに接続されていません」と再試行 | `navigator.onLine`が`false`で、端末がオフラインで開けるベースか、的の一覧の保存分を持たないラウンド。ベースを持たないときの表示は`app/offline-pwa` |
 | 取得エラー | エラーメッセージと再試行 | 取得がエラー。通信失敗は「読み込めませんでした。」(端末がオフラインで開けるベースを持たないラウンド)。的の保存分が全く無く、保存が現れないまま取得の打ち切りに達したときも同じ |
@@ -49,11 +49,11 @@
 - `features/rounds/domain/round-base.ts`、`features/rounds/application/round-base-refreshing.ts`: 端末に持つベースの規則と、入力中のラウンドの一括の取得(`rounds/sync`)。`features/rounds/domain/round-view.ts`の`deriveRoundState`は、端末の組から画面と同じ導出で状態を求める関数で、一覧も使う(`rounds/history`)。一括の取得の反映は、一覧も同じ経路(`refreshAll`)を使う。一括の取得は、`disabled_at is null`かつ`status = in_progress`、または端末にベースか操作があるラウンドを得て、ラウンドごとにベースを差し替える。端末のラウンドのIDは50件ごとの取得に分けて並行に得る(入力中の条件は最初の取得に含め、以降の取得は入力中を除く)。すべての取得が成功したときだけ成功とする。返らなかったラウンドは、端末のベースの保存を消し、メモリの記録だけが削除済みを持つ(未送信の操作は残す)。
 - `features/rounds/domain/round-tables.ts`、`features/rounds/domain/round-op-apply.ts`、`features/rounds/domain/round-view.ts`: サーバーのテーブルの形のベース(`RoundTables`)、操作の列を重ねる導出(RPCごとの処理)、画面の状態を導く`selectRoundState`、起点のテーブルに操作を重ねて画面の状態を求める`roundScreenState`(起点は`originOf`が記録から求める)。窓口の`append(roundId, operation)`は追記の直後の画面の状態を返す。完了のラウンドの編集で入力中へ戻す操作は、手続き`features/rounds/application/round-editing.ts`が積む(窓口が追記の前の状態を値で渡して呼ぶ。`rounds/completion`)。画面の状態は、端末の記録のベースと操作の列から求める(起点は記録のベース、無ければ作成の操作が表す状態)。`use-scorecard.ts`は窓口の画面の値(`RoundScreen`)と追記を受ける。
 - `features/round-sync/application/round-sync.ts`: 端末のベースで開いたときの取り直し。取得に失敗しても、定期的な取り直しは行わず、次の契機(起動、通信の復帰、画面が見える状態、同じラウンドの開き直し、効かなかった結果の検出)まで端末のベースの表示が続く。ラウンドの取得(`roundDetail`、`roundDetails`)は`retry: true`で、数秒の瞬断は取得のライブラリの再試行が吸収する(的の個別取得も窓口が同じ取得のライブラリの再試行を使う)。結果の種類が「無い」なら、開き方によらず見つかりませんにする(作成が未確定のラウンドを除く)。
-- `features/rounds/ui/round-detail-frame.tsx`、`back-link.tsx`、`use-round-origin.ts`: 枠と「戻る」リンク。`BackLink`は引数の遷移元(`RoundOrigin`)から行き先を`originPathOf`で決め、文言は「戻る」だけ(`aria-label`は付けず、戻り先を含めない)。`useRoundOrigin()`は現在のURLの検索部から`roundOriginOf`で遷移元を返す。詳細の枠は静的に生成するため、サーバー描画と水和は空の検索部(ホーム)で描き、水和の後にブラウザのURLを読む(`useSyncExternalStore`)。取得中・見つからない枠でも同じ遷移元を使う。
+- `features/rounds/ui/round-detail-frame.tsx`、`back-link.tsx`、`use-round-origin.ts`: 詳細の枠と「戻る」リンク。ヘッダーの操作(戻る、プリセット保存、ラウンドのメニュー)は、共用のヘッダーの行(左右の余白6px、高さ44pxの上下中央)に置く。ラウンドのメニューは枠を含めて32px四方のアイコン、戻るは`p-1.5`(32px)、プリセット保存は28pxのボタンの外に`m-1.5`(40px)である(`app/navigation`)。`RoundDetailFrame`は、共用のヘッダー枠(`components/screen-frame.tsx`。`app/navigation`)を、`leading`に`BackLink`、`trailing`に受けた操作(`actions`。取得中・見つからない・オフライン・エラーでは無し)を入れて描き、子を本文領域に置く。スクロールの入れ物は持たず、子が決める。取得中・見つからない・オフライン・エラーの表示は、`round-detail-client.tsx`が`<main>`(`h-full overflow-y-auto`)をスクロールの入れ物にして描く。ヘッダーの下線と本文(ラウンドの情報、取得の状態の表示)の間に32pxの余白を取る(スコアカードの本文と取得の状態の表示の入れ物を`p-8`。ホーム・履歴・設定の本文の上の余白と同じ)。取得中から表示への切り替えでも同じ枠なので、ヘッダーは動かない。`BackLink`は引数の遷移元(`RoundOrigin`)から行き先を`originPathOf`で決め、文言は「戻る」だけ(`aria-label`は付けず、戻り先を含めない)。`useRoundOrigin()`は現在のURLの検索部から`roundOriginOf`で遷移元を返す。詳細の枠は静的に生成するため、サーバー描画と水和は空の検索部(ホーム)で描き、水和の後にブラウザのURLを読む(`useSyncExternalStore`)。取得中・見つからない枠でも同じ遷移元を使う。
 - 遷移元(`?from=history`): 履歴のカードだけが詳細へのリンクに付ける(`roundPath(id, "history")`)。ホームのカードと、作成からの開始(`round-start.ts`)は付けず、ホームとして扱う。経路表に`ROUND_ORIGIN_PARAM`・`ROUND_ORIGIN_HISTORY`と`roundPath`、`domain/round-routes.ts`に`RoundOrigin`・`roundOriginOf`(値が`history`と完全に一致するときだけ履歴)・`originPathOf`を置く。戻り先は経路表の定数からだけ作り(ホームは`ROUNDS_HOME_PATH`、履歴は戻りの印の付いた`ROUNDS_HISTORY_RETURN_PATH`。印の意味は`rounds/history`)、値をそのまま遷移先にしない。詳細の戻るリンクと、詳細での削除の後の移動(`round-leaving.ts`)は、どちらもこの戻り先を使う。`returnTo`は検索部を含めて運ぶため、サインインし直した後も遷移元つきの詳細へ戻る。ServiceWorkerの枠の判定とrewriteはパスだけを見るため、クエリつきのURLも同じ枠で開く。
-- `features/rounds/ui/scorecard-client.tsx`（Client Component）: スコアカードの枠を組み立てる。
+- `features/rounds/ui/scorecard-client.tsx`（Client Component）: スコアカードの枠を組み立てる。`RoundDetailFrame`に、プリセット保存(`SavePresetDialog`)とラウンドのメニュー(`RoundMenu`)を`actions`として渡し、本文領域に、スクロール領域(`<main>`。詳細の唯一のスクロールの入れ物)と下端の枠(`BottomFrame`)の縦の列と、横向きの右のパネル(`KeypadPanel`)を横に並べた行(`h-full`)を置く。テンキーはどちらの向きもヘッダーの下にある。
 - `features/rounds/ui/use-scorecard.ts`: `state`(保存の完了前の操作を含む記録から導いた`shots`と距離の構成)を窓口の画面の値(`RoundScreen`)から受け、画面のフック(指している矢、テンキー、取り消しの列、距離の編集)を束ねる。
-- `features/rounds/ui/scorecard-header-bar.tsx`、`round-config-panel.tsx`、`round-summary-bar.tsx`: ヘッダーの帯(領域の外)、ラウンドの設定のカード(カードの枠と編集のダイアログを1つの部品に持つ)、合計の帯(領域の中)。
+- `features/rounds/ui/round-config-panel.tsx`、`round-summary-bar.tsx`: ラウンドの設定のカード(カードの枠と編集のダイアログを1つの部品に持つ)、合計の帯(領域の中)。
 - `features/rounds/ui/distance-section.tsx`: 距離ごとのカード(見出し、編集、小計、エンドの行)。
 - `features/rounds/domain/scorecard-scoring.ts`: 距離とラウンドの集計、エンドの小計を求める純粋関数。
 
@@ -65,8 +65,8 @@
 | :--- | :--- |
 | `app/(main)/rounds/[id]/page.tsx` | 入口(サーバー専用の宣言を持ち、クライアントの部品を描くだけ) |
 | `app/root-client-entry.tsx` | 入口(完了と保存の手続きと遷移の`replace`を生成する) |
-| `features/rounds/ui/round-detail-client.tsx`、`round-detail-frame.tsx`、`back-link.tsx`、`use-round-origin.ts` | ui(取得の表示の切り替え、取得中などの枠、戻るリンクと遷移元の読み取り) |
-| `features/rounds/ui/scorecard-client.tsx`、`scorecard-header-bar.tsx`、`round-summary-bar.tsx` | ui(スコアカードの組み立て、上端の帯、合計の帯) |
+| `features/rounds/ui/round-detail-client.tsx`、`round-detail-frame.tsx`、`back-link.tsx`、`use-round-origin.ts` | ui(取得の表示の切り替え、ヘッダーを含む詳細の枠、戻るリンクと遷移元の読み取り) |
+| `features/rounds/ui/scorecard-client.tsx`、`round-summary-bar.tsx` | ui(スコアカードの組み立て、合計の帯) |
 | `features/rounds/ui/round-config-panel.tsx`、`round-menu.tsx`、`save-preset-dialog.tsx`、`save-preset-dialog-state.ts` | ui(設定のパネルと編集のダイアログ、メニューと削除の確認、保存のダイアログの描画と状態) |
 | `features/rounds/ui/distance-section.tsx`、`distance-edit-fields.tsx`、`distance-fields.tsx`、`use-distance-draft.ts`、`target-face-picker.tsx`、`end-row.tsx` | ui(距離のカード、距離の編集のダイアログと操作、編集フォームの欄の描画、編集フォームの下書きと検証・保存・削除、的の選択、エンドの行) |
 | `features/rounds/ui/keypad-buttons.tsx`、`keypad-panel.tsx`、`bottom-frame.tsx`、`complete-round-bar.tsx` | ui(テンキー、横向きのパネル、縦向きの下端の枠、完了の帯と確認) |
@@ -93,7 +93,7 @@
 | 判断 | 理由 | 見直す条件 |
 | :--- | :--- | :--- |
 | 入力と表示を`/rounds/[id]`の1画面にまとめ、独立した集計画面を設けない | 入力後も同じ画面で内訳を確認できるようにするため | 集計だけを見る用途が増えたとき |
-| 戻る行（`h-14`）と完了の帯はスクロール領域の外に置き、ラウンドの結果（`top-0`）と距離の結果（`top-8`）は領域の中でstickyにして重ねずに並べる | 長いスコアカードでも合計を見られるようにするため。結果の帯は設定のカードと結合した見た目、距離の結果は距離ごとの範囲で固定されるため、領域の外へ出さない | 固定要素の高さを変えるとき(領域の中の固定表示は`data-sticky-inset`を付ければ指す矢への追従が見込む) |
+| ヘッダー（共用の枠、線を含めて45px）と完了の帯はスクロール領域の外に置き、ラウンドの結果（`top-0`）と距離の結果（`top-8`）は領域の中でstickyにして重ねずに並べる | 長いスコアカードでも合計を見られるようにするため。結果の帯は設定のカードと結合した見た目、距離の結果は距離ごとの範囲で固定されるため、領域の外へ出さない | 固定要素の高さを変えるとき(領域の中の固定表示は`data-sticky-inset`を付ければ指す矢への追従が見込む) |
 | 最高点数・X数を、的のリング構成から動的に求め、Xのない的は最高点数と次の点数を表示する | 6点的やコンパウンドの40cm的など、標準の10点的以外にも対応するため。Xの有無を固定とした集計は採らない。詳細: #418 | 的の種類を増やすとき |
 | 表示の順を「最高点数/X数」にし、X数は`score_str`で数える | Xのない的でも最高点数が先頭にあるほうが読みやすいため、「X数/最高点数」の順をやめた。`score_int`だけではXと10を区別できない | 最高点数とX数の並びを利用者が選べるようにするとき |
 | ラウンド全体の最高点数・X数は、全距離で一致するときだけ表示する | 的が異なる距離を足した最高点数・X数は意味を持たないため | 的が異なる距離の集計を定義するとき |

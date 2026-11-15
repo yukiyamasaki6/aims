@@ -79,7 +79,7 @@ describe("RoundsHome", () => {
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
     });
 
-    it("見出しと件数の表示を持たない", () => {
+    it("ヘッダーに見出し「ホーム」のレベル1だけを持ち、件数の見出しは持たない", () => {
       // Given
       fakeWindow.setLocal({ inProgress });
 
@@ -87,7 +87,12 @@ describe("RoundsHome", () => {
       renderHome();
 
       // Then
-      expect(screen.queryByRole("heading")).toBeNull();
+      const heading = screen.getByRole("heading", {
+        level: 1,
+        name: roundsText("homeTitle"),
+      });
+      expect(heading.closest("header")).not.toBeNull();
+      expect(screen.getAllByRole("heading")).toHaveLength(1);
     });
 
     it("履歴の取得を呼ばず、取得が応答しない状況でも入力中のラウンドを表示する", () => {

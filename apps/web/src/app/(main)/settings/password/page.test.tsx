@@ -56,6 +56,9 @@ describe("パスワード変更画面の入口", () => {
     ).toBeInTheDocument();
     expect(currentInput()).toHaveValue("");
     expect(newInput()).toHaveValue("");
+    expect(
+      screen.getByRole("link", { name: authText("back") }),
+    ).toBeInTheDocument();
   });
 
   it("セキュリティチェックのサイトキーの環境変数が無くても、例外を投げずに描画する", () => {

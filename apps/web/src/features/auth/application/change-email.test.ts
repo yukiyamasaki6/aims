@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
-import { SETTINGS_PATH } from "@/routes";
 import type { AuthFailureKind } from "../domain/auth-failure";
 import {
   type ChangeEmailEvent,
@@ -32,19 +30,16 @@ function setup(
   const authenticator = createFakeChangeEmailAuthenticator(results);
   const connectivity = createFakeConnectivity(offline);
   const clock = createManualClock();
-  const navigation = createFakePageNavigation();
   const changeEmail = createChangeEmail({
     authenticator,
     connectivity,
     clock,
-    pageNavigation: navigation.pageNavigation,
   });
   return {
     changeEmail,
     authenticator,
     connectivity,
     clock,
-    navigation,
     ...screenHarness<ChangeEmailFlow, ChangeEmailEvent>(changeEmailReducer),
   };
 }
@@ -191,8 +186,7 @@ describe("メールアドレス変更の手続き", () => {
 
     it("2欄とも呼ぶときは、変更前、変更後の順に、その欄のメールアドレスと入力のコードで1回ずつ確認を頼み、完了なら完了にする(大文字を含むアドレスも入力のまま渡す)", async () => {
       // Given
-      const { changeEmail, authenticator, navigation, view } =
-        await requested();
+      const { changeEmail, authenticator, view } = await requested();
       authenticator.confirmEmailChange
         .mockResolvedValueOnce({ kind: "partial" })
         .mockResolvedValueOnce({ kind: "completed" });
@@ -201,8 +195,6 @@ describe("メールアドレス変更の手続き", () => {
       await changeEmail.confirm({ codes }, view);
 
       // Then
-      expect(navigation.go).not.toHaveBeenCalled();
-      expect(navigation.replace).not.toHaveBeenCalled();
       expect(authenticator.confirmEmailChange.mock.calls).toEqual([
         [{ email: otherEmail, code: "111111" }],
         [{ email: newEmail, code: "222222" }],
@@ -675,23 +667,6 @@ describe("メールアドレス変更の手続き", () => {
       // Then
       expect(ready.observedState.captchaToken).toBe("token");
       expect(resetCheck).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("leave", () => {
-    it("設定画面へ移り、置き換えず、認証を呼ばない", () => {
-      // Given
-      const { changeEmail, authenticator, navigation } = setup();
-
-      // When
-      changeEmail.leave();
-
-      // Then
-      expect(navigation.go).toHaveBeenCalledExactlyOnceWith(SETTINGS_PATH);
-      expect(navigation.replace).not.toHaveBeenCalled();
-      expect(authenticator.requestEmailChange).not.toHaveBeenCalled();
-      expect(authenticator.confirmEmailChange).not.toHaveBeenCalled();
-      expect(authenticator.resendEmailChangeCode).not.toHaveBeenCalled();
     });
   });
 

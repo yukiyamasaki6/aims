@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 import { roundIdOfPath } from "../domain/round-routes";
 import { FetchState, LoadingState, NotFoundState } from "./fetch-state";
 import { RoundDetailFrame } from "./round-detail-frame";
@@ -22,6 +23,17 @@ function ScorecardSkeleton() {
   );
 }
 
+// 取得中・見つからない・エラーの本文。スクロールの入れ物と、幅を絞った列。
+function DetailScroll({ children }: { children: ReactNode }) {
+  return (
+    <main className="h-full overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col p-8">
+        {children}
+      </div>
+    </main>
+  );
+}
+
 // pathnameは取得のkeyにだけ使い、初回描画は取得中の枠になる。
 // SSRのHTMLと、Service Workerが別URLへ返す枠のHTMLが同一になり、水和が一致する。
 // IDごとに部品を作り直す。詳細から別の詳細へ移っても、Nextのルーターは同じ枠の部品を作り直さないため、前のIDの状態が残る。
@@ -40,11 +52,13 @@ function InvalidRoundDetail() {
   const { view } = useFetchResult<never>(notFoundNow, whenOnline);
   return (
     <RoundDetailFrame>
-      {view.status === "loading" ? (
-        <LoadingState loading={<ScorecardSkeleton />} />
-      ) : (
-        <NotFoundState />
-      )}
+      <DetailScroll>
+        {view.status === "loading" ? (
+          <LoadingState loading={<ScorecardSkeleton />} />
+        ) : (
+          <NotFoundState />
+        )}
+      </DetailScroll>
     </RoundDetailFrame>
   );
 }
@@ -61,7 +75,13 @@ function RoundDetailLoader({ roundId }: { roundId: string }) {
   }
   return (
     <RoundDetailFrame>
-      <FetchState view={view} onRetry={retry} loading={<ScorecardSkeleton />} />
+      <DetailScroll>
+        <FetchState
+          view={view}
+          onRetry={retry}
+          loading={<ScorecardSkeleton />}
+        />
+      </DetailScroll>
     </RoundDetailFrame>
   );
 }

@@ -4,8 +4,16 @@ import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { type ReactNode, type TouchEvent, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  type TouchEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { LogoImage } from "@/components/logo-image";
+import { ScreenMenuProvider } from "@/components/screen-frame";
 import { cn } from "@/lib/utils";
 import {
   HOME_PATH,
@@ -85,16 +93,38 @@ function useDrawerSwipe(onClose: () => void) {
   };
 }
 
-export function LeftPanel() {
+// ドロワーを開いたらドロワーの中へフォーカスを移し、閉じたらメニューボタンへ戻す。
+// メニューボタンは本文側(DOMでドロワーより後)にあり、Tabだけではドロワーに入れないため。
+function useDrawerFocus(
+  open: boolean,
+  drawerRef: RefObject<HTMLElement | null>,
+  menuRef: RefObject<HTMLButtonElement | null>,
+) {
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    const drawer = drawerRef.current;
+    if (open) {
+      drawer?.querySelector<HTMLElement>("button")?.focus();
+    } else if (wasOpen.current) {
+      const active = document.activeElement;
+      if (!active || active === document.body || drawer?.contains(active))
+        menuRef.current?.focus();
+    }
+    wasOpen.current = open;
+  }, [open, drawerRef, menuRef]);
+}
+
+export function LeftPanel({ children }: { children: ReactNode }) {
   const { drawerOpen, setDrawerOpen, railOpen, setRailOpen } = useOpenState();
   // ホーム・履歴の項目の押下は、ドロワーの値だけを閉にする。列の値は変えない。
   const closeDrawer = () => setDrawerOpen(false);
   const swipe = useDrawerSwipe(closeDrawer);
+  const drawerRef = useRef<HTMLElement>(null);
+  const menuRef = useRef<HTMLButtonElement>(null);
+  useDrawerFocus(drawerOpen, drawerRef, menuRef);
 
   return (
     <>
-      <MobileMenuBar onOpen={() => setDrawerOpen(true)} />
-
       <Scrim
         open={drawerOpen}
         onClose={closeDrawer}
@@ -104,6 +134,7 @@ export function LeftPanel() {
       />
 
       <DrawerFrame
+        drawerRef={drawerRef}
         open={drawerOpen}
         onClose={closeDrawer}
         onNavigate={closeDrawer}
@@ -117,11 +148,25 @@ export function LeftPanel() {
         onToggle={() => setRailOpen(!railOpen)}
         onNavigate={closeDrawer}
       />
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <ScreenMenuProvider
+          menu={
+            <MenuButton
+              buttonRef={menuRef}
+              onOpen={() => setDrawerOpen(true)}
+            />
+          }
+        >
+          {children}
+        </ScreenMenuProvider>
+      </div>
     </>
   );
 }
 
 function DrawerFrame({
+  drawerRef,
   open,
   onClose,
   onNavigate,
@@ -129,6 +174,7 @@ function DrawerFrame({
   offset,
   dragging,
 }: {
+  drawerRef: RefObject<HTMLElement | null>;
   open: boolean;
   onClose: () => void;
   onNavigate: () => void;
@@ -139,6 +185,7 @@ function DrawerFrame({
   const t = useTranslations("navigation");
   return (
     <aside
+      ref={drawerRef}
       {...swipe}
       style={{
         transform: `translateX(${offset}px)`,
@@ -146,9 +193,12 @@ function DrawerFrame({
       }}
       className={cn(
         "fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col overflow-y-auto border-r bg-card text-card-foreground md:hidden",
+        // 開くときはvisibilityを即時に変える(開いた直後のfocus()が効くように)。閉じるときだけ、動きの終わりまで見せる。
         dragging
           ? "transition-none"
-          : "transition-[transform,translate,visibility] duration-200",
+          : open
+            ? "transition-[transform,translate] duration-200"
+            : "transition-[transform,translate,visibility] duration-200",
         open ? "translate-x-0" : "invisible",
       )}
     >
@@ -264,20 +314,25 @@ function PanelBody({
   );
 }
 
-// ドロワーの開き口。1つの要素で、縦向きは上端の横のバー、横向きは左端の縦の帯(ハンバーガーだけ)の形になる。
-function MobileMenuBar({ onOpen }: { onOpen: () => void }) {
+// ドロワーの開き口。画面のヘッダー行の先頭に、ScreenFrameが置く。
+function MenuButton({
+  onOpen,
+  buttonRef,
+}: {
+  onOpen: () => void;
+  buttonRef: RefObject<HTMLButtonElement | null>;
+}) {
   const t = useTranslations("navigation");
   return (
-    <div className="flex shrink-0 items-center border-b p-3 md:hidden max-md:landscape:w-14 max-md:landscape:items-start max-md:landscape:justify-center max-md:landscape:border-r max-md:landscape:border-b-0">
-      <button
-        type="button"
-        onClick={onOpen}
-        aria-label={t("leftPanelOpenMenu")}
-        className="flex items-center"
-      >
-        <Menu className="size-5" />
-      </button>
-    </div>
+    <button
+      ref={buttonRef}
+      type="button"
+      onClick={onOpen}
+      aria-label={t("leftPanelOpenMenu")}
+      className="flex shrink-0 items-center p-1.5 md:hidden"
+    >
+      <Menu className="size-5" />
+    </button>
   );
 }
 

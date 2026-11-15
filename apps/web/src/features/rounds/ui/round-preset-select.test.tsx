@@ -10,6 +10,7 @@ import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { ROUNDS_HOME_PATH } from "@/routes";
 import type { FetchResult } from "../domain/fetch-status";
 import type { Preset, Presets } from "../domain/preset";
 import { RoundPresetSelect } from "./round-preset-select";
@@ -174,6 +175,28 @@ beforeEach(() => {
 });
 
 describe("RoundPresetSelect", () => {
+  describe("ヘッダー", () => {
+    it("見出し「作成」と、ホームへの戻るのリンク1つがヘッダーにあり、本文には戻るも見出しも無い", () => {
+      // Given
+      loadPresets.mockReturnValue(new Promise(() => {}));
+
+      // When
+      render(<RoundPresetSelect />);
+
+      // Then
+      const heading = screen.getByRole("heading", {
+        level: 1,
+        name: roundsText("newRoundTitle"),
+      });
+      expect(heading.closest("header")).not.toBeNull();
+      const backs = screen.getAllByRole("link", { name: roundsText("back") });
+      expect(backs).toHaveLength(1);
+      expect(backs[0].closest("header")).not.toBeNull();
+      expect(backs[0]).toHaveAttribute("href", ROUNDS_HOME_PATH);
+      expect(within(screen.getByRole("main")).queryByRole("link")).toBeNull();
+    });
+  });
+
   describe("取得の状態", () => {
     it("取得中は読み込み中の表示と、枠と、押せる開始ボタンを表示し、プリセットの見出しは出さない", () => {
       // Given

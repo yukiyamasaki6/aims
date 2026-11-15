@@ -6,7 +6,6 @@ import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import { SETTINGS_PATH } from "@/routes";
 import type { CallResult } from "../application/call-result";
 import {
@@ -46,12 +45,10 @@ function setup(
   const authenticator = createFakeChangeEmailAuthenticator(results);
   const connectivity = createFakeConnectivity(offline);
   const clock = createManualClock();
-  const navigation = createFakePageNavigation();
   const changeEmail = createChangeEmail({
     authenticator,
     connectivity,
     clock,
-    pageNavigation: navigation.pageNavigation,
   });
   const form = <ChangeEmailForm changeEmail={changeEmail} siteKey="site-key" />;
   const rendered = render(form, { wrapper: IntlTestProvider });
@@ -59,7 +56,6 @@ function setup(
     authenticator,
     connectivity,
     clock,
-    navigation,
     form,
     ...rendered,
   };
@@ -425,7 +421,7 @@ describe("メールアドレス変更画面の部品", () => {
 
     it("戻ると入力の段階に戻る", async () => {
       // Given
-      const { navigation } = setup();
+      setup();
       const user = userEvent.setup();
       await advanceToCodeStep(user);
 
@@ -435,7 +431,6 @@ describe("メールアドレス変更画面の部品", () => {
       // Then
       expect(emailInput()).toBeInTheDocument();
       expect(queryCodeInput("new")).toBeNull();
-      expect(navigation.go).not.toHaveBeenCalled();
     });
 
     it("戻った後に別のメールアドレスで、要求しなおせる", async () => {
@@ -538,7 +533,7 @@ describe("メールアドレス変更画面の部品", () => {
 
       it("見出しと戻ると、状態の領域の完了の文言が出て、現在のメールアドレス、入力欄、コード欄、確認と再送の操作は描かれず、画面に留まり、待機の刻みも続かない", async () => {
         // Given
-        const { authenticator, clock, navigation } = setup();
+        const { authenticator, clock } = setup();
         const user = userEvent.setup();
         const region = screen.getByRole("status");
 
@@ -552,9 +547,10 @@ describe("メールアドレス変更画面の部品", () => {
         expect(
           screen.getByRole("heading", { name: authText("changeEmailTitle") }),
         ).toBeInTheDocument();
+        expect(screen.queryAllByRole("button")).toHaveLength(0);
         expect(
-          screen.getAllByRole("button").map((button) => button.textContent),
-        ).toEqual([authText("back")]);
+          screen.getByRole("link", { name: authText("back") }),
+        ).toHaveAttribute("href", SETTINGS_PATH);
         expect(screen.queryByRole("textbox")).toBeNull();
         expect(
           screen.queryByText(
@@ -562,27 +558,24 @@ describe("メールアドレス変更画面の部品", () => {
           ),
         ).toBeNull();
         expect(clock.pendingCount()).toBe(0);
-        expect(navigation.go).not.toHaveBeenCalled();
-        expect(navigation.replace).not.toHaveBeenCalled();
       });
 
-      it("戻るを押すと、設定画面へ移り、入力段階にもコード確認にも戻らない", async () => {
+      it("戻るは設定画面へのリンクのままで、本文に戻るのボタンは無く、入力段階にもコード確認にも戻らない", async () => {
         // Given
-        const { authenticator, navigation } = setup();
+        const { authenticator } = setup();
         const user = userEvent.setup();
-        await complete(user, authenticator);
 
         // When
-        await user.click(
-          screen.getByRole("button", { name: authText("back") }),
-        );
+        await complete(user, authenticator);
 
         // Then
-        expect(navigation.go).toHaveBeenCalledExactlyOnceWith(SETTINGS_PATH);
+        expect(
+          screen.queryByRole("button", { name: authText("back") }),
+        ).toBeNull();
+        expect(
+          screen.getAllByRole("link", { name: authText("back") }),
+        ).toHaveLength(1);
         expect(screen.queryByRole("textbox")).toBeNull();
-        expect(screen.getByRole("status")).toHaveTextContent(
-          authText("changeEmailDone"),
-        );
       });
 
       it("画面を作り直すと、完了の文言は出ず、入力の段階で新しい現在のメールアドレスが表示される", async () => {
@@ -907,6 +900,27 @@ describe("メールアドレス変更画面の部品", () => {
         await act(async () => release());
       },
     );
+
+    it("処理中はヘッダーの戻るがリンクでなく押せず、処理が終わるとリンクに戻る", async () => {
+      // Given
+      const env = setup();
+      const user = userEvent.setup();
+      const release = await holdings.request(env, user);
+
+      // When
+      const during = screen
+        .getAllByText(authText("back"))
+        .filter((element) => element.closest("header"));
+      await act(async () => release());
+
+      // Then
+      expect(during).toHaveLength(1);
+      expect(during[0]).toHaveAttribute("aria-disabled", "true");
+      expect(during[0].closest("a")).toBeNull();
+      expect(
+        await screen.findByRole("link", { name: authText("back") }),
+      ).toHaveAttribute("href", SETTINGS_PATH);
+    });
   });
 
   describe("オフライン", () => {

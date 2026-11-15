@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { type ReactNode, Suspense, useLayoutEffect, useRef } from "react";
+import { ScreenFrame } from "@/components/screen-frame";
 import type { HistoryUnit } from "../domain/history-view-state";
 import {
   type HistoryListItem,
@@ -46,7 +47,7 @@ export function RoundsHistory() {
   );
 }
 
-// 履歴の枠。非スクロールの枠の中に、アイコンの層(上端から8px、一覧の幅の右端)と、スクロールの入れ物を別の要素として置く。一覧の先頭の空白(pt-14 = アイコンの上端8px + 48px)はスクロールの内容の側にある。
+// 履歴の枠。ヘッダーの右端にフィルターのアイコンを置き、本文はスクロールの入れ物に入れる。
 function HistoryFrame({
   icon,
   children,
@@ -54,17 +55,13 @@ function HistoryFrame({
   icon: ReactNode;
   children: ReactNode;
 }) {
+  const t = useTranslations("rounds");
   return (
-    <div className="relative h-full">
-      <div className="pointer-events-none absolute inset-x-0 top-2 z-10">
-        <div className="mx-auto flex max-w-xl justify-end px-8">
-          <div className="pointer-events-auto size-12">{icon}</div>
-        </div>
-      </div>
+    <ScreenFrame title={t("historyTitle")} trailing={icon}>
       <div className="h-full overflow-y-auto">
-        <main className="mx-auto max-w-xl px-8 pt-14 pb-8">{children}</main>
+        <main className="mx-auto max-w-xl px-8 py-8">{children}</main>
       </div>
-    </div>
+    </ScreenFrame>
   );
 }
 

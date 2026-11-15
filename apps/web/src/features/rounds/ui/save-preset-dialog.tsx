@@ -6,6 +6,7 @@ import { BusyButton } from "@/components/ui/busy-button";
 import { buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { generatePresetName } from "../domain/preset-save";
 import { compareDistancePosition } from "../domain/scorecard-scoring";
 import type { Distance } from "../domain/scorecard-types";
@@ -56,7 +57,10 @@ export function SavePresetDialog({
     >
       <DialogTrigger
         data-testid="save-as-preset-trigger"
-        className={buttonVariants({ variant: "default", size: "sm" })}
+        className={cn(
+          buttonVariants({ variant: "default", size: "sm" }),
+          "m-1.5",
+        )}
       >
         {t("presetSaveTrigger")}
       </DialogTrigger>

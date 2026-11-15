@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
@@ -133,6 +133,30 @@ afterEach(() => {
 });
 
 describe("RoundDetailClient", () => {
+  describe("ヘッダー", () => {
+    it.each([
+      ["取得中", { status: "loading" }],
+      ["見つからない", { status: "not-found" }],
+      ["オフライン", { status: "offline" }],
+      ["エラー", { status: "error", reason: "failed" }],
+    ] as const)(
+      "%sでは、戻るのリンクだけがヘッダーにあり、プリセット保存とラウンドのメニューは出ない",
+      (_name, view) => {
+        // Given
+        fake.setView(ID, view);
+
+        // When
+        renderDetail();
+
+        // Then
+        const back = screen.getByRole("link", { name: roundsText("back") });
+        const header = back.closest("header");
+        expect(header).not.toBeNull();
+        expect(within(header as HTMLElement).queryByRole("button")).toBeNull();
+      },
+    );
+  });
+
   describe("取得中", () => {
     it("取得中は、戻るリンクと読み込み中の表示を出し、スコアカードは出さない", () => {
       // Given
