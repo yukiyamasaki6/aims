@@ -37,6 +37,10 @@ describe("next.config rewrites", () => {
         source: "/__shell/settings/password",
         destination: "/settings/password",
       },
+      {
+        source: "/__shell/settings/delete-account",
+        destination: "/settings/delete-account",
+      },
     ]);
   });
 

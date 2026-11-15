@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { ROUND_PRESET_SELECT } from "./reference-query-constants";
-import { createReferenceSnapshots } from "./reference-snapshot";
+import {
+  createReferenceSnapshots,
+  eraseReferenceSnapshots,
+} from "./reference-snapshot";
 
 const IDENTITY_KEY = "aims:local-user-id";
 
@@ -256,5 +259,37 @@ describe("createReferenceSnapshots", () => {
 
     // Then
     expect(loaded).toBeNull();
+  });
+});
+
+describe("eraseReferenceSnapshots", () => {
+  it("指定した利用者の全ての種類の参照データを消し、他の利用者の参照データは消さない", () => {
+    // Given
+    snapshots.save("presets", "user-1", { a: 1 }, 100);
+    snapshots.save("target-faces", "user-1", [{ id: "face-1" }], 100);
+    snapshots.save("presets", "user-2", { b: 2 }, 100);
+    snapshots.save("target-faces", "user-2", [{ id: "face-2" }], 100);
+
+    // When
+    eraseReferenceSnapshots("user-1");
+
+    // Then
+    expect(localStorage.getItem("aims:reference:presets:user-1")).toBeNull();
+    expect(
+      localStorage.getItem("aims:reference:target-faces:user-1"),
+    ).toBeNull();
+    expect(storedData("user-2")).toEqual({ b: 2 });
+    expect(
+      localStorage.getItem("aims:reference:target-faces:user-2"),
+    ).not.toBeNull();
+  });
+
+  it("消す参照データが無くても、投げない", () => {
+    // Given
+    // When
+    const erase = () => eraseReferenceSnapshots("user-1");
+
+    // Then
+    expect(erase).not.toThrow();
   });
 });

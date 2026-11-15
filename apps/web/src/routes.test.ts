@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CHANGE_EMAIL_PATH,
   CHANGE_PASSWORD_PATH,
+  DELETE_ACCOUNT_PATH,
   FRAME_PATHS,
   frameHtmlOf,
   roundPath,
@@ -20,6 +21,7 @@ describe("routes", () => {
         "/settings",
         "/settings/email",
         "/settings/password",
+        "/settings/delete-account",
       ];
 
       // When
@@ -39,12 +41,16 @@ describe("routes", () => {
           url: "/__shell/settings/password",
           html: "settings/password.html",
         },
+        {
+          url: "/__shell/settings/delete-account",
+          html: "settings/delete-account.html",
+        },
       ]);
     });
   });
 
   describe("FRAME_PATHS", () => {
-    it("ラウンドの4画面と設定の3画面を、重複なく含む", () => {
+    it("ラウンドの4画面と設定の4画面を、重複なく含む", () => {
       // Given
       // When
       const paths = FRAME_PATHS;
@@ -53,8 +59,9 @@ describe("routes", () => {
       expect(SETTINGS_PATH).toBe("/settings");
       expect(CHANGE_EMAIL_PATH).toBe("/settings/email");
       expect(CHANGE_PASSWORD_PATH).toBe("/settings/password");
-      expect(paths).toHaveLength(7);
-      expect(new Set(paths).size).toBe(7);
+      expect(DELETE_ACCOUNT_PATH).toBe("/settings/delete-account");
+      expect(paths).toHaveLength(8);
+      expect(new Set(paths).size).toBe(8);
       expect(paths).toEqual(
         expect.arrayContaining([
           "/rounds",
@@ -64,6 +71,7 @@ describe("routes", () => {
           "/settings",
           "/settings/email",
           "/settings/password",
+          "/settings/delete-account",
         ]),
       );
     });

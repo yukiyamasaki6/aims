@@ -119,4 +119,39 @@ describe("createMemoryOpLogStore", () => {
     expect(group?.base).toBeUndefined();
     expect(group?.entries.map((row) => row.eventId)).toEqual(["b"]);
   });
+
+  it("指定した利用者の行とベースを全ての列から消し、他の利用者と利用者なしの行は残す", async () => {
+    // Given
+    const s = store();
+    await s.append(entry("a", "s1", "u1"));
+    await s.append(entry("b", "s2", "u1"));
+    await s.append(entry("c", "s1", "u2"));
+    await s.append(entry("d", "s1", null));
+    await s.commit("s3", "u1", { revision: 1 }, 10);
+    await s.commit("s3", "u2", { revision: 1 }, 10);
+
+    // When
+    await s.erase("u1");
+
+    // Then
+    expect((await s.loadAll("u1")).size).toBe(0);
+    expect(
+      (await s.loadAll("u2")).get("s1")?.entries.map((r) => r.eventId),
+    ).toEqual(["c"]);
+    expect((await s.loadAll("u2")).get("s3")?.base).toBeDefined();
+    expect(
+      (await s.loadAll(null)).get("s1")?.entries.map((r) => r.eventId),
+    ).toEqual(["d"]);
+  });
+
+  it("消す行が無くても失敗しない", async () => {
+    // Given
+    const s = store();
+
+    // When
+    const erasing = s.erase("u1");
+
+    // Then
+    await expect(erasing).resolves.toBeUndefined();
+  });
 });

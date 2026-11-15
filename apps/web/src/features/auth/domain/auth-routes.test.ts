@@ -23,6 +23,7 @@ describe("allowedReturnTo", () => {
       ["/settings", "/settings"],
       ["/settings/", "/settings/"],
       ["/settings?x=1", "/settings?x=1"],
+      ["/settings/delete-account", "/settings/delete-account"],
     ])("%sを検証して%sを返す", (raw, expected) => {
       // Given
 
@@ -256,6 +257,11 @@ describe("redirectFor", () => {
       "未認証で/settings/passwordを開くと、その遷移元つきのサインイン",
       { pathname: "/settings/password" },
       "/signin?returnTo=%2Fsettings%2Fpassword",
+    ],
+    [
+      "未認証で/settings/delete-accountを開くと、その遷移元つきのサインイン",
+      { pathname: "/settings/delete-account" },
+      "/signin?returnTo=%2Fsettings%2Fdelete-account",
     ],
     [
       "認証済みでサインインを設定の遷移元付きで開くと、設定",

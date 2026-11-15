@@ -36,6 +36,7 @@ describe("proxy", () => {
       `${ROUNDS_PATH}/1`,
       "/settings",
       "/settings/1",
+      "/settings/delete-account",
     ])("%sで実行する", (url) => {
       // Given
       // When
@@ -135,6 +136,22 @@ describe("proxy", () => {
       // Then
       expect(response.headers.get("location")).toBe(
         "https://app.example.com/signin?returnTo=%2Fsettings",
+      );
+    });
+
+    it("未認証でアカウント削除の経路を開くと、その経路を遷移元に付けてサインインへリダイレクトする", async () => {
+      // Given
+      db.getClaims.mockResolvedValue({ data: null, error: null });
+
+      // When
+      const request = new NextRequest(
+        "https://app.example.com/settings/delete-account",
+      );
+      const response = await proxy(request);
+
+      // Then
+      expect(response.headers.get("location")).toBe(
+        "https://app.example.com/signin?returnTo=%2Fsettings%2Fdelete-account",
       );
     });
 

@@ -4,10 +4,14 @@ import { type ReactNode, useId } from "react";
 import { ScreenFrame } from "@/components/screen-frame";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CHANGE_EMAIL_PATH, CHANGE_PASSWORD_PATH } from "@/routes";
+import {
+  CHANGE_EMAIL_PATH,
+  CHANGE_PASSWORD_PATH,
+  DELETE_ACCOUNT_PATH,
+} from "@/routes";
 
 // 設定の画面。見出しと、分類ごとの区画を描く。
-// account: 分類「アカウント」の、メールアドレス変更とパスワード変更の項目に続く中身(サインアウトなど、認証の部品)。入口が渡す。
+// account: 分類「アカウント」の、メールアドレス変更、パスワード変更、アカウント削除の項目に続く中身(サインアウトなど、認証の部品)。入口が渡す。
 export function SettingsScreen({ account }: { account: ReactNode }) {
   const t = useTranslations("settings");
   const accountTitleId = useId();
@@ -41,6 +45,14 @@ export function SettingsScreen({ account }: { account: ReactNode }) {
                 )}
               >
                 {t("changePasswordItem")}
+              </Link>
+              <Link
+                href={DELETE_ACCOUNT_PATH}
+                className={cn(
+                  buttonVariants({ variant: "ghost", size: "row" }),
+                )}
+              >
+                {t("deleteAccountItem")}
               </Link>
               {account}
             </div>

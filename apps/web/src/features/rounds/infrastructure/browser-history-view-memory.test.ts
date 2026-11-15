@@ -3,7 +3,10 @@ import {
   DEFAULT_HISTORY_VIEW_STATE,
   type HistoryViewState,
 } from "../domain/history-view-state";
-import { createBrowserHistoryViewMemory } from "./browser-history-view-memory";
+import {
+  createBrowserHistoryViewMemory,
+  eraseHistoryViewMemory,
+} from "./browser-history-view-memory";
 
 const saved: HistoryViewState = {
   input: {
@@ -287,5 +290,41 @@ describe("createBrowserHistoryViewMemory", () => {
       // Then
       expect(write).not.toThrow();
     });
+  });
+});
+
+describe("eraseHistoryViewMemory", () => {
+  it("このタブの記憶が指定した利用者のものなら消し、既定の状態に戻る", () => {
+    // Given
+    const memory = createBrowserHistoryViewMemory(identityReader);
+    memory.write(saved);
+
+    // When
+    eraseHistoryViewMemory("user-1");
+
+    // Then
+    expect(window.sessionStorage.getItem("aims:history-view")).toBeNull();
+    expect(memory.read()).toEqual(DEFAULT_HISTORY_VIEW_STATE);
+  });
+
+  it("別の利用者の記憶は消さない", () => {
+    // Given
+    const memory = createBrowserHistoryViewMemory(identityReader);
+    memory.write(saved);
+
+    // When
+    eraseHistoryViewMemory("user-2");
+
+    // Then
+    expect(memory.read()).toEqual(saved);
+  });
+
+  it("記憶が無いとき、投げない", () => {
+    // Given
+    // When
+    const erase = () => eraseHistoryViewMemory("user-1");
+
+    // Then
+    expect(erase).not.toThrow();
   });
 });

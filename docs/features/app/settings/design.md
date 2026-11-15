@@ -4,7 +4,7 @@
 
 設定画面は`/settings`の1画面で、`(main)`配下に置く(認証の保護とセッション喪失の見張りは他の画面と同じ)。
 分類は縦に並べた区画で表し、今は「アカウント」の1つである。分類ごとのURLと、分類の一覧(タブや側面の一覧)は持たない。
-分類「アカウント」に「メールアドレス変更」と「パスワード変更」の項目(リンク)を置き、専用の画面`/settings/email`(`auth/change-email`)と`/settings/password`(`auth/change-password`)へ移る。項目の画面は、分類ではなく項目ごとのURLを持つ。
+分類「アカウント」に「メールアドレス変更」「パスワード変更」「アカウント削除」の項目(リンク)を置き、専用の画面`/settings/email`(`auth/change-email`)、`/settings/password`(`auth/change-password`)、`/settings/delete-account`(`auth/delete-account`)へ移る。項目の画面は、分類ではなく項目ごとのURLを持つ。
 サインアウトは認証の部品(`SignOutButton`)を、入口が分類「アカウント」の区画へ渡して置く。
 画面の枠(`/__shell/settings`)をオフライン用に保存し、オフラインでもサインアウトできる。
 レフトパネルは、サインアウトのあった下端に「設定」項目を置く。
@@ -13,7 +13,7 @@
 
 | 画面・状態 | 内容 |
 | :--- | :--- |
-| `/settings`(認証済み) | 共用のヘッダーの現在地「設定」(`app/navigation`)と、本文に分類「アカウント」の区画(メールアドレス変更とパスワード変更の項目、サインアウト)を表示する。 |
+| `/settings`(認証済み) | 共用のヘッダーの現在地「設定」(`app/navigation`)と、本文に分類「アカウント」の区画(メールアドレス変更、パスワード変更、アカウント削除の項目、サインアウト)を表示する。 |
 | `/settings`(未認証) | `proxy.ts`が遷移元付きで`/signin`へ送る。サインインすると`/settings`へ戻る。 |
 | `/settings`(オフライン) | Service Workerが保存済みの枠を返す。未認証の確定は`(main)`の見張りが`/signin`へ移す。 |
 
@@ -55,11 +55,11 @@
 - `src/app/(main)/settings/page.tsx`(入口): クライアントのページ。`useSession`で受け取った手続きの`signOut`で`SignOutButton`を作り、`SettingsScreen`の分類「アカウント」の枠へ渡す。
 - `src/components/ui/button.tsx`(共有の画面部品): 大きさの種類に`row`を足す。
 - `src/features/settings/ui/settings-screen.tsx`(UI層): 共用のヘッダー枠(`components/screen-frame.tsx`)に現在地「設定」を入れ、本文に分類の区画(見出し付き)と、項目の枠を描く。分類の内容は入口が渡す。
-  行は、「メールアドレス変更」「パスワード変更」のリンクと、入口が渡す`account`(サインアウトの行)を並べる。
+  行は、「メールアドレス変更」「パスワード変更」「アカウント削除」のリンクと、入口が渡す`account`(サインアウトの行)を並べる。
   先頭・末尾の角丸は、子の位置を当てる並べる`div`のクラスで付け、行の数が増えても崩れない。
-  `account`は、流れの中に行となる要素を1つだけ描く(確認ダイアログはポータルで、流れに要素を足さない)。「メールアドレス変更」「パスワード変更」の項目は、経路表の`CHANGE_EMAIL_PATH`、`CHANGE_PASSWORD_PATH`へのリンクとしてここで描く(認証の部品を要さない)。認証の部品(サインアウト)は入口が渡す。認証状態は持たない。
+  `account`は、流れの中に行となる要素を1つだけ描く(確認ダイアログはポータルで、流れに要素を足さない)。「メールアドレス変更」「パスワード変更」「アカウント削除」の項目は、経路表の`CHANGE_EMAIL_PATH`、`CHANGE_PASSWORD_PATH`、`DELETE_ACCOUNT_PATH`へのリンクとしてここで描く(認証の部品を要さない)。認証の部品(サインアウト)は入口が渡す。認証状態は持たない。
 - `src/features/settings/ui/settings-messages.ts`(UI層): 文言の一覧(名前空間`settings`)。
-- `src/routes.ts`(経路表): `SETTINGS_PATH`(`/settings`)と、`CHANGE_EMAIL_PATH`(`/settings/email`)と、`CHANGE_PASSWORD_PATH`(`/settings/password`)と、全ての画面の枠の一覧`FRAME_PATHS`(ラウンドの4画面と、設定の3画面)を持つ。
+- `src/routes.ts`(経路表): `SETTINGS_PATH`(`/settings`)と、`CHANGE_EMAIL_PATH`(`/settings/email`)と、`CHANGE_PASSWORD_PATH`(`/settings/password`)と、`DELETE_ACCOUNT_PATH`(`/settings/delete-account`)と、全ての画面の枠の一覧`FRAME_PATHS`(ラウンドの4画面と、設定の4画面)を持つ。
 - 保護の範囲は、`features/auth/domain/auth-routes.ts`が`ROUNDS_PATH`と`SETTINGS_PATH`とその配下とする。遷移元の許可も同じ範囲である。
 - `src/proxy.ts`の`matcher`に`/settings/:path*`を加え、`proxy.test.ts`が経路表との一致を確かめる。
 - 枠の保存と配布(`serwist.config.mjs`、`next.config.ts`の`/__shell/*`のrewrite、`sw.ts`の枠の判定)は`app/offline-pwa`に従い、`FRAME_PATHS`から導く。
@@ -78,11 +78,12 @@
 
 ## 制約と未対応
 
-- 分類は「アカウント」の1つで、設定項目はメールアドレス変更、パスワード変更、サインアウトである。
+- 分類は「アカウント」の1つで、設定項目はメールアドレス変更、パスワード変更、アカウント削除、サインアウトである。
+  項目の並びは、メールアドレス変更、パスワード変更、アカウント削除(リンク)、サインアウト(入口が渡す)の順である。
 - 見た目は、本番ビルドの撮影(PC 1280x800、SP 390x844)で確かめた(E2Eでは確かめない)。
   外枠はなく、行ごとの角丸で、先頭の行は上の角、末尾の行は下の角だけが丸い。
   行の間の区切り線は、`border-foreground/40`ではっきり見える。
   フォーカスリングは切れず、行の外側まで全周に見える。
   `z-10`のフォーカス中の行は、隣の行の枠線の上に描かれ、他の行の枠・文字に干渉しない。
   リングは薄い灰色で、白い背景では目立ちが弱い。
-- `/settings`の下の画面は、`/settings/email`と`/settings/password`だけである。他の`/settings/…`は保護されるが、画面はなく404になる。
+- `/settings`の下の画面は、`/settings/email`、`/settings/password`、`/settings/delete-account`だけである。他の`/settings/…`は保護されるが、画面はなく404になる。

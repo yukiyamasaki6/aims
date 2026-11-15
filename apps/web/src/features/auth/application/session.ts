@@ -6,8 +6,10 @@ import {
   beginSignOut,
   endSignOut,
   expireSignOut,
+  HOLD_TIMEOUT_MS,
   initialSessionEndFlow,
   leave,
+  releaseEnd,
   SIGN_OUT_TIMEOUT_MS,
   type SignOutVerdict,
 } from "../domain/session-end-flow";
@@ -51,6 +53,22 @@ export type SignOutResult =
   | { readonly kind: "failed"; readonly failure: AuthFailure }
   | { readonly kind: "ignored" };
 
+// アカウント削除がセッションの終了の実行中を保持している間の手続き。保持はサインアウトと同じ実行中の排他を取り、保持の間の喪失の遷移を保留する。
+// 例外は投げない。
+export type SessionEndHold = {
+  // 保持の上限(HOLD_TIMEOUT_MS)に達して打ち切られたときに解決する。打ち切りは実行中を解いて世代を進める。解除した後は解決しない。
+  readonly expired: Promise<void>;
+  // 保持が有効か。打ち切られた後(世代が進んだ後)と解いた後は偽で、遅れて届いた結果が何も変えないために使う。
+  isActive(): boolean;
+  // 上限の計時を止める。削除の応答を受けた時点で呼ぶ。
+  disarm(): void;
+  // この端末のサインインを終え、終えられたら遷移元を付けずにサインインへ移す。サインアウトの終え方と共通で、SIGN_OUT_TIMEOUT_MSで打ち切る。
+  // failed: 終えられなかった(通信エラー)。それ以外は、完了(遷移で画面ごと捨てられる)。
+  complete(): Promise<SignOutResult>;
+  // 実行中を解き、サインインの状態を確かめて、失っていれば喪失として移す。
+  release(): Promise<void>;
+};
+
 type Dependencies = {
   authenticator: SessionAuthenticator;
   pageReplace: PageReplace;
@@ -62,6 +80,8 @@ type Dependencies = {
 export type Session = {
   // サインアウトを始める。実行中の判定は集約が持ち、実行中に呼ぶと何もしない(ignored)。終えられたら、遷移元を付けずにサインインへ移す。
   signOut(): Promise<SignOutResult>;
+  // セッションの終了の実行中を保持する(アカウント削除用)。実行中のとき(サインアウトの実行中、別の保持)は保持できずnull。保持の間、喪失の遷移は保留する。
+  holdEnd(): SessionEndHold | null;
   // セッションの喪失と、記録の利用者と違う利用者のサインインを見張る。失ったらサインインへ、違う利用者なら今の場所へ、ページ全体を置き換える。見張りをやめる関数を返す。
   watch(): () => void;
 };
@@ -76,7 +96,7 @@ function resultOf(verdict: SignOutVerdict): SignOutResult {
 // 手続き全体はSIGN_OUT_TIMEOUT_MSで打ち切り、終えられなかった(通信エラー)として返す。打ち切った後の続きは、世代が違うため何も変えない(遅れて本当にサインアウトできたときは、見張りがサインインへ移す)。
 // セッションの喪失(サインアウトの通知、更新の拒否、確認の結果の未認証)は見張りが検知して移す。サインアウトの実行中の喪失は、サインアウトの判定に委ねる。
 // サインインの通知の利用者が記録の利用者と違うとき(起動時の復元の不一致、別の利用者のサインイン)は、新しい利用者を端末の識別情報へ書き、今の場所を読み込み直す。新しい文書は、その利用者の記録で起動する。
-// 実行中の状態(SessionEndFlow)は、この手続きが1つ持ち、サインアウトと見張りの両方が使う。
+// 実行中の状態(SessionEndFlow)は、この手続きが1つ持ち、サインアウトと見張りと、アカウント削除の保持(holdEnd)が使う。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: サインアウトと見張りが1つの可変の状態(flow)を共有するファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すことになり、責務は分かれず追いにくくなる。
 export function createSession({
   authenticator,
@@ -87,12 +107,16 @@ export function createSession({
 }: Dependencies): Session {
   let flow = initialSessionEndFlow;
 
-  // 打ち切りは、時計のコールバックの中で同期に適用する。完了と同時なら、先に決まった一方だけが効く。
   async function signOut(): Promise<SignOutResult> {
     const start = beginSignOut(flow);
     flow = start.state;
     if (start.request === null) return { kind: "ignored" };
-    const mine = flow.generation;
+    return endWithin(flow.generation);
+  }
+
+  // 世代mineの実行を、サインインの終了の上限(SIGN_OUT_TIMEOUT_MS)で打ち切って進める。
+  // 打ち切りは、時計のコールバックの中で同期に適用する。完了と同時なら、先に決まった一方だけが効く。
+  async function endWithin(mine: number): Promise<SignOutResult> {
     const { promise: expired, resolve } =
       Promise.withResolvers<SignOutResult>();
     const cancel = clock.after(SIGN_OUT_TIMEOUT_MS, () => {
@@ -118,6 +142,36 @@ export function createSession({
     flow = ended.state;
     if (ended.result.kind === "completed") go(signInHref(null));
     return resultOf(ended.result);
+  }
+
+  // 保持は、サインアウトと同じ実行中の排他を取り、保持の上限で打ち切る。打ち切りの後に遅れて届いた結果は、世代が違うため何も変えない。
+  function holdEnd(): SessionEndHold | null {
+    const start = beginSignOut(flow);
+    flow = start.state;
+    if (start.request === null) return null;
+    const mine = flow.generation;
+    const { promise: expired, resolve } = Promise.withResolvers<void>();
+    const cancel = clock.after(HOLD_TIMEOUT_MS, () => {
+      const expiry = expireSignOut(flow, mine);
+      if (expiry === null) return;
+      flow = expiry.state;
+      resolve();
+    });
+    return {
+      expired,
+      isActive: () => flow.running && flow.generation === mine,
+      disarm: cancel,
+      complete() {
+        cancel();
+        return endWithin(mine);
+      },
+      async release() {
+        cancel();
+        flow = releaseEnd(flow, mine);
+        const reading = await authenticator.readSession();
+        if (lostByStatus(reading.status)) lose();
+      },
+    };
   }
 
   function go(destination: string) {
@@ -166,5 +220,5 @@ export function createSession({
     };
   }
 
-  return { signOut, watch };
+  return { signOut, holdEnd, watch };
 }

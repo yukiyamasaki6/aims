@@ -187,6 +187,18 @@ export function createIndexedDbOpLogStore<Op extends OpBase, Base>(
       }
       await tx.done;
     },
+    erase(userId) {
+      return inTransaction(async (tx) => {
+        const ops = tx.objectStore(STORE_NAME);
+        for (const entry of await ops.getAll()) {
+          if (entry.userId === userId) await ops.delete(entry.seq);
+        }
+        const bases = tx.objectStore(BASE_STORE_NAME);
+        for (const key of await bases.getAllKeys()) {
+          if (key[0] === userId) await bases.delete(key);
+        }
+      });
+    },
   };
 }
 

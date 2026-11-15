@@ -34,6 +34,7 @@
 - `src/features/auth/application/session.ts`: 手続き。`signOut`（実行中なら何もせず`ignored`、認証サービスに頼む、サインインの状態を読む、判定する、終えられたら遷移する）と、`watch`（喪失の検知と遷移、記録の利用者と違う利用者のサインインの検知と読み込み直し）の順序を持つ。不一致のときは、新しい利用者を端末の識別情報へ書き、読み戻せたときだけ今の場所を読み込み直す。記録の利用者の照合(`RecordUser`の`isRecordUser`)と識別情報の書き込みは、入口が引数で渡す。集約の現在の値を持ち、サインインの状態の読み取りを宣言する(ページ全体の置き換えの約束`PageReplace`は`page-replace.ts`)。見張りの読み込み直しは、サインイン・サインアップの完了が置き換えで済むようになっても残る。起動時の復元での食い違い、確認コードの検証だけで中断した後の`(main)`への移動、別のタブや再表示で届くサインインは、`(main)`の初回の通知でしか検知できないためである。
 - `src/features/auth/ui/session-context.tsx`: `SessionProvider`と`useSession`。入口(`src/app/root-client-entry.tsx`)がアプリで1つ生成したセッションの手続きを、認証が要る画面の集合(`(main)`のレイアウト)と、設定画面のページへ渡す。
 - `src/features/auth/domain/session-end-flow.ts`: 集約。実行中の判定、打ち切りの上限`SIGN_OUT_TIMEOUT_MS`と世代(開始と打ち切りで進め、打ち切られた実行の遅れた続きを見分ける)、打ち切りの適用`expireSignOut`、終えられたかの判定（呼び出しの後の未認証。喪失の定義と同じ）、置き換える先を返す`leave`（実行中は置き換えない、通知の利用者が記録の利用者と同じなら置き換えない）、遷移は1回、行き先を守る。
+- `src/features/auth/application/session.ts`の`holdEnd()`は、同じ実行中の排他をアカウント削除に貸す(`docs/features/auth/design.md`)。
 - `src/features/auth/domain/auth-change.ts`: サインインの状態の分類と、確かめた結果の喪失の定義。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装（`docs/features/auth/design.md`）。この端末のサインアウト（範囲`local`）、サインインの状態の読み取り、認証状態の変化の購読を含む。接続は、渡された関数で使うたびに取得する。
 - `src/features/auth/infrastructure/browser-page-load.ts`: ページ全体の読み込みと置き換え、今の場所の読み出し。サインアウトの完了、喪失、利用者の不一致の3つの置き換えと、サインイン・サインアップの入口(完了の置き換え)が同じ部品を使う。

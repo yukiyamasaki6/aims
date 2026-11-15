@@ -50,7 +50,7 @@ describe("SettingsScreen", () => {
     ).toBeNull();
   });
 
-  it("分類「アカウント」の区画の中に、「メールアドレス変更」と「パスワード変更」の項目を表示する", () => {
+  it("分類「アカウント」の区画の中に、「メールアドレス変更」「パスワード変更」「アカウント削除」の項目を表示する", () => {
     // Given
     // When
     render(<SettingsScreen account={null} />, {
@@ -68,9 +68,14 @@ describe("SettingsScreen", () => {
         name: settingsText("changePasswordItem"),
       }),
     ).toBeVisible();
+    expect(
+      within(accountSection()).getByRole("link", {
+        name: settingsText("deleteAccountItem"),
+      }),
+    ).toBeVisible();
   });
 
-  it("「メールアドレス変更」の項目を、「パスワード変更」の項目より上に表示する", () => {
+  it("「メールアドレス変更」「パスワード変更」「アカウント削除」の項目を、この順に表示する", () => {
     // Given
     // When
     render(<SettingsScreen account={null} />, {
@@ -84,6 +89,7 @@ describe("SettingsScreen", () => {
     expect(names).toEqual([
       settingsText("changeEmailItem"),
       settingsText("changePasswordItem"),
+      settingsText("deleteAccountItem"),
     ]);
   });
 
@@ -115,7 +121,7 @@ describe("SettingsScreen", () => {
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
-  it("分類の中身を渡さなければ、区画には見出しと、メールアドレス変更とパスワード変更の項目だけを表示し、ボタンはない", () => {
+  it("分類の中身を渡さなければ、区画には見出しと、メールアドレス変更、パスワード変更、アカウント削除の項目だけを表示し、ボタンはない", () => {
     // Given
     // When
     render(<SettingsScreen account={null} />, {
@@ -125,7 +131,7 @@ describe("SettingsScreen", () => {
     // Then
     const region = accountSection();
     expect(within(region).getAllByRole("heading")).toHaveLength(1);
-    expect(within(region).getAllByRole("link")).toHaveLength(2);
+    expect(within(region).getAllByRole("link")).toHaveLength(3);
     expect(within(region).queryByRole("button")).toBeNull();
   });
 
