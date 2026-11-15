@@ -139,6 +139,22 @@ describe("RoundConfigPanel", () => {
     });
   });
 
+  describe("閉じるボタン", () => {
+    it("設定を開くと、閉じるボタンの文言は確定になる", async () => {
+      // Given
+      const user = userEvent.setup();
+      setup();
+
+      // When
+      await user.click(screen.getByTestId("round-config-summary"));
+
+      // Then
+      expect(screen.getByTestId("round-config-save")).toHaveTextContent(
+        roundsText("confirm"),
+      );
+    });
+  });
+
   describe("保存", () => {
     describe("入力内容が有効な場合", () => {
       it("enqueueを検証済みの設定で呼び、折りたたむ", async () => {

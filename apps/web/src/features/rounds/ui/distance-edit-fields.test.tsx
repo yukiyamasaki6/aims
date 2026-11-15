@@ -291,6 +291,19 @@ describe("DistanceEditFields", () => {
     });
   });
 
+  describe("閉じるボタン", () => {
+    it("距離を開くと、閉じるボタンの文言は確定になる", () => {
+      // Given
+      // When
+      setup();
+
+      // Then
+      expect(screen.getByTestId("distance-config-save-1")).toHaveTextContent(
+        roundsText("confirm"),
+      );
+    });
+  });
+
   describe("保存", () => {
     describe("入力内容が有効な場合", () => {
       it("onSavedとenqueueを検証済みの距離設定で呼ぶ", async () => {

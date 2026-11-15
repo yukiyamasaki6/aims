@@ -109,7 +109,7 @@ function DistanceEditActions({
         data-testid={`distance-config-save-${distanceNumber}`}
         onClick={onSave}
       >
-        {t("save")}
+        {t("confirm")}
       </Button>
 
       <div className="flex flex-col gap-3 border-t pt-3">

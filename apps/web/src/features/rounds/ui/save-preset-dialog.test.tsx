@@ -141,6 +141,21 @@ describe("SavePresetDialog", () => {
     });
   });
 
+  describe("確認ボタン", () => {
+    it("ダイアログを開くと、確認ボタンの文言は保存のままである", async () => {
+      // Given
+      const { user } = setup();
+
+      // When
+      await user.click(screen.getByTestId("save-as-preset-trigger"));
+
+      // Then
+      expect(screen.getByTestId("save-as-preset-confirm")).toHaveTextContent(
+        roundsText("save"),
+      );
+    });
+  });
+
   describe("閉じて再度開く", () => {
     it("直前の入力とエラーは破棄される", async () => {
       // Given

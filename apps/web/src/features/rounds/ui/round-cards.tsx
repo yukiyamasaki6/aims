@@ -23,6 +23,25 @@ export function RoundCardsSkeleton() {
   );
 }
 
+// 履歴の末尾と0件の文言。カード1枚と同じ幅・高さの領域の中央に置く。
+// 高さはカードと同じ枠・同じ2行構成の見えない見本を同じ格子の1マスに重ねて決める(カードの行の構成を変えるときは見本も同じ変更にする)。
+export function HistoryNotice({ children }: { children: string }) {
+  return (
+    <div className="grid">
+      <div
+        aria-hidden="true"
+        className="invisible col-start-1 row-start-1 flex flex-col gap-0.5 rounded-xl border border-transparent p-4"
+      >
+        <span className="block h-[1lh] font-medium" />
+        <span className="block h-[1lh] text-sm" />
+      </div>
+      <p className="col-start-1 row-start-1 flex items-center justify-center p-4 text-center text-muted-foreground text-sm">
+        {children}
+      </p>
+    </div>
+  );
+}
+
 // origin: カードから開く詳細の遷移元。履歴だけが"history"を渡す(ホームは"home"でクエリなし)。
 export function RoundCards({
   rounds,

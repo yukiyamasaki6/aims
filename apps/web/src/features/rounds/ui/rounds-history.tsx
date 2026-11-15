@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Suspense, useLayoutEffect, useRef } from "react";
+import { type ReactNode, Suspense, useLayoutEffect, useRef } from "react";
 import type { HistoryUnit } from "../domain/history-view-state";
 import {
   type HistoryListItem,
@@ -11,7 +11,12 @@ import {
 import { historyView } from "../domain/rounds-list-view";
 import { FetchState } from "./fetch-state";
 import { HistoryControls } from "./history-controls";
-import { DistanceCards, RoundCards, RoundCardsSkeleton } from "./round-cards";
+import {
+  DistanceCards,
+  HistoryNotice,
+  RoundCards,
+  RoundCardsSkeleton,
+} from "./round-cards";
 import { RoundDeleteDialog, useRoundDelete } from "./round-delete";
 import { useRoundProcedures } from "./rounds-context";
 import { type MoreStatus, useHistoryPages } from "./use-history-pages";
@@ -29,9 +34,37 @@ function measureSkeletonPitch(root: HTMLElement | null): number {
 // 履歴。サーバーで完了と記録されたラウンドを、ページごとに取得して表示する。取得の成功時だけラウンドを出す。
 export function RoundsHistory() {
   return (
-    <Suspense fallback={<RoundCardsSkeleton />}>
+    <Suspense
+      fallback={
+        <HistoryFrame icon={null}>
+          <RoundCardsSkeleton />
+        </HistoryFrame>
+      }
+    >
       <RoundsHistoryScreen />
     </Suspense>
+  );
+}
+
+// 履歴の枠。非スクロールの枠の中に、アイコンの層(上端から8px、一覧の幅の右端)と、スクロールの入れ物を別の要素として置く。一覧の先頭の空白(pt-14 = アイコンの上端8px + 48px)はスクロールの内容の側にある。
+function HistoryFrame({
+  icon,
+  children,
+}: {
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative h-full">
+      <div className="pointer-events-none absolute inset-x-0 top-2 z-10">
+        <div className="mx-auto flex max-w-xl justify-end px-8">
+          <div className="pointer-events-auto size-12">{icon}</div>
+        </div>
+      </div>
+      <div className="h-full overflow-y-auto">
+        <main className="mx-auto max-w-xl px-8 pt-14 pb-8">{children}</main>
+      </div>
+    </div>
   );
 }
 
@@ -52,9 +85,11 @@ function HistoryTail({
   const t = useTranslations("rounds");
   if (!hasMore) {
     return (
-      <p className="text-muted-foreground text-sm">
-        {t(unit === "distance" ? "historyEndDistance" : "historyEnd")}
-      </p>
+      <div className="mt-3">
+        <HistoryNotice>
+          {t(unit === "distance" ? "historyEndDistance" : "historyEnd")}
+        </HistoryNotice>
+      </div>
     );
   }
   return (
@@ -121,7 +156,7 @@ function HistoryBody({
     );
   }
   if (rounds.length === 0 && !hasMore) {
-    return <p className="text-muted-foreground text-sm">{t("historyEmpty")}</p>;
+    return <HistoryNotice>{t("historyEmpty")}</HistoryNotice>;
   }
   return (
     <>
@@ -158,33 +193,29 @@ function RoundsHistoryScreen() {
     if (shown) restoreScroll();
   }, [shown]);
 
-  return (
-    <div ref={anchorRef}>
-      {/* 一覧の右上に固定するアイコンの置き場。静止時は最初の項目の上の余白になり、スクロール中は項目の上に重なって通る。読み込み前も置く(出現時に一覧が動かないため)。 */}
-      <div className="sticky top-2 z-10 ml-auto size-12">
-        {input && condition && (
-          <HistoryControls
-            input={input}
-            condition={condition}
-            onApply={applyInput}
-          />
-        )}
-      </div>
-      <HistoryBody
-        content={content}
-        unit={condition?.unit}
-        more={more}
-        tailRef={tailRef}
-        onRetry={retry}
-        onRetryMore={retryMore}
-        onDelete={requestDelete}
-      />
+  const icon = input && condition && (
+    <HistoryControls input={input} condition={condition} onApply={applyInput} />
+  );
 
-      <RoundDeleteDialog
-        target={target}
-        onCancel={cancel}
-        onConfirm={confirmDelete}
-      />
-    </div>
+  return (
+    <HistoryFrame icon={icon}>
+      <div ref={anchorRef}>
+        <HistoryBody
+          content={content}
+          unit={condition?.unit}
+          more={more}
+          tailRef={tailRef}
+          onRetry={retry}
+          onRetryMore={retryMore}
+          onDelete={requestDelete}
+        />
+
+        <RoundDeleteDialog
+          target={target}
+          onCancel={cancel}
+          onConfirm={confirmDelete}
+        />
+      </div>
+    </HistoryFrame>
   );
 }

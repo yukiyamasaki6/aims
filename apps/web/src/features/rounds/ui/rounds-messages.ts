@@ -21,6 +21,7 @@ export const roundsMessages = {
   ja: {
     // 共通
     save: "保存",
+    confirm: "確定",
     delete: "削除",
     back: "戻る",
     requiredMark: "*",

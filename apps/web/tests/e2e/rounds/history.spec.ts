@@ -21,6 +21,7 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
+import { expectUncovered } from "../helpers/visibility";
 
 const navigationText = translatorFor("navigation");
 const roundsText = translatorFor("rounds");
@@ -902,18 +903,30 @@ test.describe("履歴", () => {
       for (const name of names) {
         await expect(cards.filter({ hasText: name })).toHaveCount(4);
       }
+    });
 
-      // スクロールしても、フィルターのアイコンは一覧の項目に隠れず、押せる最前面にある。
+    test("履歴を開いた直後とスクロールした後のどちらでも、フィルターのアイコンは最前面にあり、押してポップアップを開ける", async ({
+      page,
+    }) => {
+      const credentials = await signInFreshUser(page, "e2e-history");
+      await addCompletedRounds(credentials, "アイコン", 25);
       const toggle = page.getByTestId("history-controls-toggle");
-      const isFront = await toggle.evaluate((element) => {
-        const box = element.getBoundingClientRect();
-        const front = document.elementFromPoint(
-          box.x + box.width / 2,
-          box.y + box.height / 2,
-        );
-        return front !== null && element.contains(front);
-      });
-      expect(isFront).toBe(true);
+
+      // 履歴を開いた直後に、アイコンも先頭のカードのメニューも覆われず、アイコンを押してポップアップを開き、Escで閉じる。
+      await page.goto("/rounds/history");
+      await expectUncovered(
+        page.getByRole("listitem").first().getByTestId("round-menu-trigger"),
+      );
+      // アイコンは丸いため、角の点は丸みの内側になるよう余白を大きくして確かめる。
+      await expectUncovered(toggle, 8);
+      await openFilter(page);
+      await page.keyboard.press("Escape");
+      await expect(page.getByTestId("history-controls")).toHaveCount(0);
+
+      // 末尾までスクロールしても、アイコンは覆われず、押してポップアップを開ける。
+      await scrollToHistoryEnd(page);
+      await expectUncovered(toggle, 8);
+      await openFilter(page);
     });
 
     test("後ろのページにある条件に一致するラウンドも、得点順に並べて種別で絞り込むと先頭側に表示され、条件を変えるたびに先頭から取得し直される", async ({
