@@ -81,8 +81,8 @@ async function expectNotFrontmost(item: Locator) {
     .toBe(0);
 }
 
-// 格納したレフトパネルの中身は、縦向きで狭い画面では画面の外へ押し出され、それ以外では畳まれる。どちらも最前面に現れないことで確かめる。
-async function expectPanelCollapsed(page: Page) {
+// 閉じたレフトパネルの中身は、幅768px未満のドロワーでは画面の外へ押し出され、幅768px以上の列では幅0で畳まれる。どちらも最前面に現れないことで確かめる。
+async function expectPanelClosed(page: Page) {
   for (const item of panelContents(page)) {
     await expectNotFrontmost(item);
   }
@@ -119,6 +119,25 @@ async function tabCycle(page: Page) {
     if (step.item) focused.push(step.item);
   }
   return focused;
+}
+
+function closeMenuButton(page: Page) {
+  return page.getByRole("button", {
+    name: navigationText("leftPanelCloseMenu"),
+  });
+}
+
+function openMenuButton(page: Page) {
+  return page.getByRole("button", {
+    name: navigationText("leftPanelOpenMenu"),
+  });
+}
+
+// 本文(<main>)が、inertな領域の中にあるか。
+function isMainInert(page: Page) {
+  return page
+    .getByRole("main")
+    .evaluate((el) => el.closest("[inert]") !== null);
 }
 
 async function expectTabNeverEntersPanel(page: Page) {
@@ -217,10 +236,10 @@ test.describe("認証済み", () => {
     await expect(page.getByTestId("new-round-fab")).toBeVisible();
   });
 
-  test("縦向きで狭い画面でレフトパネルを展開してホームの項目を押すと、ホームへ移動し、レフトパネルが格納される", async ({
+  test("縦向きで狭い画面でドロワーを展開してホームの項目を押すと、ホームへ移動し、ドロワーが閉じる", async ({
     page,
   }) => {
-    // 縦向きで狭い画面でラウンド作成画面を開き、ヘッダーのメニューボタンでレフトパネルを展開する。
+    // 縦向きで狭い画面でラウンド作成画面を開き、ヘッダーのメニューボタンでドロワーを展開する。
     await page.setViewportSize(MOBILE_VIEWPORT);
     await page.goto("/rounds/new");
     await waitForHydration(page);
@@ -229,12 +248,12 @@ test.describe("認証済み", () => {
       .click();
     await expectPanelExpanded(page);
 
-    // ホームの項目を押して、ホームへ移り、レフトパネルが格納されていることを確かめる。
+    // ホームの項目を押して、ホームへ移り、ドロワーが閉じていることを確かめる。
     await page
       .getByRole("link", { name: navigationText("leftPanelHome") })
       .click();
     await expect(page).toHaveURL(/\/rounds$/);
-    await expectPanelCollapsed(page);
+    await expectPanelClosed(page);
   });
 
   test("ホームでレフトパネルの設定の項目を押すと、設定画面へ移動し、設定の項目だけが現在のページになる", async ({
@@ -286,10 +305,10 @@ test.describe("認証済み", () => {
     await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
   });
 
-  test("縦向きで狭い画面でレフトパネルを展開して設定の項目を押すと、設定画面へ移動し、レフトパネルが格納される", async ({
+  test("縦向きで狭い画面でドロワーを展開して設定の項目を押すと、設定画面へ移動し、ドロワーが閉じる", async ({
     page,
   }) => {
-    // 縦向きで狭い画面でラウンド作成画面を開き、ヘッダーのメニューボタンでレフトパネルを展開する。
+    // 縦向きで狭い画面でラウンド作成画面を開き、ヘッダーのメニューボタンでドロワーを展開する。
     await page.setViewportSize(MOBILE_VIEWPORT);
     await page.goto("/rounds/new");
     await waitForHydration(page);
@@ -298,12 +317,12 @@ test.describe("認証済み", () => {
       .click();
     await expectPanelExpanded(page);
 
-    // 設定の項目を押して、設定画面へ移り、レフトパネルが格納されていることを確かめる。
+    // 設定の項目を押して、設定画面へ移り、ドロワーが閉じていることを確かめる。
     await page
       .getByRole("link", { name: navigationText("leftPanelSettings") })
       .click();
     await expect(page).toHaveURL(/\/settings$/);
-    await expectPanelCollapsed(page);
+    await expectPanelClosed(page);
   });
 
   test("ホームから設定へ移った後、ブラウザの戻るでホームへ、進むで設定へ移動する", async ({
@@ -330,154 +349,164 @@ test.describe("認証済み", () => {
   });
 
   test.describe("レフトパネルの開閉", () => {
-    test("縦向きで狭い画面では、レフトパネルが格納された状態で始まり、ヘッダーのメニューボタンで展開し、閉じるボタンで格納する", async ({
+    for (const [name, viewport] of [
+      ["縦向き", MOBILE_VIEWPORT],
+      ["横向き", COMPACT_LANDSCAPE_VIEWPORT],
+    ] as const) {
+      test(`${name}で狭い画面では、ドロワーが閉じた状態で始まり、ヘッダーのメニューボタンで展開し、閉じるボタンで閉じる`, async ({
+        page,
+      }) => {
+        // ラウンド一覧を開き、ドロワーが閉じていることを確かめる。
+        await page.setViewportSize(viewport);
+        await openRounds(page);
+        await expectPanelClosed(page);
+
+        // ヘッダーのメニューボタンを押して、ドロワーを展開する。
+        await openMenuButton(page).click();
+        await expectPanelExpanded(page);
+
+        // 閉じるボタンを押して、ドロワーを閉じる。
+        await closeMenuButton(page).click();
+        await expectPanelClosed(page);
+      });
+    }
+
+    test("縦向きで狭い画面でドロワーを展開すると、本文が支援技術から隠れ、Tabを回してもドロワーの外へ出ず、Escで閉じて本文とメニューボタンへ戻る", async ({
       page,
     }) => {
-      // 縦向きで狭い画面でラウンド一覧を開き、レフトパネルが格納されていることを確かめる。
+      // ドロワーを展開し、本文がinertな領域に入ることを確かめる。
       await page.setViewportSize(MOBILE_VIEWPORT);
       await openRounds(page);
-      await expectPanelCollapsed(page);
-
-      // ヘッダーのメニューボタンを押して、レフトパネルを展開する。
-      await page
-        .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
-        .click();
+      await openMenuButton(page).click();
       await expectPanelExpanded(page);
+      expect(await isMainInert(page)).toBe(true);
 
-      // 閉じるボタンを押して、レフトパネルを格納する。
-      // 背景も同じ名前のボタンで、パネルの中の閉じるボタンはDOMで後にある。
-      await page
-        .getByRole("button", { name: navigationText("leftPanelCloseMenu") })
-        .last()
-        .click();
-      await expectPanelCollapsed(page);
+      // TabとShift+Tabを繰り返し、フォーカスがドロワーの中だけを巡ることを確かめる。
+      const focusedLabels: (string | null)[] = [];
+      const inAside: boolean[] = [];
+      const pressAndRecord = async (key: string) => {
+        await page.keyboard.press(key);
+        const step = await page.evaluate(() => ({
+          inAside: !!document.activeElement?.closest("aside"),
+          label:
+            document.activeElement?.getAttribute("aria-label") ??
+            document.activeElement?.getAttribute("href") ??
+            null,
+        }));
+        inAside.push(step.inAside);
+        focusedLabels.push(step.label);
+      };
+      for (let i = 0; i < 8; i++) await pressAndRecord("Tab");
+      for (let i = 0; i < 3; i++) await pressAndRecord("Shift+Tab");
+      expect(inAside).toEqual(inAside.map(() => true));
+      expect(focusedLabels).toEqual(
+        expect.arrayContaining([
+          navigationText("leftPanelCloseMenu"),
+          ROUNDS_PATH,
+          ROUNDS_HISTORY_PATH,
+          SETTINGS_PATH,
+        ]),
+      );
+
+      // Escでドロワーを閉じ、フォーカスがメニューボタンへ戻り、本文のinertが外れることを確かめる。
+      await page.keyboard.press("Escape");
+      await expectPanelClosed(page);
+      await expect(openMenuButton(page)).toBeFocused();
+      expect(await isMainInert(page)).toBe(false);
     });
 
-    test("広い画面では、レフトパネルが展開された状態で始まり、格納ボタンで格納し、開くボタンで展開する", async ({
+    test("広い画面でレフトパネルを閉じると、フォーカスがメニューボタンへ移り、閉じている間はTabで中身へ届かず、メニューボタンで開くとフォーカスが閉じるボタンへ移る", async ({
       page,
     }) => {
-      // 広い画面でラウンド一覧を開き、レフトパネルが展開されていることを確かめる。
+      // 広い画面でラウンド一覧を開き、レフトパネルが出ていてメニューを開くボタンが無いことを確かめ、閉じるボタンで閉じる。
       await openRounds(page);
       await expectPanelExpanded(page);
+      await expect(openMenuButton(page)).toBeHidden();
+      await closeMenuButton(page).click();
 
-      // 格納ボタンを押して、レフトパネルを格納する。
-      await page
-        .getByRole("button", { name: navigationText("leftPanelCollapse") })
-        .click();
-      await expectPanelCollapsed(page);
+      // 閉じて幅0になるまで待ち、メニューを開くボタンが出てフォーカスされ、Tabが中身へ届かないことを確かめる。
+      await expectPanelClosed(page);
+      await expect(closeMenuButton(page)).toBeHidden();
+      await expect(openMenuButton(page)).toBeVisible();
+      await expect(openMenuButton(page)).toBeFocused();
+      await expectTabNeverEntersPanel(page);
 
-      // 開くボタンを押して、レフトパネルを展開する。
-      await page
-        .getByRole("button", { name: navigationText("leftPanelExpand") })
-        .click();
+      // メニューを開くボタンで開き、フォーカスが閉じるボタンへ移ることを確かめる。
+      await openMenuButton(page).click();
       await expectPanelExpanded(page);
+      await expect(openMenuButton(page)).toBeHidden();
+      await expect(closeMenuButton(page)).toBeFocused();
     });
 
-    test("横向きで狭い画面では、レフトパネルが格納された状態で始まり、ヘッダーのメニューボタンで展開し、閉じるボタンで格納する", async ({
+    test("広い画面でレフトパネルが出ている間は、Escで閉じず、Tabでパネルの外へフォーカスが出られる", async ({
       page,
     }) => {
-      // 横向きで狭い画面でラウンド一覧を開き、レフトパネルが格納されていることを確かめる。
-      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+      // 広い画面でラウンド一覧を開き、Escを押しても、レフトパネルが出たままであることを確かめる。
       await openRounds(page);
-      await expectPanelCollapsed(page);
-
-      // ヘッダーのメニューボタンを押して、レフトパネルを展開する。
-      await page
-        .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
-        .click();
+      await page.keyboard.press("Escape");
       await expectPanelExpanded(page);
 
-      // 閉じるボタンを押して、レフトパネルを格納する。
-      // 背景も同じ名前のボタンで、パネルの中の閉じるボタンはDOMで後にある。
-      await page
-        .getByRole("button", { name: navigationText("leftPanelCloseMenu") })
-        .last()
-        .click();
-      await expectPanelCollapsed(page);
+      // Tabで一巡し、パネルの外の要素にもフォーカスが届くことを確かめる。
+      const focused = await tabCycle(page);
+      expect(focused.some((item) => item.inPanel)).toBe(true);
+      expect(focused.some((item) => !item.inPanel)).toBe(true);
     });
 
     test("開閉を操作していないとき、画面の向きや幅を変えると、レフトパネルは変えた後の画面の始まりの状態で表示される", async ({
       page,
     }) => {
-      // 縦向きで狭い画面でラウンド一覧を開き、レフトパネルが格納されていることを確かめる。
+      // 縦向きで狭い画面でラウンド一覧を開き、ドロワーが閉じていることを確かめる。
       await page.setViewportSize(MOBILE_VIEWPORT);
       await openRounds(page);
-      await expectPanelCollapsed(page);
+      await expectPanelClosed(page);
 
-      // 横向きで狭い画面へ変えて、格納されたままであることを確かめる。
+      // 横向きで狭い画面へ変えて、閉じたままであることを確かめる。
       await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
-      await expectPanelCollapsed(page);
+      await expectPanelClosed(page);
 
-      // 広い画面へ変えて、展開されることを確かめる。
+      // 広い画面へ変えて、レフトパネルが出ることを確かめる。
       await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
       await expectPanelExpanded(page);
 
-      // 縦向きで狭い画面へ回して、ひとりでに開かず格納されることを確かめる。
+      // 縦向きで狭い画面へ回して、ひとりでに開かず閉じていることを確かめる。
       await page.setViewportSize(PORTRAIT_NARROW_VIEWPORT);
-      await expectPanelCollapsed(page);
+      await expectPanelClosed(page);
     });
 
-    test("縦向きで狭い画面でレフトパネルを展開した後は、画面の向きや幅を変えても、展開されたまま表示される", async ({
+    test("広い画面でレフトパネルを閉じた後、幅768px未満でドロワーを展開して閉じ、広い画面へ戻すと、レフトパネルは閉じたままである", async ({
       page,
     }) => {
-      // 縦向きで狭い画面でラウンド一覧を開き、ヘッダーのメニューボタンでレフトパネルを展開する。
-      await page.setViewportSize(MOBILE_VIEWPORT);
-      await openRounds(page);
-      await page
-        .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
-        .click();
-      await expectPanelExpanded(page);
-
-      // 横向きで狭い画面へ回して、展開されたままであることを確かめる。
-      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
-      await expectPanelExpanded(page);
-
-      // 広い画面へ変えて、展開されたままであることを確かめる。
-      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
-      await expectPanelExpanded(page);
-
-      // 縦向きで狭い画面へ戻して、展開されたままであることを確かめる。
-      await page.setViewportSize(MOBILE_VIEWPORT);
-      await expectPanelExpanded(page);
-    });
-
-    test("広い画面でレフトパネルを格納した後は、画面の向きや幅を変えても、格納されたまま表示される", async ({
-      page,
-    }) => {
-      // 広い画面でラウンド一覧を開き、格納ボタンでレフトパネルを格納する。
+      // 広い画面でラウンド一覧を開き、閉じるボタンでレフトパネルを閉じる。
       await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
       await openRounds(page);
-      await page
-        .getByRole("button", { name: navigationText("leftPanelCollapse") })
-        .click();
-      await expectPanelCollapsed(page);
+      await closeMenuButton(page).click();
+      await expectPanelClosed(page);
 
-      // 縦向きで狭い画面へ回して、格納されたままであることを確かめる。
+      // 縦向きで狭い画面へ変えて、メニューボタンでドロワーを展開する。
       await page.setViewportSize(PORTRAIT_NARROW_VIEWPORT);
-      await expectPanelCollapsed(page);
+      await openMenuButton(page).click();
+      await expectPanelExpanded(page);
 
-      // 横向きで狭い画面へ変えて、格納されたままであることを確かめる。
-      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
-      await expectPanelCollapsed(page);
+      // 閉じるボタンでドロワーを閉じる。
+      await closeMenuButton(page).click();
+      await expectPanelClosed(page);
 
-      // 広い画面へ戻して、展開されずに格納されたままであることを確かめる。
+      // 広い画面へ戻して、レフトパネルが閉じたままであることを確かめる。
       await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
-      await expectPanelCollapsed(page);
+      await expectPanelClosed(page);
     });
 
-    test("幅768px未満で格納されたレフトパネルの中身には、Tabでフォーカスが届かず、展開している間だけ届く", async ({
+    test("幅768px未満で閉じたドロワーの中身には、Tabでフォーカスが届かず、展開している間だけ届く", async ({
       page,
     }) => {
-      // 縦向きで狭い画面で格納されている間は、Tabを一巡しても、パネルの中にフォーカスが届かない。
+      // 縦向きで狭い画面でドロワーが閉じている間は、Tabを一巡しても、パネルの中にフォーカスが届かない。
       await page.setViewportSize(MOBILE_VIEWPORT);
       await openRounds(page);
       await expectPanelContentsAbsent(page);
       await expectTabNeverEntersPanel(page);
 
       // ヘッダーのメニューボタンで展開し、Tabでホームの項目まで届く。
-      const menuButton = page.getByRole("button", {
-        name: navigationText("leftPanelOpenMenu"),
-      });
+      const menuButton = openMenuButton(page);
       await menuButton.focus();
       await menuButton.click();
       const homeLink = page.getByRole("link", {
@@ -490,15 +519,12 @@ test.describe("認証済み", () => {
       }
       await expect(homeLink).toBeFocused();
 
-      // 閉じるボタンで格納し、中身が隠れてから、Tabがパネルの中に届かないことを確かめる。
-      await page
-        .getByRole("button", { name: navigationText("leftPanelCloseMenu") })
-        .last()
-        .click();
+      // 閉じるボタンで閉じ、中身が隠れてから、Tabがパネルの中に届かないことを確かめる。
+      await closeMenuButton(page).click();
       await expectPanelContentsAbsent(page);
       await expectTabNeverEntersPanel(page);
 
-      // 横向きで狭い画面へ回しても、格納されたままパネルの中に届かず、ヘッダーのメニューボタンには届く。
+      // 横向きで狭い画面へ回しても、閉じたままパネルの中に届かず、ヘッダーのメニューボタンには届く。
       await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
       await expectPanelContentsAbsent(page);
       await expectTabNeverEntersPanel(page);
@@ -519,36 +545,13 @@ test.describe("認証済み", () => {
         1,
       );
     });
-
-    test("広い画面でレフトパネルを格納した後、縦向きで狭い画面でドロワーを展開しても、広い画面へ戻すと、広い画面のレフトパネルは格納されたままである", async ({
-      page,
-    }) => {
-      // 広い画面でラウンド一覧を開き、格納ボタンでレフトパネルを格納する。
-      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
-      await openRounds(page);
-      await page
-        .getByRole("button", { name: navigationText("leftPanelCollapse") })
-        .click();
-      await expectPanelCollapsed(page);
-
-      // 縦向きで狭い画面へ変えて、ヘッダーのメニューボタンでドロワーを展開し、中身が見えることを確かめる。
-      await page.setViewportSize(MOBILE_VIEWPORT);
-      await page
-        .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
-        .click();
-      await expectPanelExpanded(page);
-
-      // 広い画面へ戻して、広い画面のレフトパネルが格納されたままであることを確かめる。
-      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
-      await expectPanelCollapsed(page);
-    });
   });
 
   test.describe("ヘッダーのメニューボタン", () => {
-    test("縦向きで狭い画面でメニューボタンを押すと、フォーカスがレフトパネルの中へ移り、閉じるとメニューボタンへ戻る", async ({
+    test("縦向きで狭い画面でメニューボタンを押すと、フォーカスがドロワーの中へ移り、閉じるとメニューボタンへ戻る", async ({
       page,
     }) => {
-      // メニューボタンを押して展開し、フォーカスがレフトパネルの中にあることを確かめる。
+      // メニューボタンを押して展開し、フォーカスがドロワーの中にあることを確かめる。
       await page.setViewportSize(MOBILE_VIEWPORT);
       await openRounds(page);
       const menuButton = page.getByRole("button", {
@@ -564,12 +567,9 @@ test.describe("認証済み", () => {
         )
         .toBe(true);
 
-      // 閉じるボタンで格納し、フォーカスがメニューボタンへ戻ることを確かめる。
-      await page
-        .getByRole("button", { name: navigationText("leftPanelCloseMenu") })
-        .last()
-        .click();
-      await expectPanelCollapsed(page);
+      // 閉じるボタンで閉じ、フォーカスがメニューボタンへ戻ることを確かめる。
+      await closeMenuButton(page).click();
+      await expectPanelClosed(page);
       await expect(menuButton).toBeFocused();
     });
 
@@ -603,22 +603,19 @@ test.describe("認証済み", () => {
       });
     }
 
-    test("幅768px以上では、どの画面にも「メニューを開く」が表示されない", async ({
+    test("広い画面では、どの画面でもレフトパネルが出ていて「メニューを開く」が無く、閉じると「メニューを開く」が出る", async ({
       page,
     }) => {
       await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
       for (const path of Screens) {
         await page.goto(path);
-        await expect(
-          page.getByRole("button", {
-            name: navigationText("leftPanelCollapse"),
-          }),
-        ).toBeVisible();
-        await expect(
-          page.getByRole("button", {
-            name: navigationText("leftPanelOpenMenu"),
-          }),
-        ).toBeHidden();
+        await expect(closeMenuButton(page)).toBeVisible();
+        await expect(openMenuButton(page)).toBeHidden();
+        // 履歴・設定には水和の目印が無いため、閉じない間は押し直す。
+        await expect(async () => {
+          await closeMenuButton(page).click({ timeout: 1_000 });
+          await expect(openMenuButton(page)).toBeVisible({ timeout: 1_000 });
+        }).toPass();
       }
     });
 
@@ -641,7 +638,7 @@ test.describe("認証済み", () => {
       await expect(back).toBeVisible();
       await expect(key).toBeVisible();
 
-      // メニューボタンを押してレフトパネルを展開し、2つの位置の最前面がレフトパネルか背景であることを確かめる。
+      // メニューボタンを押してドロワーを展開し、2つの位置の最前面がドロワーか背景であることを確かめる。
       await page
         .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
         .click();

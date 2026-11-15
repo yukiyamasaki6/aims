@@ -84,4 +84,45 @@ describe("installFakeViewport", () => {
     expect(onResize).toHaveBeenCalledTimes(1);
     expect(state).toEqual([300, 900]);
   });
+
+  it("既定は幅768px以上に一致せず、wide:trueで一致し、他のqueryには影響しない", () => {
+    // Given
+    const matches = () => ({
+      wide: window.matchMedia("(min-width: 768px)").matches,
+      other: window.matchMedia("(prefers-color-scheme: dark)").matches,
+    });
+
+    // When
+    const narrow = installFakeViewport();
+    const byDefault = matches();
+    narrow.restore();
+    const wide = installFakeViewport({ wide: true });
+    const withWide = matches();
+    wide.restore();
+
+    // Then
+    expect(byDefault).toEqual({ wide: false, other: false });
+    expect(withWide).toEqual({ wide: true, other: false });
+  });
+
+  it("setWideでmatchesが変わり、changeの購読者へ通知する。解除した購読者へは通知しない", () => {
+    // Given
+    const viewport = installFakeViewport();
+    const query = window.matchMedia("(min-width: 768px)");
+    const kept = vi.fn();
+    const removed = vi.fn();
+    query.addEventListener("change", kept);
+    query.addEventListener("change", removed);
+    query.removeEventListener("change", removed);
+
+    // When
+    viewport.setWide(true);
+    const matches = window.matchMedia("(min-width: 768px)").matches;
+    viewport.restore();
+
+    // Then
+    expect(matches).toBe(true);
+    expect(kept).toHaveBeenCalledTimes(1);
+    expect(removed).not.toHaveBeenCalled();
+  });
 });

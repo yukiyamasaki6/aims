@@ -2,10 +2,13 @@
 // jsdomにはmatchMediaとvisualViewportが無い。
 
 const WATCHED_EVENTS = ["resize"];
+const WIDE_QUERY = "(min-width: 768px)";
 
 export type FakeViewportOptions = {
   // display-mode: standaloneに一致するか。
   standalone: boolean;
+  // 幅768px以上(min-width: 768px)に一致するか。
+  wide: boolean;
   // navigator.virtualKeyboardを持つか。
   virtualKeyboard: boolean;
   // nullならvisualViewportを持たない。
@@ -17,6 +20,8 @@ export type FakeViewport = {
   // visualViewportの高さを、通知なしに替える。
   setVisualViewportHeight(height: number): void;
   setInnerHeight(height: number): void;
+  // 幅768px以上かを替え、matchMediaのchangeの購読者へ通知する(actで包むのは呼ぶ側)。
+  setWide(wide: boolean): void;
   // visualViewportのresizeを発火する。
   fireVisualViewportResize(): void;
   // 解除されていない購読(resize)の数。
@@ -26,6 +31,7 @@ export type FakeViewport = {
 
 const DEFAULTS: FakeViewportOptions = {
   standalone: false,
+  wide: false,
   virtualKeyboard: false,
   visualViewport: null,
   innerHeight: 800,
@@ -90,10 +96,25 @@ export function installFakeViewport(
 
   const unwatch = [watch(window), watch(document)];
 
-  defineValue(window, "matchMedia", (query: string) => ({
-    matches: options.standalone && query === "(display-mode: standalone)",
-    media: query,
-  }));
+  let wide = options.wide;
+  const wideListeners = new Set<() => void>();
+  defineValue(window, "matchMedia", (query: string) => {
+    const isWide = query === WIDE_QUERY;
+    return {
+      get matches() {
+        return isWide
+          ? wide
+          : options.standalone && query === "(display-mode: standalone)";
+      },
+      media: query,
+      addEventListener(type: string, listener: () => void) {
+        if (isWide && type === "change") wideListeners.add(listener);
+      },
+      removeEventListener(type: string, listener: () => void) {
+        if (isWide && type === "change") wideListeners.delete(listener);
+      },
+    };
+  });
   defineValue(window, "innerHeight", options.innerHeight);
   if (options.virtualKeyboard) defineValue(navigator, "virtualKeyboard", {});
   else Reflect.deleteProperty(navigator, "virtualKeyboard");
@@ -112,11 +133,16 @@ export function installFakeViewport(
     setInnerHeight(height) {
       defineValue(window, "innerHeight", height);
     },
+    setWide(next) {
+      wide = next;
+      for (const listener of [...wideListeners]) listener();
+    },
     fireVisualViewportResize() {
       viewport?.dispatchEvent(new Event("resize"));
     },
     subscriptions: () => registrations.length,
     restore() {
+      wideListeners.clear();
       for (const undo of unwatch) undo();
       for (const restoreProperty of restores) restoreProperty();
       document.documentElement.style.removeProperty("--app-height");
