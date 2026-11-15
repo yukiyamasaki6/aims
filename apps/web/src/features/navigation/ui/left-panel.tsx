@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, X } from "lucide-react";
+import { House, ListOrdered, Menu, Settings, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -359,7 +359,7 @@ function NavItem({
       onClick={onNavigate}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "rounded-lg px-3 py-2 text-sm",
+        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
         current && "bg-muted font-medium",
       )}
     >
@@ -375,15 +375,18 @@ function PanelBody({ onNavigate }: { onNavigate: () => void }) {
     <>
       <nav className="flex flex-1 flex-col gap-1 px-4 pt-1">
         <NavItem href={ROUNDS_HOME_PATH} onNavigate={onNavigate}>
+          <House aria-hidden="true" className="size-5 shrink-0" />
           {t("leftPanelHome")}
         </NavItem>
         <NavItem href={ROUNDS_HISTORY_PATH} onNavigate={onNavigate}>
+          <ListOrdered aria-hidden="true" className="size-5 shrink-0" />
           {t("leftPanelHistory")}
         </NavItem>
       </nav>
 
-      <div className="flex flex-col border-t p-4">
+      <div className="flex flex-col p-4">
         <NavItem href={SETTINGS_PATH} onNavigate={onNavigate}>
+          <Settings aria-hidden="true" className="size-5 shrink-0" />
           {t("leftPanelSettings")}
         </NavItem>
       </div>

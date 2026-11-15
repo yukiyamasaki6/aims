@@ -408,7 +408,7 @@ describe("LeftPanel", () => {
       expect(drawerLink("leftPanelSettings")).toHaveFocus();
     });
 
-    it("Tabを繰り返すと、閉じる・ロゴ・ホーム・履歴・設定の順に一巡する", async () => {
+    it("Tabを繰り返すと、閉じる・ロゴ・ホーム・点数一覧・設定の順に一巡する", async () => {
       // Given
       const user = userEvent.setup();
       render(<PanelWithFrame />, { wrapper: IntlTestProvider });
@@ -725,7 +725,85 @@ describe("LeftPanel", () => {
     });
   });
 
-  describe("ホーム・履歴の項目", () => {
+  describe("移動項目の名前と装飾", () => {
+    it.each([
+      "/rounds",
+      "/rounds/history",
+      "/rounds/new",
+      "/rounds/123e4567-e89b-12d3-a456-426614174000",
+    ])(
+      "%sで開いたメニューは3つの移動項目を文字で識別できる",
+      async (pathname) => {
+        // Given
+        nav.pathname = pathname;
+        const user = userEvent.setup();
+        render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+
+        // When
+        await openDrawer(user);
+
+        // Then
+        const panel = within(drawerPanel());
+        for (const key of [
+          "leftPanelHome",
+          "leftPanelHistory",
+          "leftPanelSettings",
+        ] as const) {
+          expect(
+            panel.getByRole("link", { name: navigationText(key) }),
+          ).toHaveTextContent(navigationText(key));
+        }
+        expect(
+          panel.queryByRole("button", { name: authText("signOut") }),
+        ).toBeNull();
+      },
+    );
+
+    it("点数一覧の項目名とリンク名は指定された日本語「点数一覧」である", () => {
+      // Given
+      // When
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+
+      // Then
+      for (const panel of [drawerPanel(), railPanel()]) {
+        const menu = within(panel);
+        expect(menu.getByRole("link", { name: "点数一覧" })).toHaveTextContent(
+          /^点数一覧$/,
+        );
+        expect(menu.queryByRole("link", { name: /^(履歴|一覧)$/ })).toBeNull();
+      }
+    });
+
+    it("各移動項目のアイコンは装飾であり名前と独立した操作対象を増やさない", () => {
+      // Given
+      // When
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+
+      // Then
+      for (const panel of [drawerPanel(), railPanel()]) {
+        for (const key of [
+          "leftPanelHome",
+          "leftPanelHistory",
+          "leftPanelSettings",
+        ] as const) {
+          const link = within(panel).getByRole("link", {
+            name: navigationText(key),
+          });
+          const icon = link.querySelector("svg");
+          expect(icon).toHaveAttribute("aria-hidden", "true");
+          expect(icon).not.toHaveAttribute("tabindex", "0");
+          expect(link).toHaveAccessibleName(navigationText(key));
+          expect(
+            link.querySelectorAll(
+              "button, a, [tabindex], [role='button'], [role='link']",
+            ),
+          ).toHaveLength(0);
+        }
+      }
+    });
+  });
+
+  describe("ホーム・点数一覧の項目", () => {
     // 項目は2つの枠に1つずつあり、DOM順で先のドロワーの枠を押す。
     function homeLink() {
       return screen.getAllByRole("link", {
@@ -739,7 +817,7 @@ describe("LeftPanel", () => {
       })[0];
     }
 
-    it("ホーム・履歴・設定の項目を2つの枠に表示し、個人の項目は表示しない", () => {
+    it("ホーム・点数一覧・設定の項目を2つの枠に表示し、個人の項目は表示しない", () => {
       // Given
       // When
       render(<PanelWithFrame />, { wrapper: IntlTestProvider });
@@ -761,7 +839,7 @@ describe("LeftPanel", () => {
       expect(screen.queryByText("個人")).toBeNull();
     });
 
-    it("設定の項目は、各枠でホーム・履歴より後に置かれる", () => {
+    it("設定の項目は、各枠でホーム・点数一覧より後に置かれる", () => {
       // Given
       // When
       render(<PanelWithFrame />, { wrapper: IntlTestProvider });

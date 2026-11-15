@@ -5,7 +5,7 @@ export const navigationMessages = {
     introDescription: "アーチェリーのスコア記録・分析・共有アプリ",
     startButton: "開始",
     leftPanelHome: "ホーム",
-    leftPanelHistory: "履歴",
+    leftPanelHistory: "点数一覧",
     leftPanelSettings: "設定",
     leftPanelOpenMenu: "メニューを開く",
     leftPanelCloseMenu: "メニューを閉じる",

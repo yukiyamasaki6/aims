@@ -45,9 +45,16 @@ import {
 } from "./rounds-context";
 import { RoundsHistory } from "./rounds-history";
 
+const suspense = vi.hoisted(() => ({ pending: null as Promise<void> | null }));
+
 vi.mock("next/navigation", async () => {
   const { fakeSearchParams: fake } = await import("./navigation-test-helpers");
-  return { useSearchParams: fake.useSearchParams };
+  return {
+    useSearchParams: () => {
+      if (suspense.pending) throw suspense.pending;
+      return fake.useSearchParams();
+    },
+  };
 });
 
 const roundsText = translatorFor("rounds");
@@ -310,6 +317,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  suspense.pending = null;
   fakeSearchParams.reset();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -357,6 +365,96 @@ const DATE_DIRECTION_TEST_ID = "history-sort-date-direction";
 const SCORE_DIRECTION_TEST_ID = "history-sort-score-direction";
 
 describe("RoundsHistory", () => {
+  describe("指定された日本語の見出し", () => {
+    it.each([
+      ["取得中", () => {}, () => screen.findByRole("status")],
+      [
+        "空",
+        () => fetchResolves([]),
+        () => screen.findByText(roundsText("historyEmpty")),
+      ],
+      [
+        "成功",
+        () => fetchResolves(completed),
+        () => screen.findByText("午前練習"),
+      ],
+      [
+        "通信失敗",
+        () =>
+          fake.store.loadList.mockResolvedValue({
+            status: "error",
+            reason: "failed",
+          }),
+        () => screen.findByRole("alert"),
+      ],
+      [
+        "オフライン",
+        () => fake.store.loadList.mockResolvedValue({ status: "offline" }),
+        () => screen.findByText(roundsText("fetchOffline")),
+      ],
+    ] as const)(
+      "%sでも見出しの指定された日本語「点数一覧」と対応する本文を表示する",
+      async (_state, prepare, body) => {
+        // Given
+        prepare();
+
+        // When
+        renderHistory();
+
+        // Then
+        expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+          /^点数一覧$/,
+        );
+        expect(await body()).toBeVisible();
+        expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+          /^点数一覧$/,
+        );
+      },
+    );
+
+    it("Suspense待機中も指定された日本語「点数一覧」の見出しを表示する", () => {
+      // Given
+      suspense.pending = new Promise(() => {});
+
+      // When
+      renderHistory();
+
+      // Then
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+        /^点数一覧$/,
+      );
+      expect(
+        screen.queryByRole("button", {
+          name: roundsText("historyFilterTitle"),
+        }),
+      ).toBeNull();
+      expect(fake.store.loadList).not.toHaveBeenCalled();
+    });
+
+    it("Suspense待機の解除後も指定された日本語「点数一覧」の見出しを保つ", async () => {
+      // Given
+      const pending = Promise.withResolvers<void>();
+      suspense.pending = pending.promise;
+      fetchResolves(completed);
+      renderHistory();
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+        /^点数一覧$/,
+      );
+
+      // When
+      await act(async () => {
+        suspense.pending = null;
+        pending.resolve();
+      });
+
+      // Then
+      expect(await screen.findByText("午前練習")).toBeVisible();
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+        /^点数一覧$/,
+      );
+    });
+  });
+
   describe("履歴の表示", () => {
     it("表示を始めると履歴を1回取得し、取得できた完了のラウンドをカードで表示する", async () => {
       // Given
