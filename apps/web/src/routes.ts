@@ -52,16 +52,20 @@ export const ROUND_FRAME_PATH = `${ROUNDS_PATH}/${ROUND_FRAME_ID}`;
 // 設定の画面の経路。分類ごとの経路は持たない。
 export const SETTINGS_PATH = "/settings";
 
-// パスワード変更の画面の経路。設定の項目ごとの画面は、設定の配下に置く。
+// メールアドレス変更の画面の経路。設定の項目ごとの画面は、設定の配下に置く。
+export const CHANGE_EMAIL_PATH = `${SETTINGS_PATH}/email`;
+
+// パスワード変更の画面の経路。
 export const CHANGE_PASSWORD_PATH = `${SETTINGS_PATH}/password`;
 
-// 全ての画面の枠の経路。ラウンドのホーム、履歴、作成、詳細と、設定の2画面の6つ。
+// 全ての画面の枠の経路。ラウンドのホーム、履歴、作成、詳細と、設定の3画面の7つ。
 export const FRAME_PATHS: string[] = [
   ROUNDS_HOME_PATH,
   ROUNDS_HISTORY_PATH,
   NEW_ROUND_PATH,
   ROUND_FRAME_PATH,
   SETTINGS_PATH,
+  CHANGE_EMAIL_PATH,
   CHANGE_PASSWORD_PATH,
 ];
 

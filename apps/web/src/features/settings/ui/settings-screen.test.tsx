@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { CHANGE_EMAIL_PATH } from "@/routes";
 import { SettingsScreen } from "./settings-screen";
 
 const settingsText = translatorFor("settings");
@@ -31,7 +32,7 @@ describe("SettingsScreen", () => {
     expect(screen.getAllByRole("heading")).toHaveLength(2);
   });
 
-  it("分類「アカウント」の区画の中に、「パスワード変更」の項目を表示する", () => {
+  it("分類「アカウント」の区画の中に、「メールアドレス変更」と「パスワード変更」の項目を表示する", () => {
     // Given
     // When
     render(<SettingsScreen account={null} />, {
@@ -41,9 +42,46 @@ describe("SettingsScreen", () => {
     // Then
     expect(
       within(accountSection()).getByRole("link", {
+        name: settingsText("changeEmailItem"),
+      }),
+    ).toBeVisible();
+    expect(
+      within(accountSection()).getByRole("link", {
         name: settingsText("changePasswordItem"),
       }),
     ).toBeVisible();
+  });
+
+  it("「メールアドレス変更」の項目を、「パスワード変更」の項目より上に表示する", () => {
+    // Given
+    // When
+    render(<SettingsScreen account={null} />, {
+      wrapper: IntlTestProvider,
+    });
+
+    // Then
+    const names = within(accountSection())
+      .getAllByRole("link")
+      .map((link) => link.textContent);
+    expect(names).toEqual([
+      settingsText("changeEmailItem"),
+      settingsText("changePasswordItem"),
+    ]);
+  });
+
+  it("「メールアドレス変更」の項目は、メールアドレス変更の画面を指す", () => {
+    // Given
+    // When
+    render(<SettingsScreen account={null} />, {
+      wrapper: IntlTestProvider,
+    });
+
+    // Then
+    expect(
+      within(accountSection()).getByRole("link", {
+        name: settingsText("changeEmailItem"),
+      }),
+    ).toHaveAttribute("href", CHANGE_EMAIL_PATH);
   });
 
   it("渡した子要素を、分類「アカウント」の区画の中にだけ表示する", () => {
@@ -59,7 +97,7 @@ describe("SettingsScreen", () => {
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
-  it("分類の中身を渡さなければ、区画には見出しと、パスワード変更の項目だけを表示し、ボタンはない", () => {
+  it("分類の中身を渡さなければ、区画には見出しと、メールアドレス変更とパスワード変更の項目だけを表示し、ボタンはない", () => {
     // Given
     // When
     render(<SettingsScreen account={null} />, {
@@ -69,7 +107,7 @@ describe("SettingsScreen", () => {
     // Then
     const region = accountSection();
     expect(within(region).getAllByRole("heading")).toHaveLength(1);
-    expect(within(region).getAllByRole("link")).toHaveLength(1);
+    expect(within(region).getAllByRole("link")).toHaveLength(2);
     expect(within(region).queryByRole("button")).toBeNull();
   });
 

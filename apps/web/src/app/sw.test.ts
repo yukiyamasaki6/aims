@@ -6,6 +6,7 @@ import type {
 } from "serwist";
 import { NetworkOnly, RegExpRoute, Strategy } from "serwist";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { FRAME_PATHS, shellUrlOf } from "@/routes";
 
 // Serwistはimport時にService Workerのイベントリスナー登録等の副作用を持つ外部パッケージのため、コンストラクタに渡された構成を捕捉するスタブに差し替える。キャッシュ戦略とルートの照合はserwistの実物を使う。
 const sw = vi.hoisted(() => ({
@@ -97,6 +98,8 @@ describe("sw", () => {
         ["/rounds/abc", "/__shell/rounds/_"],
         ["/settings", "/__shell/settings"],
         ["/settings?tab=1#top", "/__shell/settings"],
+        ["/settings/email", "/__shell/settings/email"],
+        ["/settings/email?tab=1#top", "/__shell/settings/email"],
         ["/settings/password", "/__shell/settings/password"],
         ["/settings/password?tab=1#top", "/__shell/settings/password"],
       ])("%sはプリキャッシュの%sを返す", async (url, frameUrl) => {
@@ -115,6 +118,24 @@ describe("sw", () => {
         expect(sw.matchPrecache).toHaveBeenCalledWith(frameUrl);
         expect(network).not.toHaveBeenCalled();
       });
+
+      it.each(FRAME_PATHS)(
+        "枠の経路%sは、経路から導いた枠をプリキャッシュから返す",
+        async (path) => {
+          // Given
+          const frame = new Response("frame");
+          sw.matchPrecache.mockResolvedValue(frame);
+
+          // When
+          const handler = findHandler(path, "navigate");
+          const response = await handleFrame(path, vi.fn());
+
+          // Then
+          expect(handler).toBeInstanceOf(Strategy);
+          expect(response).toBe(frame);
+          expect(sw.matchPrecache).toHaveBeenCalledWith(shellUrlOf(path));
+        },
+      );
 
       it("枠が未格納ならネットワークから取得する", async () => {
         // Given
@@ -151,6 +172,8 @@ describe("sw", () => {
         "/settings/x",
         "/settingsx",
         "/settings/",
+        "/settings/email/",
+        "/settings/emailx",
       ])("枠のない%sのナビゲーションはネットワークへ通す", (url) => {
         // Given
         // When
@@ -255,6 +278,7 @@ describe("sw", () => {
     it.each([
       "/__shell/rounds",
       "/__shell/settings",
+      "/__shell/settings/email",
       "/__shell/settings/password",
       "/_next/static/chunks/main.js",
       "/offline",

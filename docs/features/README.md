@@ -63,6 +63,7 @@
 | auth | password-reset | パスワードを再設定する | PW再設定 |
 | auth | signout | サインアウトする | Email/PW認証 |
 | auth | change-password | サインイン後にパスワードを変更する | パスワード変更 |
+| auth | change-email | サインイン後にメールアドレスを変更する | メール変更 |
 | rounds | start | ラウンドを始める | ラウンド・種目管理 |
 | rounds | score-entry | 矢の点数を記録・修正する | 素点テンキー入力、誤入力修正・差し替え |
 | rounds | setup | ラウンドの設定を変える | 基本属性入力、的（ターゲット）管理、ラウンド・種目管理 |

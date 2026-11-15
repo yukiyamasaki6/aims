@@ -33,6 +33,7 @@ function setup() {
     signInWithOtp: vi.fn(),
     resetPasswordForEmail: vi.fn(),
     verifyOtp: vi.fn(),
+    resend: vi.fn(),
     updateUser: vi.fn(),
     signOut: vi.fn(),
     getSession: vi.fn(),
@@ -843,6 +844,299 @@ describe("パスワードの変更(updatePassword)", () => {
     expect(result).toEqual({
       kind: "failed",
       failure: { kind: "unreachable" },
+    });
+  });
+});
+
+describe("メールアドレスの変更(readCurrentEmail、requestEmailChange、confirmEmailChange、resendEmailChangeCode)", () => {
+  const newEmail = "new@example.com";
+  const currentEmail = "current@example.com";
+  const unreachable = { kind: "failed", failure: { kind: "unreachable" } };
+
+  describe("現在のメールアドレスの読み取り", () => {
+    it("セッションがあればそのメールアドレスを返し、無いときと読み取りが投げたときは不明にする", async () => {
+      // Given
+      const withSession = setup();
+      withSession.auth.getSession.mockResolvedValue({
+        data: { session: { user: { email: currentEmail } } },
+      });
+      const without = setup();
+      without.auth.getSession.mockResolvedValue({ data: { session: null } });
+      const thrown = setup();
+      thrown.auth.getSession.mockRejectedValue(new Error("storage"));
+
+      // When
+      const found = await withSession.service.readCurrentEmail();
+      const none = await without.service.readCurrentEmail();
+      const failed = await thrown.service.readCurrentEmail();
+
+      // Then
+      expect(found).toBe(currentEmail);
+      expect(none).toBeNull();
+      expect(failed).toBeNull();
+    });
+  });
+
+  describe("要求(requestEmailChange)", () => {
+    it("新しいメールアドレスだけをupdateUserへ1回渡し、受け付けと応答の現在のメールアドレスを返す", async () => {
+      // Given
+      const { service, auth } = setup();
+      auth.updateUser.mockResolvedValue({
+        data: { user: { email: currentEmail } },
+        error: null,
+      });
+
+      // When
+      const result = await service.requestEmailChange({ newEmail });
+
+      // Then
+      expect(auth.updateUser).toHaveBeenCalledExactlyOnceWith({
+        email: newEmail,
+      });
+      expect(result).toEqual({ kind: "accepted", currentEmail });
+    });
+
+    it("保留中の変更のnew_emailがあっても、応答の現在のメールアドレスだけを返す", async () => {
+      // Given
+      const { service, auth } = setup();
+      auth.updateUser.mockResolvedValue({
+        data: {
+          user: { email: currentEmail, new_email: "previous@example.com" },
+        },
+        error: null,
+      });
+
+      // When
+      const result = await service.requestEmailChange({ newEmail });
+
+      // Then
+      expect(result).toEqual({ kind: "accepted", currentEmail });
+    });
+
+    it("応答の現在のメールアドレスが要求と同じなら、保留中のnew_emailがあっても、同じメールアドレスにする", async () => {
+      // Given
+      const { service, auth } = setup();
+      auth.updateUser.mockResolvedValue({
+        data: {
+          user: { email: currentEmail, new_email: "previous@example.com" },
+        },
+        error: null,
+      });
+
+      // When
+      const result = await service.requestEmailChange({
+        newEmail: currentEmail,
+      });
+
+      // Then
+      expect(result).toEqual({
+        kind: "failed",
+        failure: { kind: "same_email" },
+      });
+    });
+
+    it.each([
+      [
+        "422 email_exists",
+        { error: new AuthApiError("exists", 422, "email_exists") },
+        "email_exists",
+      ],
+      [
+        "200で現在のメールアドレスが要求と同じ",
+        { data: { user: { email: newEmail } }, error: null },
+        "same_email",
+      ],
+      [
+        "200で現在のメールアドレスが大文字小文字だけ違う",
+        { data: { user: { email: newEmail.toUpperCase() } }, error: null },
+        "same_email",
+      ],
+      [
+        "429 over_email_send_rate_limit",
+        { error: rateLimited },
+        "rate_limited",
+      ],
+      [
+        "429 over_request_rate_limit",
+        { error: new AuthApiError("rate", 429, "over_request_rate_limit") },
+        "rate_limited",
+      ],
+      ["再試行可能な通信エラー", { error: connectionLost }, "unreachable"],
+      [
+        "その他のコード",
+        { error: new AuthApiError("x", 400, "some_unknown_code") },
+        "other",
+      ],
+      [
+        "200で応答に現在のメールアドレスが無い",
+        { data: { user: {} }, error: null },
+        "other",
+      ],
+    ])("応答%sを、%sの失敗にする", async (_name, response, kind) => {
+      // Given
+      const { service, auth } = setup();
+      auth.updateUser.mockResolvedValue(response);
+
+      // When
+      const result = await service.requestEmailChange({ newEmail });
+
+      // Then
+      expect(result).toEqual({ kind: "failed", failure: { kind } });
+    });
+  });
+
+  describe("確認(confirmEmailChange)", () => {
+    it.each([
+      [
+        "一方だけの確認(利用者もセッションも返さない)",
+        { user: null, session: null },
+        "partial",
+      ],
+      [
+        "両方の確認(セッションを返す)",
+        { user: { id: "u" }, session: { access_token: "t" } },
+        "completed",
+      ],
+    ])(
+      "%sは、アドレスとコードをtype email_changeで渡し、%sにする",
+      async (_name, data, kind) => {
+        // Given
+        const { service, auth } = setup();
+        auth.verifyOtp.mockResolvedValue({ data, error: null });
+
+        // When
+        const result = await service.confirmEmailChange({
+          email: currentEmail,
+          code: "123456",
+        });
+
+        // Then
+        expect(auth.verifyOtp).toHaveBeenCalledExactlyOnceWith({
+          email: currentEmail,
+          token: "123456",
+          type: "email_change",
+        });
+        expect(result).toEqual({ kind });
+      },
+    );
+
+    it.each([
+      [
+        "403 otp_expired",
+        new AuthApiError("expired", 403, "otp_expired"),
+        "code_expired",
+      ],
+      ["429 over_email_send_rate_limit", rateLimited, "rate_limited"],
+      [
+        "429 over_request_rate_limit",
+        new AuthApiError("rate", 429, "over_request_rate_limit"),
+        "rate_limited",
+      ],
+      [
+        "500でコードの無いAuthRetryableFetchError",
+        new AuthRetryableFetchError("boom", 500),
+        "unreachable",
+      ],
+      [
+        "その他のコード",
+        new AuthApiError("x", 400, "some_unknown_code"),
+        "other",
+      ],
+    ])("応答%sを、%sの失敗にする", async (_name, error, kind) => {
+      // Given
+      const { service, auth } = setup();
+      auth.verifyOtp.mockResolvedValue({ data: {}, error });
+
+      // When
+      const result = await service.confirmEmailChange({
+        email: newEmail,
+        code: "123456",
+      });
+
+      // Then
+      expect(result).toEqual({ kind: "failed", failure: { kind } });
+    });
+  });
+
+  describe("再送(resendEmailChangeCode)", () => {
+    it("現在のメールアドレスとトークンをtype email_changeでresendへ1回渡し、受け付けにする", async () => {
+      // Given
+      const { service, auth } = setup();
+      auth.resend.mockResolvedValue({ error: null });
+
+      // When
+      const result = await service.resendEmailChangeCode({
+        email: currentEmail,
+        captchaToken: "token",
+      });
+
+      // Then
+      expect(auth.resend).toHaveBeenCalledExactlyOnceWith({
+        type: "email_change",
+        email: currentEmail,
+        options: { captchaToken: "token" },
+      });
+      expect(result).toEqual({ kind: "accepted" });
+    });
+
+    it.each([
+      [
+        "400 captcha_failed",
+        new AuthApiError("captcha", 400, "captcha_failed"),
+        "captcha_failed",
+      ],
+      ["429 over_email_send_rate_limit", rateLimited, "rate_limited"],
+      ["通信の断", connectionLost, "unreachable"],
+      [
+        "その他のコード",
+        new AuthApiError("x", 400, "some_unknown_code"),
+        "other",
+      ],
+    ])("応答%sを、%sの失敗にする", async (_name, error, kind) => {
+      // Given
+      const { service, auth } = setup();
+      auth.resend.mockResolvedValue({ error });
+
+      // When
+      const result = await service.resendEmailChangeCode({
+        email: currentEmail,
+        captchaToken: "token",
+      });
+
+      // Then
+      expect(result).toEqual({ kind: "failed", failure: { kind } });
+    });
+  });
+
+  describe("呼び出しが投げたとき、接続を得られないとき", () => {
+    it("要求・確認・再送は届かなかった失敗にし、読み取りは不明にする", async () => {
+      // Given
+      const thrown = setup();
+      thrown.auth.updateUser.mockRejectedValue(new Error("network down"));
+      thrown.auth.verifyOtp.mockRejectedValue(new Error("network down"));
+      thrown.auth.resend.mockRejectedValue(new Error("network down"));
+      const service = unavailableService();
+
+      // When
+      const results = [
+        await thrown.service.requestEmailChange({ newEmail }),
+        await thrown.service.confirmEmailChange({ email: newEmail, code: "1" }),
+        await thrown.service.resendEmailChangeCode({
+          email: currentEmail,
+          captchaToken: "t",
+        }),
+        await service.requestEmailChange({ newEmail }),
+        await service.confirmEmailChange({ email: newEmail, code: "1" }),
+        await service.resendEmailChangeCode({
+          email: currentEmail,
+          captchaToken: "t",
+        }),
+      ];
+      const reading = await service.readCurrentEmail();
+
+      // Then
+      for (const result of results) expect(result).toEqual(unreachable);
+      expect(reading).toBeNull();
     });
   });
 });

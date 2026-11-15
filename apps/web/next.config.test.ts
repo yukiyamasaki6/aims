@@ -30,6 +30,10 @@ describe("next.config rewrites", () => {
       { source: "/__shell/rounds/_", destination: "/rounds/_" },
       { source: "/__shell/settings", destination: "/settings" },
       {
+        source: "/__shell/settings/email",
+        destination: "/settings/email",
+      },
+      {
         source: "/__shell/settings/password",
         destination: "/settings/password",
       },

@@ -56,7 +56,7 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 - `src/features/auth/domain/password.ts`、`auth-code.ts`: パスワードの文字種の規則と、認証コードの桁数(入力欄の上限)、未入力の検査と再送の待ち時間の規則(domain。誤りの種類を返す)。パスワード再設定も使う。
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(`same_password`はchange-passwordと共用)。
   文言は持たない。
-- `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の5機能で共通。`docs/features/auth/design.md`)。
+- `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の6機能で共通。`docs/features/auth/design.md`)。
   コードの目的`sign-up`の`signInWithOtp`、`verifyOtp`、`updateUser`の呼び出しを含む。
   パスワードの設定の応答のうち、422 `same_password`を失敗の種類`same_password`に写す(サインアップ、再設定、パスワード変更で共通。コードの目的は渡さない)。
   呼び出しの結果は`CallResult`(受け付けられた、または失敗)の値で返し、応答が無かった場合(接続を作れない、呼び出しが投げた)は`unreachable`の失敗にする。

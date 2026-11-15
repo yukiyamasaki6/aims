@@ -32,7 +32,7 @@
 - `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: サインアップと共有する、手続きの共通の順序(送信の直前にオフラインを1回読むことを含む。操作の開始、コードの送付の依頼、確認、パスワード設定の依頼)と、認証サービスへ頼むことの約束。
 - `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、開始の命令(`beginSendCode`ほか)が、操作の可否と入力の検証の順序、確認・再送・戻るの排他を守って`Start`を返す。事実の遷移でトークンの消費を守る。サインアップと共有する。
 - `src/features/auth/domain/password.ts`、`auth-code.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`auth-routes.ts`: パスワードの文字種、認証コードと再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則(domain。経路の文字列は経路表が持つ)。入力の誤りと失敗は種類で返し、文言は持たない。
-- `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の5機能で共通。`docs/features/auth/design.md`)。
+- `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の6機能で共通。`docs/features/auth/design.md`)。
   ブラウザの接続で`resetPasswordForEmail`、`verifyOtp`、`updateUser`、`signOut`(範囲`local`)を使う。
   応答が無かった場合(接続を作れない、呼び出しが投げた)は、`unreachable`の失敗として返す。
 - `src/features/auth/infrastructure/browser-page-load.ts`: サインアウトのセッション喪失の遷移（`window.location.replace`による置き換え、今の場所）の実装。

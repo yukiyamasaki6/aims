@@ -3,10 +3,10 @@ import { useTranslations } from "next-intl";
 import { type ReactNode, useId } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CHANGE_PASSWORD_PATH } from "@/routes";
+import { CHANGE_EMAIL_PATH, CHANGE_PASSWORD_PATH } from "@/routes";
 
 // 設定の画面。見出しと、分類ごとの区画を描く。
-// account: 分類「アカウント」の、パスワード変更の項目に続く中身(サインアウトなど、認証の部品)。入口が渡す。
+// account: 分類「アカウント」の、メールアドレス変更とパスワード変更の項目に続く中身(サインアウトなど、認証の部品)。入口が渡す。
 export function SettingsScreen({ account }: { account: ReactNode }) {
   const t = useTranslations("settings");
   const accountTitleId = useId();
@@ -21,6 +21,12 @@ export function SettingsScreen({ account }: { account: ReactNode }) {
           {t("accountTitle")}
         </h2>
         <div className="flex flex-col [&>*:first-child]:rounded-t-lg [&>*:first-child]:border-t [&>*:last-child]:rounded-b-lg">
+          <Link
+            href={CHANGE_EMAIL_PATH}
+            className={cn(buttonVariants({ variant: "ghost", size: "row" }))}
+          >
+            {t("changeEmailItem")}
+          </Link>
           <Link
             href={CHANGE_PASSWORD_PATH}
             className={cn(buttonVariants({ variant: "ghost", size: "row" }))}
