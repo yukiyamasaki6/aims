@@ -1,6 +1,8 @@
 begin;
 
-select plan(41);
+select plan(42);
+
+select hasnt_column('public', 'target_faces', 'owner_id', 'target_facesは持ち主の列を持たない');
 
 -- formatは的の選択UIの並び順（種類→サイズ）を、名前文字列の解析ではなく
 -- roundsやdistancesと同じ意味を持つ列で扱うために持たせる。
@@ -80,24 +82,24 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$insert into public.target_faces (owner_id, name, size, format)
-    values ('11111111-1111-1111-1111-111111111111', 'Missing Bow Type', 80, 'outdoor')$$,
+  $$insert into public.target_faces (name, size, format)
+    values ('Missing Bow Type', 80, 'outdoor')$$,
   '23502',
   null,
   'target_faces.bow_typeを省略した作成はNOT NULL制約で拒否される'
 );
 
 select throws_ok(
-  $$insert into public.target_faces (owner_id, name, format)
-    values ('11111111-1111-1111-1111-111111111111', 'Missing Size', 'outdoor')$$,
+  $$insert into public.target_faces (name, format)
+    values ('Missing Size', 'outdoor')$$,
   '23502',
   null,
   'target_faces.sizeを省略した作成はNOT NULL制約で拒否される'
 );
 
 select throws_ok(
-  $$insert into public.target_faces (owner_id, name, size)
-    values ('11111111-1111-1111-1111-111111111111', 'Missing Format', 80)$$,
+  $$insert into public.target_faces (name, size)
+    values ('Missing Format', 80)$$,
   '23502',
   null,
   'target_faces.formatを省略した作成はNOT NULL制約で拒否される'
@@ -124,12 +126,12 @@ select results_eq(
   '6点的（インドア・40cm・3つ目トライアングル）のsizeは40'
 );
 
--- Seed data: グローバル的（owner_id is null）が投入されている。
+-- Seed data: 的が投入されている。
 -- 標準13件 + インドア・コンパウンド用に追加した6件 = 19件。
 select results_eq(
-  $$select count(*) from public.target_faces where owner_id is null$$,
+  $$select count(*) from public.target_faces$$,
   $$values (19::bigint)$$,
-  'グローバル的が19件シードされている（標準13件+インドア・コンパウンド用6件）'
+  '的が19件シードされている（標準13件+インドア・コンパウンド用6件）'
 );
 
 select results_eq(
@@ -262,13 +264,12 @@ select throws_ok(
   '参照中のtarget_faceは外部キー制約で削除できない'
 );
 
--- Fixture: 別ユーザーが所有する個人的な的。
+-- Fixture: シード以外の的。
 -- 的はシードのみでアプリから書き込まないため、authenticatedにはSELECTだけを許可する。
-insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111');
 insert into auth.users (id) values ('99999999-9999-9999-9999-999999999999');
 
-insert into public.target_faces (id, owner_id, name, size, format, bow_type)
-values ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'My Target', 80, 'outdoor', array['recurve', 'compound', 'barebow']);
+insert into public.target_faces (id, name, size, format, bow_type)
+values ('22222222-2222-2222-2222-222222222222', 'My Target', 80, 'outdoor', array['recurve', 'compound', 'barebow']);
 
 insert into public.target_face_spots (id, target_face_id, center_x, center_y)
 values ('33333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 0, 0);
@@ -278,34 +279,34 @@ values ('33333333-3333-3333-3333-333333333333', 6.1, '#FFE552', null, 1, '10', 1
 
 set local role authenticated;
 
--- 認証済みユーザーは、他人の個人的な的を含め、グローバル・個人問わず全て閲覧できる。
+-- 認証済みユーザーは、全ての的・スポット・リングを閲覧できる。
 select set_config('request.jwt.claim.sub', '99999999-9999-9999-9999-999999999999', true);
 select results_eq(
   $$select count(*) from public.target_faces where id = '22222222-2222-2222-2222-222222222222'$$,
   $$values (1::bigint)$$,
-  '他ユーザーの個人的な的も閲覧できる'
+  '認証済みユーザーは全ての的を閲覧できる'
 );
 
 select results_eq(
   $$select count(*) from public.target_face_spots where target_face_id = '22222222-2222-2222-2222-222222222222'$$,
   $$values (1::bigint)$$,
-  '他ユーザーの個人的な的のスポットも閲覧できる'
+  '認証済みユーザーは全ての的のスポットを閲覧できる'
 );
 
 -- このアプリは認証済みユーザーだけが利用するため、未認証では参照できない。
 set local role anon;
 select throws_ok(
-  $$select count(*) from public.target_faces where owner_id is null$$,
+  $$select count(*) from public.target_faces$$,
   '42501',
   null,
-  '未認証（anon）はグローバルな的を閲覧できない'
+  '未認証（anon）は的を閲覧できない'
 );
 
 select throws_ok(
   $$select id from public.target_faces where id = '22222222-2222-2222-2222-222222222222'$$,
   '42501',
   null,
-  '未認証（anon）は個人的な的を閲覧できない'
+  '未認証（anon）は的を個別に指定しても閲覧できない'
 );
 
 select throws_ok(
@@ -314,7 +315,7 @@ select throws_ok(
     where tf.id = '22222222-2222-2222-2222-222222222222'$$,
   '42501',
   null,
-  '未認証（anon）は個人的な的のスポットも閲覧できない'
+  '未認証（anon）は的のスポットも閲覧できない'
 );
 
 -- 的を削除すると、子のスポット・点数帯がカスケード削除される。

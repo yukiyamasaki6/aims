@@ -10,7 +10,7 @@
 | `round_events` | `rounds`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない。効かせた操作の、効いた項目だけを記録する |
 | `distance_events` | `distances`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない。効かせた操作の、効いた項目だけを記録する |
 | `shot_events` | `shots`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない            |
-| `target_faces`            | 的を表す。`owner_id`がnullならグローバル、値があれば個人登録   |
+| `target_faces`            | 的を表す。                                                                                 |
 | `target_face_spots`       | 的の中の的中スポット（中心座標）を表す。1つの的が複数スポットを持てる（3つ目等の複数的配置）   |
 | `target_face_rings`       | スポットの中の点数帯（同心円1本）を表す。半径・色・重なり順・得点を持つ                    |
 | `preset_rounds`           | ラウンドの定型フォーマット（種別・弓種・距離構成）を表す。`owner_id`がnullならグローバル、値があれば個人プリセット |
@@ -25,7 +25,6 @@ erDiagram
     rounds ||--o{ distances : "1対多"
     distances ||--o{ shots : "1対多"
     users ||--o{ shots : "1対多"
-    users ||--o{ target_faces : "1対多"
     target_faces ||--o{ target_face_spots : "1対多"
     target_face_spots ||--o{ target_face_rings : "1対多"
     target_faces ||--o{ distances : "1対多"
@@ -139,7 +138,6 @@ erDiagram
     }
     target_faces {
         uuid id PK "サロゲートID"
-        uuid owner_id FK "所有ユーザー [NULLABLE: null=グローバル、値あり=個人登録]"
         string name "的名（例：Outdoor 122cm）"
         bigint size "的の呼称サイズ（cm） [CHECK: > 0]"
         string format "対応する種別 [CHECK: outdoor / indoor / field]"

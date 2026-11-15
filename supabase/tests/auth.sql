@@ -1,6 +1,6 @@
 begin;
 
-select plan(7);
+select plan(6);
 
 insert into auth.users (id) values ('55555555-5555-5555-5555-555555555555');
 
@@ -19,9 +19,6 @@ select is(
 -- auth.users削除時の連鎖検証: public.usersだけでなく、所有物やメンバー登録・
 -- 記録済みshotsまで巻き込んでカスケード削除されることを確認する。
 insert into auth.users (id) values ('e0000000-0000-0000-0000-000000000001');
-
-insert into public.target_faces (owner_id, name, size, format, bow_type)
-values ('e0000000-0000-0000-0000-000000000001', 'Owned Target', 80, 'outdoor', array['recurve', 'compound', 'barebow']);
 
 insert into public.preset_rounds (owner_id, name, format, bow_type)
 values ('e0000000-0000-0000-0000-000000000001', 'Owned Preset', 'outdoor', 'recurve');
@@ -43,11 +40,6 @@ delete from auth.users where id = 'e0000000-0000-0000-0000-000000000001';
 select is_empty(
   $$select id from public.users where id = 'e0000000-0000-0000-0000-000000000001'$$,
   'auth.users削除でpublic.usersもカスケード削除される'
-);
-
-select is_empty(
-  $$select id from public.target_faces where owner_id = 'e0000000-0000-0000-0000-000000000001'$$,
-  'auth.users削除で所有するtarget_facesもカスケード削除される'
 );
 
 select is_empty(

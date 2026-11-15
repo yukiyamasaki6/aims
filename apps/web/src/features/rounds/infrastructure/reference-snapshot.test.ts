@@ -100,6 +100,26 @@ describe("reference-snapshot", () => {
     expect(loaded).toBeNull();
   });
 
+  it("owner_idを含む削除前の的のselectで保存した一覧は、無いものとして扱う", () => {
+    // Given
+    const selectBeforeRemovingOwnerId =
+      "id, name, size, format, bow_type, owner_id, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index, score_str, score_int))";
+    localStorage.setItem(
+      "aims:reference:target-faces:user-1",
+      JSON.stringify({
+        shape: selectBeforeRemovingOwnerId,
+        startedAt: 1,
+        data: [{ id: "face-1" }],
+      }),
+    );
+
+    // When
+    const loaded = snapshots.load("target-faces");
+
+    // Then
+    expect(loaded).toBeNull();
+  });
+
   it("shapeが一致するものは読める", () => {
     // Given
     localStorage.setItem(

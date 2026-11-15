@@ -12,7 +12,7 @@ import type { PresetRecord } from "../domain/preset";
 import { newestById } from "../domain/round-base";
 import type { ServerHistoryPage } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
-import type { TargetFaceRecord } from "../domain/target-face";
+import type { TargetFaceOption } from "../domain/target-face";
 import { failureOfResponses } from "./db-response-outcome";
 import {
   ROUND_PRESET_SELECT,
@@ -81,8 +81,8 @@ function distanceArgOf(condition: HistoryCondition) {
   return { p_distance: distanceRowArgOf(condition.distanceRow) };
 }
 
-function toTargetFaces(rows: unknown): TargetFaceRecord[] {
-  return rows as TargetFaceRecord[];
+function toTargetFaces(rows: unknown): TargetFaceOption[] {
+  return rows as TargetFaceOption[];
 }
 
 // preset_distances.target_facesはFKの多重度（多対1）上つねに単一のオブジェクトだが、
@@ -95,14 +95,10 @@ function toPresets(rows: unknown): PresetRecord[] {
 export function createRoundQueries(
   database: DatabaseGateway<RoundsDbSchema>,
 ): RoundQueries {
-  // target_facesのRLSは認証済みの全員に全行を見せるため、他人の個人の的を除くクエリの絞りが必須である。
-  const selectTargetFaces = (userId: string) =>
+  const selectTargetFaces = () =>
     database.select({
       table: "target_faces",
       columns: TARGET_FACE_SELECT,
-      filters: [
-        { op: "or", expression: `owner_id.is.null,owner_id.eq.${userId}` },
-      ],
       retry: true,
     });
 
@@ -163,16 +159,16 @@ export function createRoundQueries(
       if (!round.data) return { status: "not-found" };
       return { status: "ok", data: round.data as ServerRound };
     },
-    async targetFaces(userId) {
-      const faces = await selectTargetFaces(userId);
+    async targetFaces() {
+      const faces = await selectTargetFaces();
       const failure = failureOfResponses([faces]);
       if (failure) return failure;
       return { status: "ok", data: toTargetFaces(faces.data) };
     },
-    async roundDetails(userId, roundIds) {
+    async roundDetails(roundIds) {
       const chunks = roundIds.length > 0 ? chunkIds(roundIds) : [[]];
       const [faces, ...responses] = await Promise.all([
-        selectTargetFaces(userId),
+        selectTargetFaces(),
         ...chunks.map((chunk, index) => selectRoundsChunk(chunk, index)),
       ]);
       const failure = failureOfResponses([...responses, faces]);

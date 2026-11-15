@@ -124,14 +124,13 @@ const round = {
   ],
 };
 
-function face(id: string, ownerId: string | null) {
+function face(id: string) {
   return {
     id,
     name: id,
     size: 122,
     format: "outdoor",
     bow_type: ["recurve"],
-    owner_id: ownerId,
     target_face_spots: [],
   };
 }
@@ -240,7 +239,7 @@ describe("再試行の指定", () => {
 
     // When
     await detailDatabase.createQueries().roundDetail("round-1");
-    await batchDatabase.createQueries().roundDetails("user-1", ids);
+    await batchDatabase.createQueries().roundDetails(ids);
 
     // Then
     const retries = [...detailDatabase.queries, ...batchDatabase.queries].map(
@@ -296,13 +295,11 @@ describe("roundDetails", () => {
         { ...round, id: uuid1, status: "in_progress" },
         { ...round, id: uuid2 },
       ]),
-      target_faces: ok([face("face-1", null)]),
+      target_faces: ok([face("face-1")]),
     });
 
     // When
-    const response = await database
-      .createQueries()
-      .roundDetails("user-1", [uuid2]);
+    const response = await database.createQueries().roundDetails([uuid2]);
 
     // Then
     const [query] = database.queries_of("rounds");
@@ -311,10 +308,8 @@ describe("roundDetails", () => {
       { op: "or", expression: `status.eq.in_progress,id.in.(${uuid2})` },
     ]);
     expect(dataOf(response)?.rounds.map((r) => r.id)).toEqual([uuid1, uuid2]);
-    expect(dataOf(response)?.targetFaces).toEqual([face("face-1", null)]);
-    expect(database.queries_of("target_faces")[0].filters).toEqual([
-      { op: "or", expression: "owner_id.is.null,owner_id.eq.user-1" },
-    ]);
+    expect(dataOf(response)?.targetFaces).toEqual([face("face-1")]);
+    expect(database.queries_of("target_faces")[0].filters).toBeUndefined();
   });
 
   it("指定したラウンドが無ければ、入力中のラウンドだけで絞る", async () => {
@@ -322,7 +317,7 @@ describe("roundDetails", () => {
     const database = makeDatabase({ rounds: ok([]), target_faces: ok([]) });
 
     // When
-    await database.createQueries().roundDetails("user-1", []);
+    await database.createQueries().roundDetails([]);
 
     // Then
     expect(database.queries_of("rounds")[0].filters).toContainEqual({
@@ -338,7 +333,7 @@ describe("roundDetails", () => {
     // When
     for (const n of [0, 50, 51]) {
       const database = makeDatabase({ rounds: ok([]), target_faces: ok([]) });
-      await database.createQueries().roundDetails("user-1", uuids(n));
+      await database.createQueries().roundDetails(uuids(n));
       counts[n] = database.queries_of("rounds");
     }
 
@@ -361,7 +356,7 @@ describe("roundDetails", () => {
     const all = uuids(300);
 
     // When
-    await database.createQueries().roundDetails("user-1", all);
+    await database.createQueries().roundDetails(all);
 
     // Then
     const sent = database.queries_of("rounds").map(idsOf);
@@ -389,9 +384,7 @@ describe("roundDetails", () => {
     });
 
     // When
-    const response = await database
-      .createQueries()
-      .roundDetails("user-1", uuids(51));
+    const response = await database.createQueries().roundDetails(uuids(51));
 
     // Then
     expect(dataOf(response)?.rounds.map((r) => [r.id, r.revision])).toEqual([
@@ -404,7 +397,7 @@ describe("roundDetails", () => {
     // Given
     const comm = makeDatabase({
       rounds: (index) => (index === 1 ? failed(0) : ok([])),
-      target_faces: ok([face("face-1", null)]),
+      target_faces: ok([face("face-1")]),
     });
     const server = makeDatabase({
       rounds: (index) => (index === 2 ? failed(500, { message: "x" }) : ok([])),
@@ -412,8 +405,8 @@ describe("roundDetails", () => {
     });
 
     // When
-    const first = await comm.createQueries().roundDetails("u", uuids(51));
-    const second = await server.createQueries().roundDetails("u", uuids(120));
+    const first = await comm.createQueries().roundDetails(uuids(51));
+    const second = await server.createQueries().roundDetails(uuids(120));
 
     // Then
     expect(first).toEqual({ status: "comm-failure" });
@@ -422,21 +415,19 @@ describe("roundDetails", () => {
 });
 
 describe("targetFaces", () => {
-  it("公式と自分の的だけを、ラウンドを取得せずに1回の問い合わせで得る", async () => {
+  it("全ての的を、ラウンドを取得せずに1回の問い合わせで得る", async () => {
     // Given
     const database = makeDatabase({
       rounds: ok([]),
-      target_faces: ok([face("face-1", null), face("face-2", "user-1")]),
+      target_faces: ok([face("face-1"), face("face-2")]),
     });
 
     // When
-    const response = await database.createQueries().targetFaces("user-1");
+    const response = await database.createQueries().targetFaces();
 
     // Then
     expect(database.queries_of("rounds")).toEqual([]);
-    expect(database.queries_of("target_faces")[0].filters).toEqual([
-      { op: "or", expression: "owner_id.is.null,owner_id.eq.user-1" },
-    ]);
+    expect(database.queries_of("target_faces")[0].filters).toBeUndefined();
     expect(dataOf(response)?.map((item) => item.id)).toEqual([
       "face-1",
       "face-2",
@@ -452,8 +443,8 @@ describe("targetFaces", () => {
     });
 
     // When
-    const first = await comm.createQueries().targetFaces("u");
-    const second = await server.createQueries().targetFaces("u");
+    const first = await comm.createQueries().targetFaces();
+    const second = await server.createQueries().targetFaces();
 
     // Then
     expect(first).toEqual({ status: "comm-failure" });

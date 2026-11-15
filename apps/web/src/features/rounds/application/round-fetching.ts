@@ -10,17 +10,13 @@ import {
   type ServerHistoryPage,
 } from "../domain/round-list";
 import { baseOfServerRound, type ServerRound } from "../domain/round-tables";
-import {
-  orderTargetFaces,
-  type TargetFaceOption,
-  type TargetFaceRecord,
-} from "../domain/target-face";
+import { orderTargetFaces, type TargetFaceOption } from "../domain/target-face";
 import type { ContentFetcher } from "./content-fetcher";
 import type { ReferenceSnapshots } from "./reference-snapshots";
 
 export type RoundDetailsData = {
   rounds: ServerRound[];
-  targetFaces: TargetFaceRecord[];
+  targetFaces: TargetFaceOption[];
 };
 
 // 履歴の1ページの問い合わせ。
@@ -36,11 +32,10 @@ export type RoundQueries = {
   roundDetail(roundId: string): Promise<QueryOutcome<ServerRound>>;
   // 入力中のラウンドと、`roundIds`のラウンドをまとめて得る。1つでも失敗したら全体を失敗にする。
   roundDetails(
-    userId: string,
     roundIds: readonly string[],
   ): Promise<QueryOutcome<RoundDetailsData>>;
-  // 的の一覧。個人(owner_idが自分)と公式(owner_idがnull)を1回で得る。
-  targetFaces(userId: string): Promise<QueryOutcome<TargetFaceRecord[]>>;
+  // 的の一覧を得る。
+  targetFaces(): Promise<QueryOutcome<TargetFaceOption[]>>;
   // 個人(owner_idが自分)と公式(owner_idがnull)を1回で得る。
   presets(userId: string): Promise<QueryOutcome<PresetRecord[]>>;
   // 完了と記録された削除されていないラウンド(条件の単位が距離なら、その距離)を、条件で絞り並べた1ページとして得る。`after`は続きの起点のID(先頭のページはnull。距離単位では距離のID)、`size`は件数。
@@ -124,7 +119,7 @@ export function createRoundFetching(deps: {
     let userId = "";
     const result = await content.fetchContent((session) => {
       userId = session.userId;
-      return queries.targetFaces(session.userId);
+      return queries.targetFaces();
     });
     if (result.status !== "ok") return result;
     const faces = orderTargetFaces(result.data);
@@ -141,7 +136,7 @@ export function createRoundFetching(deps: {
     let userId = "";
     const result = await content.fetchContent<RoundDetailsData>((session) => {
       userId = session.userId;
-      return queries.roundDetails(session.userId, roundIds);
+      return queries.roundDetails(roundIds);
     });
     if (result.status !== "ok") return result;
     const faces = orderTargetFaces(result.data.targetFaces);
