@@ -1,10 +1,9 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import { SETTINGS_PATH } from "@/routes";
 import type { CallResult } from "../application/call-result";
 import { createChangePassword } from "../application/change-password";
 import { createFakeChangePasswordAuthenticator } from "../application/change-password-test-helpers";
@@ -25,9 +24,17 @@ function setup({ offline = false }: { offline?: boolean } = {}) {
     authenticator,
     connectivity: createFakeConnectivity(offline),
   });
-  const form = <ChangePasswordForm changePassword={changePassword} />;
+  const onBack = vi.fn();
+  const onBusyChange = vi.fn();
+  const form = (
+    <ChangePasswordForm
+      changePassword={changePassword}
+      onBack={onBack}
+      onBusyChange={onBusyChange}
+    />
+  );
   const rendered = render(form, { wrapper: IntlTestProvider });
-  return { authenticator, form, ...rendered };
+  return { authenticator, onBack, onBusyChange, form, ...rendered };
 }
 
 function currentInput() {
@@ -65,7 +72,7 @@ describe("パスワード変更画面の部品", () => {
     ).toHaveLength(2);
   });
 
-  it("見出しはヘッダーにあり本文にレベル1の見出しは無く、戻るは設定画面へのリンクである", () => {
+  it("見出しはヘッダーにあり本文にレベル1の見出しは無く、戻るはリンクである", () => {
     // Given
 
     // When
@@ -80,7 +87,22 @@ describe("パスワード変更画面の部品", () => {
     expect(within(screen.getByRole("main")).queryByRole("heading")).toBeNull();
     expect(
       screen.getByRole("link", { name: authText("back") }),
-    ).toHaveAttribute("href", SETTINGS_PATH);
+    ).toBeInTheDocument();
+  });
+
+  it("ヘッダーの戻るを押すと、onBackを呼び、本文に戻る操作は無い", async () => {
+    // Given
+    const { onBack } = setup();
+    const user = userEvent.setup();
+
+    // When
+    await user.click(screen.getByRole("link", { name: authText("back") }));
+
+    // Then
+    expect(onBack).toHaveBeenCalledOnce();
+    expect(
+      within(screen.getByRole("main")).queryByText(authText("back")),
+    ).toBeNull();
   });
 
   it("現在のパスワードの欄にはcurrent-password、新しいパスワードの欄にはnew-passwordのautocompleteを付ける", () => {
@@ -226,7 +248,27 @@ describe("パスワード変更画面の部品", () => {
     await act(async () => response.resolve(accepted));
     expect(
       await screen.findByRole("link", { name: authText("back") }),
-    ).toHaveAttribute("href", SETTINGS_PATH);
+    ).toBeInTheDocument();
+  });
+
+  it("処理中はonBusyChange(true)で知らせ、処理が終わるとonBusyChange(false)で知らせる。処理中の戻るは、onBackを呼ばない", async () => {
+    // Given
+    const { authenticator, onBack, onBusyChange } = setup();
+    const response = Promise.withResolvers<CallResult>();
+    authenticator.updatePassword.mockReturnValue(response.promise);
+    const user = userEvent.setup();
+    await fill(user);
+
+    // When
+    await user.click(submitButton());
+    const during = onBusyChange.mock.calls.at(-1);
+    await user.click(screen.getByText(authText("back")));
+    await act(async () => response.resolve(accepted));
+
+    // Then
+    expect(during).toEqual([true]);
+    expect(onBusyChange.mock.calls.at(-1)).toEqual([false]);
+    expect(onBack).not.toHaveBeenCalled();
   });
 
   it("処理を始めると、以前のエラーの表示が消える", async () => {

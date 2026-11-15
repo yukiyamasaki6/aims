@@ -7,6 +7,7 @@ import { waitForTurnstileToken } from "./turnstile";
 
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
+const settingsText = translatorFor("settings");
 
 export const SHARED_AUTH_STATE_PATH = "playwright/.auth/e2e-shared-user.json";
 const SHARED_EMAIL_PATH = "playwright/.auth/e2e-shared-email.txt";
@@ -100,26 +101,28 @@ export async function signUpAndSignIn(
   await clickSignInAndAwaitRounds(page, signInButton);
 }
 
-// 設定画面にはハイドレーション完了の目印(data-hydrated)がないため、
-// ハンドラ接続前の押下で確認が開かない場合は、開くまで押し直す。
+// 設定パネルは水和の後に開くため、表示された時点でハンドラが接続済みである。サインアウトのボタンを押して、確認のダイアログが開くまで待つ。
 export async function openSignOutConfirm(page: Page): Promise<void> {
-  const confirmButton = page.getByRole("button", {
-    name: authText("signOutConfirmLabel"),
-  });
-  await expect(async () => {
-    await page.getByRole("button", { name: authText("signOut") }).click();
-    await expect(confirmButton).toBeVisible({ timeout: 1_000 });
-  }).toPass();
+  await page.getByRole("button", { name: authText("signOut") }).click();
+  await expect(
+    page.getByRole("button", { name: authText("signOutConfirmLabel") }),
+  ).toBeVisible();
 }
 
-// 左パネルの設定の項目で設定画面へ移り、サインアウトを確認して、サインイン画面へ移ったことの確認で終わる。
-// 画面を読み込み直さず、項目を押して移る(端末内のデータを保った経路を保つため)。
+// 左パネルの設定の項目で設定パネルを開き、サインアウトを確認して、サインイン画面へ移ったことの確認で終わる。
+// 画面を読み込み直さず、項目を押して開く(端末内のデータを保った経路を保つため)。
 export async function signOutFromSettings(page: Page): Promise<void> {
   await page
-    .getByRole("link", { name: navigationText("leftPanelSettings") })
+    .getByRole("link", {
+      name: navigationText("leftPanelSettings"),
+      exact: true,
+    })
     .click();
-  await expect(page).toHaveURL(/\/settings$/);
-  await page.getByRole("button", { name: authText("signOut") }).click();
+  await expect(
+    page.getByRole("dialog", { name: settingsText("title") }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/#settings\/account$/);
+  await openSignOutConfirm(page);
   await page
     .getByRole("button", { name: authText("signOutConfirmLabel") })
     .click();

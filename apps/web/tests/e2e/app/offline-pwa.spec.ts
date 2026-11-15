@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { BrowserContext, Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import { FRAME_PATHS, OFFLINE_PATH, SETTINGS_PATH, shellUrlOf } from "@/routes";
+import {
+  CHANGE_PASSWORD_HASH,
+  FRAME_PATHS,
+  OFFLINE_PATH,
+  ROUNDS_PATH,
+  SETTINGS_ACCOUNT_HASH,
+  shellUrlOf,
+} from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,
@@ -19,10 +26,12 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
+import { settingsPanel } from "../helpers/settings";
 
 const authText = translatorFor("auth");
 const offlinePwaText = translatorFor("offlinePwa");
 const roundsText = translatorFor("rounds");
+const settingsText = translatorFor("settings");
 
 // 認証に依存しない/を使い、Service Workerが有効になるまで待つ。
 async function openWithServiceWorker(page: Page) {
@@ -454,7 +463,7 @@ test("Service Workerが登録済みで未認証のとき、ラウンドの詳細
   await expect(page).toHaveURL(/\/signin(\?|$)/);
 });
 
-test("未認証で紹介画面を開いて枠が保存された後に、サインインしてオフラインで設定を開くと、Service Workerが返した設定の枠が表示され、サインアウトの確認が開く", async ({
+test("未認証で紹介画面を開いて枠が保存された後に、サインインしてオフラインで設定パネルを開くと、Service Workerが返した背景の枠にパネルが開き、サインアウトの確認が開く", async ({
   page,
   context,
 }) => {
@@ -463,38 +472,95 @@ test("未認証で紹介画面を開いて枠が保存された後に、サイ�
   await expect
     .poll(async () =>
       (await precachedUrls(page)).some((url) =>
-        url.includes(`${shellUrlOf(SETTINGS_PATH)}?__WB_REVISION__=`),
+        url.includes(`${shellUrlOf(ROUNDS_PATH)}?__WB_REVISION__=`),
       ),
     )
     .toBe(true);
 
-  // 使い捨てのユーザーでサインインし、オフラインで設定を開く。
+  // 使い捨てのユーザーでサインインし、オフラインで設定パネルを開いたURLを開く。
   await signUpAndSignIn(page, {
     email: `e2e-offline-settings-${Date.now()}-${randomUUID().slice(0, 8)}@example.com`,
     password: "password-e2e-offline-settings",
   });
+  // 同じ文書内の移動にならないよう、別の画面を開いてから、オフラインにする。
+  await page.goto("/rounds/new");
   await goOffline(context);
-  const response = await page.goto(SETTINGS_PATH);
+  const response = await page.goto(`${ROUNDS_PATH}${SETTINGS_ACCOUNT_HASH}`);
   expect(response?.fromServiceWorker()).toBe(true);
-  await expect(page).toHaveURL(/\/settings$/);
+  await expect(settingsPanel(page)).toBeVisible();
   await expect(page.getByPlaceholder("you@example.com")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: offlinePwaText("offlineTitle") }),
   ).toHaveCount(0);
 
-  // 設定の枠のサインアウトを押して、確認が開く。
+  // パネルのサインアウトを押して、確認が開く。
   await openSignOutConfirm(page);
 });
 
-test("Service Workerが登録済みで未認証のとき、設定を開くと、Service Workerが返した枠からサインイン画面へ移動する", async ({
+test("オフラインで開いた設定パネルの「パスワード変更」項目を押すと、パスワード変更の画面へ移動する", async ({
+  page,
+  context,
+}) => {
+  // 使い捨てのユーザーでサインインし、Service Workerが制御してから、オフラインで設定パネルを開く。
+  await openWithServiceWorker(page);
+  await signUpAndSignIn(page, {
+    email: `e2e-offline-password-${Date.now()}-${randomUUID().slice(0, 8)}@example.com`,
+    password: "password-e2e-offline-password",
+  });
+  // 同じ文書内の移動にならないよう、別の画面を開いてから、オフラインにする。
+  await page.goto("/rounds/new");
+  await waitForServiceWorkerControl(page);
+  await goOffline(context);
+  const response = await page.goto(`${ROUNDS_PATH}${SETTINGS_ACCOUNT_HASH}`);
+  expect(response?.fromServiceWorker()).toBe(true);
+  await expect(settingsPanel(page)).toBeVisible();
+
+  // 「パスワード変更」項目を押して、パスワード変更の画面へ移る。
+  await settingsPanel(page)
+    .getByRole("link", { name: settingsText("changePasswordItem") })
+    .click();
+
+  await expect(page).toHaveURL(new RegExp(`${CHANGE_PASSWORD_HASH}$`));
+  await expect(
+    settingsPanel(page).getByRole("heading", {
+      name: authText("changePasswordTitle"),
+    }),
+  ).toBeVisible();
+});
+
+test("Service Workerが登録済みで未認証のとき、設定パネルを開いたURLを開くと、Service Workerが返した枠からサインイン画面へ移動し、設定パネルのハッシュが残る", async ({
   page,
 }) => {
   await openWithServiceWorker(page);
 
-  const response = await page.goto(SETTINGS_PATH);
+  const response = await page.goto(`${ROUNDS_PATH}${SETTINGS_ACCOUNT_HASH}`);
 
   expect(response?.fromServiceWorker()).toBe(true);
-  await expect(page).toHaveURL(/\/signin(\?|$)/);
+  await expect(page).toHaveURL(/\/signin\?returnTo=.*settings/);
+});
+
+test("オンラインで旧設定のURL(/settings)を開くと、見つからない旨の画面が表示される", async ({
+  page,
+}) => {
+  const response = await page.goto("/settings");
+
+  expect(response?.status()).toBe(404);
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(settingsPanel(page)).toHaveCount(0);
+});
+
+test("Service Workerが登録済みでオフラインのとき、旧設定のURL(/settings)を開くと、オフラインのページが表示される", async ({
+  page,
+  context,
+}) => {
+  await openWithServiceWorker(page);
+  await context.setOffline(true);
+
+  await page.goto("/settings");
+
+  await expect(
+    page.getByRole("heading", { name: offlinePwaText("offlineTitle") }),
+  ).toBeVisible();
 });
 
 test.describe("認証済みで開く", () => {

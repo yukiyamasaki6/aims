@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import type { FormEvent } from "react";
+import { type FormEvent, useEffect } from "react";
 import { ScreenFrame } from "@/components/screen-frame";
 import { BusyButton } from "@/components/ui/busy-button";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -21,14 +21,23 @@ import { useScreenView } from "./use-screen-view";
 const ID_PREFIX = "change-password";
 
 // パスワード変更の画面。完了で入力欄を作り直して値を消し、画面に留まる。
+// onBack: 設定パネルの分類「アカウント」へ戻る。onBusyChange: 送信中かを設定パネルへ知らせる。
 export function ChangePasswordForm({
   changePassword,
+  onBack,
+  onBusyChange,
 }: {
   changePassword: ChangePassword;
+  onBack: () => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const { state: flow, view } = useScreenView(
     changePasswordReducer,
     initialChangePasswordFlow,
+  );
+  useEffect(
+    () => onBusyChange(flow.submitting),
+    [flow.submitting, onBusyChange],
   );
   const hydrated = useHydrated();
   const t = useTranslations("auth");
@@ -36,7 +45,7 @@ export function ChangePasswordForm({
   return (
     <ScreenFrame
       title={t("changePasswordTitle")}
-      leading={<SettingsBackLink disabled={flow.submitting} />}
+      leading={<SettingsBackLink disabled={flow.submitting} onBack={onBack} />}
     >
       <div className="h-full overflow-y-auto">
         <main className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8">

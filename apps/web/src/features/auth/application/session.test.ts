@@ -55,6 +55,7 @@ function setup(
   const page = {
     here: vi.fn(() => options.here ?? "/rounds/new"),
     replace: vi.fn(),
+    reload: vi.fn(),
   };
   // 記録の利用者は"user-1"(文書の間、変わらない)。
   const recordUser = {
@@ -594,7 +595,7 @@ describe("セッションの終了の保持(アカウント削除用)", () => {
     it("保持の間は喪失の出来事が来ても遷移せず、解いた時点で未認証なら、遷移元つきのサインインへ移る", async () => {
       // Given
       const { session, page, state, emit } = setup({
-        here: "/settings/delete-account",
+        here: "/rounds#settings/account/delete-account",
       });
       session.watch();
       const hold = session.holdEnd();
@@ -608,7 +609,7 @@ describe("セッションの終了の保持(アカウント削除用)", () => {
       // Then
       expect(duringHold).toBe(0);
       expect(page.replace).toHaveBeenCalledExactlyOnceWith(
-        "/signin?returnTo=%2Fsettings%2Fdelete-account",
+        "/signin?returnTo=%2Frounds%23settings%2Faccount%2Fdelete-account",
       );
     });
 
@@ -631,7 +632,7 @@ describe("セッションの終了の保持(アカウント削除用)", () => {
     it("この端末のサインインを終え、終えられたら、遷移元の無いサインインへ移る", async () => {
       // Given
       const { session, authority, page, state } = setup({
-        here: "/settings/delete-account",
+        here: "/rounds#settings/account/delete-account",
       });
       authority.signOutHere.mockImplementation(async () => {
         state.status = "unauthenticated";
@@ -785,7 +786,7 @@ describe("セッション喪失の見張り", () => {
   });
 
   describe("記録の利用者と違う利用者のサインイン", () => {
-    it("記録の利用者と同じ利用者のsigned-inでは、識別情報に触れず、置き換えない", () => {
+    it("記録の利用者と同じ利用者のsigned-inでは、識別情報に触れず、読み込み直さない", () => {
       // Given
       const { session, page, identity, emit } = setup();
       session.watch();
@@ -794,14 +795,14 @@ describe("セッション喪失の見張り", () => {
       emit({ kind: "signed-in", userId: "user-1" });
 
       // Then
-      expect(page.replace).not.toHaveBeenCalled();
+      expect(page.reload).not.toHaveBeenCalled();
       expect(identity.write).not.toHaveBeenCalled();
     });
 
-    it("別の利用者のsigned-inでは、識別情報を新しい利用者へ書いてから、今の場所でページ全体を1回置き換える", () => {
+    it("別の利用者のsigned-inでは、識別情報を新しい利用者へ書いてから、今の文書を1回読み込み直す", () => {
       // Given
       const { session, page, identity, emit } = setup({
-        here: "/rounds/r1?a=1",
+        here: "/rounds/r1?a=1#settings/account",
       });
       session.watch();
 
@@ -810,13 +811,14 @@ describe("セッション喪失の見張り", () => {
 
       // Then
       expect(identity.write).toHaveBeenCalledExactlyOnceWith("user-2");
-      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/rounds/r1?a=1");
+      expect(page.reload).toHaveBeenCalledOnce();
+      expect(page.replace).not.toHaveBeenCalled();
       expect(identity.write.mock.invocationCallOrder[0]).toBeLessThan(
-        page.replace.mock.invocationCallOrder[0] ?? 0,
+        page.reload.mock.invocationCallOrder[0] ?? 0,
       );
     });
 
-    it("記録の利用者と照合できないときのsigned-inでも、今の場所を置き換える", () => {
+    it("記録の利用者と照合できないときのsigned-inでも、今の文書を読み込み直す", () => {
       // Given
       const { session, page, recordUser, emit } = setup({ here: "/rounds" });
       recordUser.isRecordUser.mockReturnValue(false);
@@ -826,10 +828,10 @@ describe("セッション喪失の見張り", () => {
       emit({ kind: "signed-in", userId: "user-1" });
 
       // Then
-      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
+      expect(page.reload).toHaveBeenCalledOnce();
     });
 
-    it("識別情報を読み戻せない(保存できない環境)ときは、置き換えない", () => {
+    it("識別情報を読み戻せない(保存できない環境)ときは、読み込み直さない", () => {
       // Given
       const { session, page, identity, emit } = setup({ canStore: false });
       session.watch();
@@ -839,10 +841,10 @@ describe("セッション喪失の見張り", () => {
 
       // Then
       expect(identity.write).toHaveBeenCalledExactlyOnceWith("user-2");
-      expect(page.replace).not.toHaveBeenCalled();
+      expect(page.reload).not.toHaveBeenCalled();
     });
 
-    it("識別情報の書き込みが例外を投げるときは、置き換えない", () => {
+    it("識別情報の書き込みが例外を投げるときは、読み込み直さない", () => {
       // Given
       const { session, page, identity, emit } = setup();
       identity.write.mockImplementation(() => {
@@ -855,10 +857,10 @@ describe("セッション喪失の見張り", () => {
 
       // Then
       expect(act).toThrow("denied");
-      expect(page.replace).not.toHaveBeenCalled();
+      expect(page.reload).not.toHaveBeenCalled();
     });
 
-    it("サインアウトの実行中は、識別情報に触れず、置き換えない", () => {
+    it("サインアウトの実行中は、識別情報に触れず、読み込み直さない", () => {
       // Given
       const { session, authority, page, identity, emit } = setup();
       authority.signOutHere.mockReturnValue(new Promise(() => {}));
@@ -869,11 +871,11 @@ describe("セッション喪失の見張り", () => {
       emit({ kind: "signed-in", userId: "user-2" });
 
       // Then
-      expect(page.replace).not.toHaveBeenCalled();
+      expect(page.reload).not.toHaveBeenCalled();
       expect(identity.write).not.toHaveBeenCalled();
     });
 
-    it("見張りをやめた後のsigned-inでは、置き換えない", () => {
+    it("見張りをやめた後のsigned-inでは、読み込み直さない", () => {
       // Given
       const { session, page, emit } = setup();
       session.watch()();
@@ -882,7 +884,7 @@ describe("セッション喪失の見張り", () => {
       emit({ kind: "signed-in", userId: "user-2" });
 
       // Then
-      expect(page.replace).not.toHaveBeenCalled();
+      expect(page.reload).not.toHaveBeenCalled();
     });
   });
 

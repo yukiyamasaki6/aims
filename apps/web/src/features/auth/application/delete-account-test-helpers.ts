@@ -18,7 +18,7 @@ const accepted: CallResult = { kind: "accepted" };
 // 既定は、再認証が成功(利用者"user-1")、削除が成功、消去が成功。
 export function createDeleteAccountHarness({
   offline = false,
-  here = "/settings/delete-account",
+  here = "/rounds#settings/account/delete-account",
 }: {
   offline?: boolean;
   here?: string;
@@ -62,6 +62,7 @@ export function createDeleteAccountHarness({
   const page = {
     here: vi.fn(() => here),
     replace: vi.fn<(to: string) => void>(),
+    reload: vi.fn<() => void>(),
   };
   // 端末に記録された最後の利用者。
   const recorded: { userId: string | null } = { userId: "user-1" };

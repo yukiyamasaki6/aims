@@ -1,10 +1,10 @@
 // サインインの前後の経路の規則。保護対象の画面、未認証専用の画面、サインインのURL、サインインの後に戻ってよい場所(遷移元)。
-// 認証の画面の経路の文字列は、経路表(src/routes.ts)が持つ。保護対象の画面の範囲は、ラウンドの画面の根の経路(ROUNDS_PATH)と設定の画面の経路(SETTINGS_PATH)と、それぞれの配下である。根は、サインインの後の既定の行き先でもある。
+// 認証の画面の経路の文字列は、経路表(src/routes.ts)が持つ。保護対象の画面の範囲は、ラウンドの画面の根の経路(ROUNDS_PATH)とその配下である。根は、サインインの後の既定の行き先でもある。
+// 遷移元は、パスとクエリに加えてハッシュ(設定パネルの表示)を含む。ハッシュは同じ文書の中の表示だけを決め、行き先のオリジンとパスを変えないため、検証の対象にしない。
 import {
   RESET_PASSWORD_PATH,
   ROUNDS_HOME_PATH,
   ROUNDS_PATH,
-  SETTINGS_PATH,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
 } from "@/routes";
@@ -19,13 +19,11 @@ const BASE = "http://localhost";
 
 // サインインが要る画面(保護の範囲の根とその配下)かを返す。
 function isProtectedPath(pathname: string): boolean {
-  return [ROUNDS_PATH, SETTINGS_PATH].some(
-    (root) => pathname === root || pathname.startsWith(`${root}/`),
-  );
+  return pathname === ROUNDS_PATH || pathname.startsWith(`${ROUNDS_PATH}/`);
 }
 
 // 遷移元として受け付けるのは、保護対象の同一オリジンのパスに限る。
-// 検証して正規化した pathname + search を返し、拒否は null。
+// 検証して正規化した pathname + search + hash を返し、拒否は null。
 export function allowedReturnTo(raw: string | null | undefined): string | null {
   if (typeof raw !== "string") return null;
 
@@ -38,7 +36,7 @@ export function allowedReturnTo(raw: string | null | undefined): string | null {
   }
   if (url.origin !== BASE) return null;
   if (!isProtectedPath(url.pathname)) return null;
-  return url.pathname + url.search;
+  return url.pathname + url.search + url.hash;
 }
 
 export function destinationOf(returnTo: string | null): string {
@@ -71,4 +69,16 @@ export function redirectFor(request: {
     return ROUNDS_HOME_PATH;
   }
   return null;
+}
+
+// クエリの遷移元に、今のURLのハッシュを足す。遷移元がハッシュを持たず、今のURLがハッシュを持つときだけ足す。
+// proxy.tsはハッシュを受け取れないため、未認証のリダイレクトの遷移元にハッシュは付かず、ブラウザが元のハッシュを/signinのURLへ引き継ぐ。
+// hash: 今のURLのハッシュ(`location.hash`の形。無いときは空文字)。
+export function returnToWithHash(
+  returnTo: string | null,
+  hash: string,
+): string | null {
+  if (returnTo === null || hash === "" || returnTo.includes("#"))
+    return returnTo;
+  return returnTo + hash;
 }

@@ -55,7 +55,7 @@ describe("createDeleteAccountHarness", () => {
     // Given
     const { connectivity, page } = createDeleteAccountHarness({
       offline: true,
-      here: "/settings",
+      here: "/rounds#settings",
     });
 
     // When
@@ -63,24 +63,22 @@ describe("createDeleteAccountHarness", () => {
 
     // Then
     expect(connectivity.isOffline()).toBe(true);
-    expect(here).toBe("/settings");
+    expect(here).toBe("/rounds#settings");
   });
 
-  it("実物のセッションは、記録の利用者がuser-1で、別の利用者のサインインだけを、今の場所の読み込み直しにする", () => {
+  it("実物のセッションは、記録の利用者がuser-1で、別の利用者のサインインだけを、今の文書の読み込み直しにする", () => {
     // Given
-    const { session, page, emit } = createDeleteAccountHarness({
-      here: "/settings",
-    });
+    const { session, page, emit } = createDeleteAccountHarness();
     const unwatch = session.watch();
 
     // When
     emit({ kind: "signed-in", userId: "user-1" });
-    const sameUser = page.replace.mock.calls.length;
+    const sameUser = page.reload.mock.calls.length;
     emit({ kind: "signed-in", userId: "user-2" });
     unwatch();
 
     // Then
     expect(sameUser).toBe(0);
-    expect(page.replace).toHaveBeenCalledExactlyOnceWith("/settings");
+    expect(page.reload).toHaveBeenCalledOnce();
   });
 });

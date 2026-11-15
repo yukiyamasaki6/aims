@@ -9,8 +9,10 @@ import { createClient } from "@/lib/supabase/infrastructure/client";
 
 import "fake-indexeddb/auto";
 import { act, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ScreenFrame } from "@/components/screen-frame";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import {
@@ -21,6 +23,7 @@ import { RootClientEntry } from "../root-client-entry";
 import MainLayout from "./layout";
 
 const authText = translatorFor("auth");
+const settingsText = translatorFor("settings");
 const navigationText = translatorFor("navigation");
 
 // 入口のテスト。SDK(@supabase/ssr)と、ブラウザの保存先(localStorage)・場所(location)の境界だけを差し替え、
@@ -87,16 +90,30 @@ function SessionWrapper({ children }: { children: ReactNode }) {
 
 const replace = vi.fn();
 const assign = vi.fn();
+const reload = vi.fn();
 const IDENTITY_KEY = "aims:local-user-id";
 
-function setLocation(pathname: string, search = "") {
+// location.replace・assignだけを差し替える。パス・クエリ・ハッシュは、jsdomの実の場所(履歴)を読む。設定パネルがhistory.pushStateでハッシュを書くため。
+function setLocation(pathname: string, search = "", hash = "") {
+  window.history.replaceState(null, "", pathname + search + hash);
+  const real = window.location;
   vi.stubGlobal("location", {
-    href: `http://localhost${pathname}${search}`,
+    get href() {
+      return real.href;
+    },
     origin: "http://localhost",
     replace,
     assign,
-    pathname,
-    search,
+    reload,
+    get pathname() {
+      return real.pathname;
+    },
+    get search() {
+      return real.search;
+    },
+    get hash() {
+      return real.hash;
+    },
   });
 }
 
@@ -146,6 +163,7 @@ beforeEach(() => {
 afterEach(() => {
   viewport.restore();
   vi.unstubAllGlobals();
+  window.history.replaceState(null, "", "/");
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
@@ -205,6 +223,89 @@ describe("MainLayout", () => {
     });
   });
 
+  describe("設定パネル", () => {
+    function panel() {
+      return screen.queryByRole("dialog", { name: settingsText("title") });
+    }
+
+    it.each([
+      ["#settings/account", true],
+      ["#settings/account/email", true],
+      ["#settingsfoo", false],
+      ["", false],
+    ])(
+      "ハッシュが%sのとき、設定パネルを表示するのは%sである",
+      async (hash, shown) => {
+        // Given
+        setLocation("/rounds/new", "", hash);
+
+        // When
+        renderLayout();
+        await flush();
+
+        // Then
+        expect(panel() !== null).toBe(shown);
+      },
+    );
+
+    it("「設定」項目を押すと、設定パネルが開き、ハッシュが#settings/accountになる", async () => {
+      // Given
+      const user = userEvent.setup();
+      renderLayout();
+      await flush();
+
+      // When
+      await user.click(
+        screen.getAllByRole("link", {
+          name: navigationText("leftPanelSettings"),
+        })[1],
+      );
+
+      // Then
+      expect(panel()).toBeInTheDocument();
+      expect(window.location.hash).toBe("#settings/account");
+    });
+
+    it("項目の画面のヘッダーにメニューボタンは出ず、メニューボタンは背景の画面のものだけである", async () => {
+      // Given
+      setLocation("/rounds/new", "", "#settings/account/password");
+      const backgroundMenus = () =>
+        screen.queryAllByLabelText(navigationText("leftPanelOpenMenu"), {
+          selector: "button",
+        });
+
+      // When
+      render(
+        <MainLayout>
+          <ScreenFrame title="背景の画面">
+            <p>子要素</p>
+          </ScreenFrame>
+        </MainLayout>,
+        { wrapper: SessionWrapper },
+      );
+      await flush();
+
+      // Then
+      const dialog = panel();
+      expect(dialog).toBeInTheDocument();
+      if (!dialog) return;
+      expect(
+        within(dialog).queryByRole("button", {
+          name: navigationText("leftPanelOpenMenu"),
+        }),
+      ).toBeNull();
+      expect(
+        within(dialog).getByRole("heading", {
+          name: authText("changePasswordTitle"),
+        }),
+      ).toBeInTheDocument();
+      expect(backgroundMenus().length).toBeGreaterThan(0);
+      expect(
+        backgroundMenus().every((button) => !dialog.contains(button)),
+      ).toBe(true);
+    });
+  });
+
   // 環境変数の欠落は、起きる時点で保証が違う。事前描画は「表示」、依頼時の欠落は下、起動時の欠落は購読が同期に投げる(扱わない)。
   describe("環境変数の欠落", () => {
     function loseEnv() {
@@ -251,9 +352,9 @@ describe("MainLayout", () => {
       expect(assign).not.toHaveBeenCalled();
     });
 
-    it("設定の画面でsigned-outの通知を受けると、/settingsを遷移元に付けてサインインへ移る", () => {
+    it("設定パネルの表示中(#settings/account/password)にsigned-outの通知を受けると、ハッシュを含む場所を遷移元に付けてサインインへ移る", () => {
       // Given
-      setLocation("/settings");
+      setLocation("/rounds/history", "", "#settings/account/password");
       renderLayout();
 
       // When
@@ -261,7 +362,7 @@ describe("MainLayout", () => {
 
       // Then
       expect(replace).toHaveBeenCalledExactlyOnceWith(
-        "/signin?returnTo=%2Fsettings",
+        "/signin?returnTo=%2Frounds%2Fhistory%23settings%2Faccount%2Fpassword",
       );
     });
 
@@ -283,7 +384,7 @@ describe("MainLayout", () => {
     });
 
     // 実物の入口(記録の起動、識別情報の記録、見張りの結線)を通す。見張りの購読が記録の起動より先に登録されても、起動時の通知は非同期で届くため記録の利用者が確定していることを固定する。
-    it("識別情報が別の利用者のまま、起動時の復元の通知(INITIAL_SESSION)が来ると、今の場所を1回置き換え、識別情報を通知の利用者にする", async () => {
+    it("識別情報が別の利用者のまま、起動時の復元の通知(INITIAL_SESSION)が来ると、今の文書を1回読み込み直し、識別情報を通知の利用者にする", async () => {
       // Given
       renderLayoutWithIdentity();
       await flush();
@@ -292,7 +393,8 @@ describe("MainLayout", () => {
       act(() => supabase.emit("INITIAL_SESSION", { user: { id: "user-2" } }));
 
       // Then
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/rounds/new");
+      expect(reload).toHaveBeenCalledOnce();
+      expect(replace).not.toHaveBeenCalled();
       expect(localStorage.getItem(IDENTITY_KEY)).toBe("user-2");
     });
 
@@ -305,7 +407,7 @@ describe("MainLayout", () => {
       act(() => supabase.emit("INITIAL_SESSION", { user: { id: "user-1" } }));
 
       // Then
-      expect(replace).not.toHaveBeenCalled();
+      expect(reload).not.toHaveBeenCalled();
       expect(localStorage.getItem(IDENTITY_KEY)).toBe("user-1");
     });
 

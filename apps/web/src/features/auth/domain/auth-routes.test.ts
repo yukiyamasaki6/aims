@@ -3,6 +3,7 @@ import {
   allowedReturnTo,
   destinationOf,
   redirectFor,
+  returnToWithHash,
   signInHref,
 } from "./auth-routes";
 
@@ -10,7 +11,7 @@ import {
 const _ROUNDS = "/rounds";
 
 describe("allowedReturnTo", () => {
-  describe("保護範囲(/roundsと/settings)の相対パスの場合", () => {
+  describe("保護範囲(/rounds)の相対パスの場合", () => {
     it.each([
       ["/rounds", "/rounds"],
       ["/rounds/", "/rounds/"],
@@ -20,10 +21,12 @@ describe("allowedReturnTo", () => {
         "/rounds/00000000-0000-0000-0000-000000000000?a=1",
       ],
       ["/rounds/new?x=1&y=%E3%81%82", "/rounds/new?x=1&y=%E3%81%82"],
-      ["/settings", "/settings"],
-      ["/settings/", "/settings/"],
-      ["/settings?x=1", "/settings?x=1"],
-      ["/settings/delete-account", "/settings/delete-account"],
+      ["/rounds#settings/account/email", "/rounds#settings/account/email"],
+      [
+        "/rounds/history?return=1#settings/account",
+        "/rounds/history?return=1#settings/account",
+      ],
+      ["/rounds/new#section", "/rounds/new#section"],
     ])("%sを検証して%sを返す", (raw, expected) => {
       // Given
 
@@ -32,17 +35,6 @@ describe("allowedReturnTo", () => {
 
       // Then
       expect(result).toBe(expected);
-    });
-
-    it("ハッシュを取り除いたパスとクエリを返す", () => {
-      // Given
-
-      // When
-      const raw = "/rounds/new?a=1#section";
-      const result = allowedReturnTo(raw);
-
-      // Then
-      expect(result).toBe("/rounds/new?a=1");
     });
 
     it("解析後に/rounds配下へ正規化されるドットセグメントは、正規化後の値を返す", () => {
@@ -56,16 +48,14 @@ describe("allowedReturnTo", () => {
       expect(result).toBe("/rounds/new");
     });
 
-    it("設定のハッシュを取り除き、別の根から正規化で設定になる値は正規化後の値を返す", () => {
+    it("ドットセグメントは正規化し、ハッシュは保つ", () => {
       // Given
 
       // When
-      const hashed = allowedReturnTo("/settings#h");
-      const normalized = allowedReturnTo("/rounds/../settings");
+      const result = allowedReturnTo("/rounds/x/../new#settings/account");
 
       // Then
-      expect(hashed).toBe("/settings");
-      expect(normalized).toBe("/settings");
+      expect(result).toBe("/rounds/new#settings/account");
     });
   });
 
@@ -95,6 +85,10 @@ describe("allowedReturnTo", () => {
       ["エンコードされたドットセグメント", "/rounds/%2e%2e/signin"],
       ["/roundsを装うクエリ", "/signin?next=/rounds"],
       ["/settingsで始まる別のパス", "/settingsx"],
+      ["旧設定の画面(保護の範囲の外)", "/settings"],
+      ["旧設定の配下の画面", "/settings/x"],
+      ["旧設定にハッシュを付けた値", "/settings#settings/account"],
+      ["/rounds配下から旧設定へ抜けるドットセグメント", "/rounds/../settings"],
       ["/settingの綴り違い", "/setting"],
       ["スキームなしの外部ホスト(//settings)", "//evil.example/settings"],
       ["スキーム付きで/settingsに見えるURL", "https://evil.example/settings"],
@@ -157,14 +151,14 @@ describe("destinationOf", () => {
     expect(result).toBe("/rounds/new?a=1");
   });
 
-  it("許可された設定の遷移元を返す", () => {
+  it("ハッシュ付きの遷移元を、そのまま返す", () => {
     // Given
 
     // When
-    const result = destinationOf("/settings");
+    const result = destinationOf("/rounds/history#settings/account/password");
 
     // Then
-    expect(result).toBe("/settings");
+    expect(result).toBe("/rounds/history#settings/account/password");
   });
 
   it("遷移元が無いか許可されない場合は一覧を返す", () => {
@@ -193,14 +187,14 @@ describe("signInHref", () => {
     expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew%3Fx%3D1");
   });
 
-  it("/settingsの遷移元を、エンコードしたreturnTo付きの/signinにする", () => {
+  it("ハッシュ付きの遷移元を、ハッシュも符号化してreturnTo付きの/signinにする", () => {
     // Given
 
     // When
-    const result = signInHref("/settings");
+    const result = signInHref("/rounds#settings/account");
 
     // Then
-    expect(result).toBe("/signin?returnTo=%2Fsettings");
+    expect(result).toBe("/signin?returnTo=%2Frounds%23settings%2Faccount");
   });
 
   it("遷移元がnullのときは、returnTo無しの/signinにする", () => {
@@ -244,33 +238,13 @@ describe("redirectFor", () => {
       "/signin?returnTo=%2Frounds%2Fx%3Fa%3D1",
     ],
     [
-      "未認証で/settingsを開くと、/settingsを遷移元に付けたサインイン",
-      { pathname: "/settings" },
-      "/signin?returnTo=%2Fsettings",
-    ],
-    [
-      "未認証で/settings配下を開くと、その遷移元つきのサインイン",
-      { pathname: "/settings/x" },
-      "/signin?returnTo=%2Fsettings%2Fx",
-    ],
-    [
-      "未認証で/settings/passwordを開くと、その遷移元つきのサインイン",
-      { pathname: "/settings/password" },
-      "/signin?returnTo=%2Fsettings%2Fpassword",
-    ],
-    [
-      "未認証で/settings/delete-accountを開くと、その遷移元つきのサインイン",
-      { pathname: "/settings/delete-account" },
-      "/signin?returnTo=%2Fsettings%2Fdelete-account",
-    ],
-    [
-      "認証済みでサインインを設定の遷移元付きで開くと、設定",
+      "認証済みでサインインをハッシュ付きの遷移元で開くと、ハッシュを含む遷移元",
       {
         signedIn: true,
         pathname: "/signin",
-        search: "?returnTo=%2Fsettings",
+        search: `?returnTo=${encodeURIComponent("/rounds/history#settings/account")}`,
       },
-      "/settings",
+      "/rounds/history#settings/account",
     ],
     [
       "認証済みでサインインを開くと、ラウンド一覧",
@@ -354,6 +328,8 @@ describe("redirectFor", () => {
     ["未認証でトップを開く", { pathname: "/" }],
     ["未認証で/roundsで始まる別のパスを開く", { pathname: "/roundsx" }],
     ["未認証で/settingsで始まる別のパスを開く", { pathname: "/settingsx" }],
+    ["未認証で/settingsを開く", { pathname: "/settings" }],
+    ["未認証で/settings配下を開く", { pathname: "/settings/x" }],
     ["認証済みで/settingsを開く", { signedIn: true, pathname: "/settings" }],
     ["認証済みで/rounds配下を開く", { signedIn: true, pathname: "/rounds/1" }],
     ["認証済みでトップを開く", { signedIn: true, pathname: "/" }],
@@ -369,3 +345,35 @@ describe("redirectFor", () => {
 });
 
 // 保護の範囲の根は引数で渡る。実在する経路でない値で、規則が根に従うことを確かめる(値そのものが検証の対象)。
+
+describe("returnToWithHash", () => {
+  it.each([
+    [
+      "遷移元がハッシュを持たず、今のハッシュがあれば足す",
+      "/rounds/history?return=1",
+      "#settings/account/email",
+      "/rounds/history?return=1#settings/account/email",
+    ],
+    [
+      "遷移元が既にハッシュを持てば、今のハッシュで上書きしない",
+      "/rounds#settings/account",
+      "#settings/account/password",
+      "/rounds#settings/account",
+    ],
+    ["今のハッシュが空なら、遷移元を変えない", "/rounds", "", "/rounds"],
+    [
+      "遷移元が無ければ、今のハッシュがあっても足さず、無いままにする",
+      null,
+      "#settings/account",
+      null,
+    ],
+  ])("%s", (_name, returnTo, hash, expected) => {
+    // Given
+
+    // When
+    const result = returnToWithHash(returnTo, hash);
+
+    // Then
+    expect(result).toBe(expected);
+  });
+});

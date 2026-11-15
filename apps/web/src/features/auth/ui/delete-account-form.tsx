@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import type { FormEvent } from "react";
+import { type FormEvent, useEffect } from "react";
 import { ScreenFrame } from "@/components/screen-frame";
 import { BusyButton } from "@/components/ui/busy-button";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -21,12 +21,17 @@ import { useScreenView } from "./use-screen-view";
 const ID_PREFIX = "delete-account";
 
 // アカウント削除の画面。削除される内容と取り消せないことを示し、現在のパスワードの確認で削除する。成功は遷移まで処理中のままで、失敗は理由を示して入力へ戻る。ヘッダーの戻るは処理中だけ押せない。
+// onBack: 設定パネルの分類「アカウント」へ戻る。onBusyChange: 送信中かを設定パネルへ知らせる(成功の後は遷移まで送信中のまま)。
 export function DeleteAccountForm({
   deleteAccount,
   siteKey,
+  onBack,
+  onBusyChange,
 }: {
   deleteAccount: DeleteAccount;
   siteKey: string;
+  onBack: () => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const {
     state: flow,
@@ -36,6 +41,10 @@ export function DeleteAccountForm({
   const hydrated = useHydrated();
   const t = useTranslations("auth");
   const texts = useAuthTexts();
+  useEffect(
+    () => onBusyChange(flow.submitting),
+    [flow.submitting, onBusyChange],
+  );
 
   // 値は送信時に読む(入力欄は制御しない)。
   function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -47,7 +56,7 @@ export function DeleteAccountForm({
   return (
     <ScreenFrame
       title={t("deleteAccountTitle")}
-      leading={<SettingsBackLink disabled={flow.submitting} />}
+      leading={<SettingsBackLink disabled={flow.submitting} onBack={onBack} />}
     >
       <div className="h-full overflow-y-auto">
         <main className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8">

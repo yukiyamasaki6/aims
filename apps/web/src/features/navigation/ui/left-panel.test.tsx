@@ -8,7 +8,7 @@ import {
   type FakeViewport,
   installFakeViewport,
 } from "@/lib/viewport/fake-viewport-test-helpers";
-import { LeftPanel } from "./left-panel";
+import { LeftPanel, type LeftPanelSettings } from "./left-panel";
 
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
@@ -29,9 +29,20 @@ afterEach(() => {
 });
 
 // ドロワーの開き口はScreenFrameが置くため、ヘッダー枠を描く子を持たせる。
-function PanelWithFrame() {
+function PanelWithFrame({
+  settings,
+}: {
+  settings?: Partial<LeftPanelSettings>;
+}) {
   return (
-    <LeftPanel>
+    <LeftPanel
+      settings={{
+        open: false,
+        onOpen: () => {},
+        closeFocus: "opener",
+        ...settings,
+      }}
+    >
       <ScreenFrame title="ホーム">
         <p>本文</p>
       </ScreenFrame>
@@ -217,7 +228,9 @@ describe("LeftPanel", () => {
       // Given
       // When
       render(
-        <LeftPanel>
+        <LeftPanel
+          settings={{ open: false, onOpen: () => {}, closeFocus: "opener" }}
+        >
           <p>本文</p>
         </LeftPanel>,
         { wrapper: IntlTestProvider },
@@ -871,7 +884,6 @@ describe("LeftPanel", () => {
     it.each([
       ["/rounds", "leftPanelHome"],
       ["/rounds/history", "leftPanelHistory"],
-      ["/settings", "leftPanelSettings"],
     ] as const)(
       "パスが%sのとき、%sの項目だけが現在のページになる",
       (pathname, current) => {
@@ -917,19 +929,6 @@ describe("LeftPanel", () => {
       expect(drawerBackdrop()).toHaveStyle({ opacity: "0" });
     });
 
-    it("ハンバーガーでドロワーを開き、設定の項目を押すと、ドロワーが閉じる", async () => {
-      // Given
-      const user = userEvent.setup();
-      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
-      await user.click(openMenuButton());
-
-      // When
-      await user.click(settingsLink());
-
-      // Then
-      expect(drawerBackdrop()).toHaveStyle({ opacity: "0" });
-    });
-
     it("Tabを押し進めると、設定の項目へフォーカスが届く", async () => {
       // Given
       const user = userEvent.setup();
@@ -941,6 +940,227 @@ describe("LeftPanel", () => {
 
       // Then
       expect(settingsLink()).toHaveFocus();
+    });
+  });
+
+  describe("設定の項目", () => {
+    function settingsLinks() {
+      return screen.getAllByRole("link", {
+        name: navigationText("leftPanelSettings"),
+      });
+    }
+
+    it("押すと、既定の動作(ページの移動)を止めて、設定を開く操作を呼ぶ", async () => {
+      // Given
+      const user = userEvent.setup();
+      const onOpen = vi.fn();
+      const defaultPrevented = vi.fn((event: Event) => event.defaultPrevented);
+      render(<PanelWithFrame settings={{ onOpen }} />, {
+        wrapper: IntlTestProvider,
+      });
+      // イベントが伝わりきった後の既定の動作の停止を、ドキュメントで受けて確かめる。
+      document.addEventListener("click", defaultPrevented);
+
+      // When
+      await user.click(settingsLinks()[0]);
+
+      // Then
+      document.removeEventListener("click", defaultPrevented);
+      expect(onOpen).toHaveBeenCalledOnce();
+      expect(defaultPrevented).toHaveReturnedWith(true);
+    });
+
+    it("ドロワーの展開中に押すと、ドロワーが閉じ、フォーカスをメニューボタンへ移さず、設定を開く操作を呼ぶ", async () => {
+      // Given
+      const user = userEvent.setup();
+      const onOpen = vi.fn();
+      render(<PanelWithFrame settings={{ onOpen }} />, {
+        wrapper: IntlTestProvider,
+      });
+      await user.click(openMenuButton());
+
+      // When
+      await user.click(drawerLink("leftPanelSettings"));
+
+      // Then
+      expect(drawerBackdrop()).toHaveStyle({ opacity: "0" });
+      expect(onOpen).toHaveBeenCalledOnce();
+      expect(openMenuButton()).not.toHaveFocus();
+    });
+
+    it("列の「設定」項目を押しても、列は開いたままである", async () => {
+      // Given
+      const user = userEvent.setup();
+      viewport.setWide(true);
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+
+      // When
+      await user.click(
+        within(railPanel()).getByRole("link", {
+          name: navigationText("leftPanelSettings"),
+        }),
+      );
+
+      // Then
+      expect(railCloseButton()).toBeInTheDocument();
+      expect(openMenuButtons()).toHaveLength(1);
+    });
+
+    it("ドロワーで押して閉じた後、ホームの項目を押して閉じたときは、従来どおりメニューボタンへ戻る", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+      await user.click(openMenuButton());
+      await user.click(drawerLink("leftPanelSettings"));
+      await user.click(openMenuButton());
+
+      // When
+      await user.click(drawerLink("leftPanelHome"));
+
+      // Then
+      expect(openMenuButton()).toHaveFocus();
+    });
+  });
+
+  describe("設定パネルが開いている間の現在のビュー", () => {
+    it.each(["/rounds", "/rounds/history"])(
+      "パスが%sでも、「設定」項目だけがaria-current=pageで、ホーム・履歴は付かない",
+      (pathname) => {
+        // Given
+        nav.pathname = pathname;
+
+        // When
+        render(<PanelWithFrame settings={{ open: true }} />, {
+          wrapper: IntlTestProvider,
+        });
+
+        // Then
+        const currentLinks = screen.getAllByRole("link", { current: "page" });
+        expect(currentLinks.map((link) => link.textContent)).toEqual([
+          navigationText("leftPanelSettings"),
+          navigationText("leftPanelSettings"),
+        ]);
+      },
+    );
+
+    it("閉じると、従来の表示中のビューの規則へ戻る", () => {
+      // Given
+      nav.pathname = "/rounds/history";
+      const { rerender } = render(
+        <PanelWithFrame settings={{ open: true }} />,
+        { wrapper: IntlTestProvider },
+      );
+
+      // When
+      rerender(<PanelWithFrame settings={{ open: false }} />);
+
+      // Then
+      const currentLinks = screen.getAllByRole("link", { current: "page" });
+      expect(currentLinks.map((link) => link.textContent)).toEqual([
+        navigationText("leftPanelHistory"),
+        navigationText("leftPanelHistory"),
+      ]);
+    });
+  });
+
+  describe("設定パネルが閉じたときのフォーカス", () => {
+    // 開いた状態で描画し、閉じる再描画の戻し先の種類を渡す。
+    function closeWith(
+      closeFocus: LeftPanelSettings["closeFocus"],
+      options: { wide: boolean },
+    ) {
+      viewport.setWide(options.wide);
+      const rendered = render(<PanelWithFrame settings={{ open: true }} />, {
+        wrapper: IntlTestProvider,
+      });
+      rendered.rerender(
+        <PanelWithFrame settings={{ open: false, closeFocus }} />,
+      );
+    }
+
+    it("開き口で、幅768px以上で列が開いていれば、列の「設定」項目にフォーカスを移す", () => {
+      // Given
+      // When
+      closeWith("opener", { wide: true });
+
+      // Then
+      expect(
+        within(railPanel()).getByRole("link", {
+          name: navigationText("leftPanelSettings"),
+        }),
+      ).toHaveFocus();
+    });
+
+    it("開き口で、幅768px以上で列が閉じていれば、列用のメニューボタンにフォーカスを移す", async () => {
+      // Given
+      const user = userEvent.setup();
+      viewport.setWide(true);
+      const { rerender } = render(
+        <PanelWithFrame settings={{ open: true }} />,
+        {
+          wrapper: IntlTestProvider,
+        },
+      );
+      const railMenu = await closeRail(user);
+
+      // When
+      rerender(
+        <PanelWithFrame settings={{ open: false, closeFocus: "opener" }} />,
+      );
+
+      // Then
+      expect(railMenu).toHaveFocus();
+    });
+
+    it("開き口で、幅768px未満なら、ドロワー用のメニューボタンにフォーカスを移し、ドロワーは開かない", () => {
+      // Given
+      // When
+      closeWith("opener", { wide: false });
+
+      // Then
+      expect(openMenuButtons()[0]).toHaveFocus();
+      expect(drawerBackdrop()).toHaveStyle({ opacity: "0" });
+    });
+
+    it.each([true, false])(
+      "背景の先頭を指すとき(幅768px以上=%s)は、本文領域にフォーカスを移す",
+      (wide) => {
+        // Given
+        // When
+        closeWith("content", { wide });
+
+        // Then
+        const content = screen.getByText("本文").closest("[tabindex='-1']");
+        expect(content).not.toBeNull();
+        expect(content).toHaveFocus();
+      },
+    );
+
+    it("初回の描画と、閉じていない間は、フォーカスを移さない", () => {
+      // Given
+      viewport.setWide(true);
+
+      // When
+      const { rerender } = render(
+        <PanelWithFrame settings={{ open: false, closeFocus: "opener" }} />,
+        { wrapper: IntlTestProvider },
+      );
+      rerender(
+        <PanelWithFrame settings={{ open: false, closeFocus: "content" }} />,
+      );
+
+      // Then
+      expect(document.body).toHaveFocus();
+    });
+
+    it("閉じた後も、列の開閉は変えない", () => {
+      // Given
+      // When
+      closeWith("opener", { wide: true });
+
+      // Then
+      expect(railCloseButton()).toBeInTheDocument();
+      expect(openMenuButtons()).toHaveLength(1);
     });
   });
 });

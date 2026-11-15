@@ -234,7 +234,7 @@
 「戻った」か「開いた」かを、画面の構成や遷移の経路でなく、開いたURLの戻りの印で決める。
 
 - 戻りの印は、履歴の経路の検索部の`return=1`である(`ROUNDS_HISTORY_RETURN_PATH`、経路表)。印の無い`/rounds/history`は「開く」、印のあるURLは「戻る」を表す。
-- 規則は1つで、履歴の画面はURLの検索部を購読し(`useSearchParams`)、印が無いときはいつでも「開いた」として、表示済みを捨てて先頭のページから取得し、自分のURLを印のある形に置き換える(`window.history.replaceState`)。印が無いのは、印の無いURLで表示を始めたときと、表示中に履歴の項目を押したときである。Next.jsは同じ経路で検索部だけが違う遷移では画面を作り直さない(画面のkeyが検索部を除いて作られる)ため、表示の開始時だけ見ると、履歴の表示中に項目を押しても取得しない。そのため、表示の開始時に限らず検索部の変化を見る。Next.jsは`replaceState`をルーターに取り込み、`useSearchParams`が新しい値を返すため、置き換えの後は印がある状態になり、取得を繰り返さない。置き換えは`window.history.replaceState(null, '', url)`の形で呼ぶ(第1引数に現在の`window.history.state`を渡すと、Next.jsは内部の印`__NA`を見て取り込まず、`useSearchParams`が印の無いままになるため。`app-router.js`の差し替えた`replaceState`)。
+- 規則は1つで、履歴の画面はURLの検索部を購読し(`useSearchParams`)、印が無いときはいつでも「開いた」として、表示済みを捨てて先頭のページから取得し、自分のURLを印のある形に置き換える(`window.history.replaceState`)。印が無いのは、印の無いURLで表示を始めたときと、表示中に履歴の項目を押したときである。Next.jsは同じ経路で検索部だけが違う遷移では画面を作り直さない(画面のkeyが検索部を除いて作られる)ため、表示の開始時だけ見ると、履歴の表示中に項目を押しても取得しない。そのため、表示の開始時に限らず検索部の変化を見る。Next.jsは`replaceState`をルーターに取り込み、`useSearchParams`が新しい値を返すため、置き換えの後は印がある状態になり、取得を繰り返さない。置き換えは`window.history.replaceState(null, '', url)`の形で呼ぶ(第1引数に現在の`window.history.state`を渡すと、Next.jsは内部の印`__NA`を見て取り込まず、`useSearchParams`が印の無いままになるため。`app-router.js`の差し替えた`replaceState`)。置き換えるURLは、今のURLのハッシュ(設定パネルの表示。`app/settings`)を保つ。ハッシュを落とすと、ハッシュ付きで開いた履歴で設定パネルが閉じるため。
 - この結果、履歴の項目(どの画面からでも、履歴の表示中でも)は最新を取得し、ブラウザの戻る・進むでこの項目に戻ると、印のあるURLで開く。
 - `useSearchParams`を使う部分は、静的な枠の生成のためにSuspenseで包む(待つ間はスケルトン)。
 - 詳細の戻り先(`originPathOf("history")`)は印のあるURLにする。詳細の戻るリンク(`back-link.tsx`)と、詳細での削除の後の移動(`round-leaving.ts`)が使う。履歴の項目(レフトパネル/ドロワー)は印の無い`ROUNDS_HISTORY_PATH`のままである。

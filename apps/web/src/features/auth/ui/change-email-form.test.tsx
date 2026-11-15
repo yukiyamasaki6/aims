@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -6,7 +6,6 @@ import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import { SETTINGS_PATH } from "@/routes";
 import type { CallResult } from "../application/call-result";
 import {
   createChangeEmail,
@@ -50,9 +49,20 @@ function setup(
     connectivity,
     clock,
   });
-  const form = <ChangeEmailForm changeEmail={changeEmail} siteKey="site-key" />;
+  const onBack = vi.fn();
+  const onBusyChange = vi.fn();
+  const form = (
+    <ChangeEmailForm
+      changeEmail={changeEmail}
+      siteKey="site-key"
+      onBack={onBack}
+      onBusyChange={onBusyChange}
+    />
+  );
   const rendered = render(form, { wrapper: IntlTestProvider });
   return {
+    onBack,
+    onBusyChange,
     authenticator,
     connectivity,
     clock,
@@ -550,7 +560,7 @@ describe("メールアドレス変更画面の部品", () => {
         expect(screen.queryAllByRole("button")).toHaveLength(0);
         expect(
           screen.getByRole("link", { name: authText("back") }),
-        ).toHaveAttribute("href", SETTINGS_PATH);
+        ).toBeInTheDocument();
         expect(screen.queryByRole("textbox")).toBeNull();
         expect(
           screen.queryByText(
@@ -560,7 +570,7 @@ describe("メールアドレス変更画面の部品", () => {
         expect(clock.pendingCount()).toBe(0);
       });
 
-      it("戻るは設定画面へのリンクのままで、本文に戻るのボタンは無く、入力段階にもコード確認にも戻らない", async () => {
+      it("戻るはヘッダーのリンクのままで、本文に戻るのボタンは無く、入力段階にもコード確認にも戻らない", async () => {
         // Given
         const { authenticator } = setup();
         const user = userEvent.setup();
@@ -576,6 +586,19 @@ describe("メールアドレス変更画面の部品", () => {
           screen.getAllByRole("link", { name: authText("back") }),
         ).toHaveLength(1);
         expect(screen.queryByRole("textbox")).toBeNull();
+      });
+
+      it("完了の後も、ヘッダーの戻るを押すと、onBackを呼ぶ", async () => {
+        // Given
+        const { authenticator, onBack } = setup();
+        const user = userEvent.setup();
+        await complete(user, authenticator);
+
+        // When
+        await user.click(screen.getByRole("link", { name: authText("back") }));
+
+        // Then
+        expect(onBack).toHaveBeenCalledOnce();
       });
 
       it("画面を作り直すと、完了の文言は出ず、入力の段階で新しい現在のメールアドレスが表示される", async () => {
@@ -919,7 +942,41 @@ describe("メールアドレス変更画面の部品", () => {
       expect(during[0].closest("a")).toBeNull();
       expect(
         await screen.findByRole("link", { name: authText("back") }),
-      ).toHaveAttribute("href", SETTINGS_PATH);
+      ).toBeInTheDocument();
+    });
+
+    it("処理中は、onBusyChangeで処理中を知らせ、処理が終わると解けたことを知らせる", async () => {
+      // Given
+      const env = setup();
+      const user = userEvent.setup();
+      const release = await holdings.request(env, user);
+      const during = env.onBusyChange.mock.calls.at(-1);
+
+      // When
+      await act(async () => release());
+
+      // Then
+      expect(during).toEqual([true]);
+      await waitFor(() =>
+        expect(env.onBusyChange.mock.calls.at(-1)).toEqual([false]),
+      );
+    });
+
+    it("処理中にヘッダーの戻るを押しても、onBackを呼ばない", async () => {
+      // Given
+      const env = setup();
+      const user = userEvent.setup();
+      const release = await holdings.request(env, user);
+      const back = screen
+        .getAllByText(authText("back"))
+        .filter((element) => element.closest("header"))[0];
+
+      // When
+      await user.click(back);
+      await act(async () => release());
+
+      // Then
+      expect(env.onBack).not.toHaveBeenCalled();
     });
   });
 

@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { SETTINGS_ACCOUNT_HASH } from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   SHARED_AUTH_STATE_PATH,
@@ -21,6 +22,7 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
+import { settingsPanel } from "../helpers/settings";
 import { expectUncovered } from "../helpers/visibility";
 
 const navigationText = translatorFor("navigation");
@@ -238,6 +240,22 @@ test.describe("履歴", () => {
 
     await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
     await expect(page.getByRole("link", { name: /直接開く/ })).toBeVisible();
+  });
+
+  test("履歴のURLを設定パネルのハッシュ付きで開くと、履歴が戻りの印付きのURLに置き換わっても、設定パネルは開いたままである", async ({
+    page,
+  }) => {
+    const credentials = await signInFreshUser(page, "e2e-history");
+    await addRound(credentials, "ハッシュ付き", "2026-05-01", {
+      completed: true,
+    });
+
+    await page.goto(`/rounds/history${SETTINGS_ACCOUNT_HASH}`);
+
+    await expect(page).toHaveURL(
+      new RegExp(`/rounds/history\\?return=1${SETTINGS_ACCOUNT_HASH}$`),
+    );
+    await expect(settingsPanel(page)).toBeVisible();
   });
 
   test("履歴のカードから開いた詳細の戻るで履歴へ、ホームのカードから開いた詳細の戻るでホームへ戻る", async ({

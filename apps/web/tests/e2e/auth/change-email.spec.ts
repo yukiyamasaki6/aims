@@ -1,12 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { CHANGE_EMAIL_HASH } from "@/routes";
 import { expect, test } from "../fixtures";
-import {
-  createConfirmedUser,
-  signUpAndSignIn,
-  waitForHydration,
-} from "../helpers/auth";
+import { createConfirmedUser, signUpAndSignIn } from "../helpers/auth";
 import { signInError } from "../helpers/auth-api";
 import { fastForwardResendCooldown } from "../helpers/clock";
 import { getOtpCodeFromMailpit } from "../helpers/mailpit";
@@ -14,6 +11,13 @@ import {
   expectStillSignedIn,
   signInOnOtherDevice,
 } from "../helpers/other-browser-device";
+import {
+  expectAccountCategory,
+  openSettingsAt,
+  panelBackLink,
+  settingsPanel,
+  waitForPanelHydration,
+} from "../helpers/settings";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
@@ -55,8 +59,7 @@ function verifyButton(page: Page) {
 }
 
 async function openChangeEmail(page: Page) {
-  await page.goto("/settings/email");
-  await waitForHydration(page);
+  await openSettingsAt(page, CHANGE_EMAIL_HASH);
 }
 
 async function sendNewEmail(page: Page, email: string) {
@@ -100,7 +103,27 @@ async function confirmBoth(page: Page, addresses: Addresses) {
   );
 }
 
-test("新しいメールアドレスを送り、現在と新しいアドレスへ届く2つのコードを確認すると、完了が表示され、戻ると設定画面へ移動し、新しいアドレスが現在として表示され、新しいアドレスでだけサインインでき、この端末はサインインしたままである", async ({
+test("ハッシュ付きのURLを直接開いても再読み込みしても、設定パネルにメールアドレス変更の画面が表示され、入力は空である", async ({
+  page,
+}) => {
+  // ハッシュ付きのURLを直接開き、メールアドレス変更の画面が表示される。
+  await signUpAndSignIn(page, {
+    email: uniqueEmail("change-email-direct"),
+    password: PASSWORD,
+  });
+  await openChangeEmail(page);
+  await expect(page).toHaveURL(new RegExp(`${CHANGE_EMAIL_HASH}$`));
+  await expect(newEmailInput(page)).toHaveValue("");
+
+  // 再読み込みして、同じ画面が表示される。
+  await page.reload();
+  await waitForPanelHydration(page);
+  await expect(settingsPanel(page)).toBeVisible();
+  await expect(newEmailInput(page)).toHaveValue("");
+  await expect(page).toHaveURL(new RegExp(`${CHANGE_EMAIL_HASH}$`));
+});
+
+test("新しいメールアドレスを送り、現在と新しいアドレスへ届く2つのコードを確認すると、完了が表示され、戻ると分類「アカウント」へ移動し、新しいアドレスが現在として表示され、新しいアドレスでだけサインインでき、この端末はサインインしたままである", async ({
   page,
 }) => {
   // 新しいメールアドレスを送って、コード確認の画面へ進む。
@@ -118,26 +141,27 @@ test("新しいメールアドレスを送り、現在と新しいアドレス�
     page.getByRole("heading", { name: authText("changeEmailTitle") }),
   ).toBeVisible();
   await expect(newEmailInput(page)).toHaveCount(0);
-  await expect(page).toHaveURL(/\/settings\/email$/);
+  await expect(page).toHaveURL(new RegExp(`${CHANGE_EMAIL_HASH}$`));
 
-  // 戻るを押して、設定画面へ進む。
-  await page.getByRole("link", { name: authText("back") }).click();
-  await expect(page).toHaveURL(/\/settings$/);
+  // 戻るを押して、分類「アカウント」へ進む。
+  await panelBackLink(page).click();
+  await expectAccountCategory(page);
+
+  // メールアドレス変更の項目を押し直すと、新しいアドレスが現在として表示される。
+  await settingsPanel(page)
+    .getByRole("link", { name: settingsText("changeEmailItem") })
+    .click();
   await expect(
-    page.getByRole("heading", { name: settingsText("title") }),
+    page.getByText(authText("changeEmailCurrent", { email: addresses.next })),
   ).toBeVisible();
 
-  // 別のクライアントでは新しいアドレスだけが使え、この端末はサインインしたままで、画面を開きなおすと新しい現在のメールアドレスが表示される。
+  // 別のクライアントでは新しいアドレスだけが使え、この端末はサインインしたままである。
   expect(await signInError(addresses.next, PASSWORD)).toBeNull();
   expect(await signInError(addresses.current, PASSWORD)).toBe(
     "invalid_credentials",
   );
   await page.goto("/rounds");
   await expect(page).toHaveURL(/\/rounds/);
-  await openChangeEmail(page);
-  await expect(
-    page.getByText(authText("changeEmailCurrent", { email: addresses.next })),
-  ).toBeVisible();
 });
 
 test("一方のコードを誤って確認すると、誤りの欄にだけエラーが出て、古いアドレスでサインインでき、誤りの欄だけ正しいコードに直して確認すると完了する", async ({
@@ -265,7 +289,21 @@ test("現在と同じアドレスを入力すると、同じアドレスには�
   await expect(verifyButton(page)).not.toBeVisible();
 });
 
-test("コード確認の画面でヘッダーの戻るのリンクを押すと、設定画面へ移動する", async ({
+test("入力の画面でヘッダーの戻るのリンクを押すと、分類「アカウント」へ移動する", async ({
+  page,
+}) => {
+  await signUpAndSignIn(page, {
+    email: uniqueEmail("change-email-back-input"),
+    password: PASSWORD,
+  });
+  await openChangeEmail(page);
+
+  await panelBackLink(page).click();
+
+  await expectAccountCategory(page);
+});
+
+test("コード確認の画面でヘッダーの戻るのリンクを押すと、分類「アカウント」へ移動する", async ({
   page,
 }) => {
   // 新しいメールアドレスを送って、コード確認の画面へ進む。
@@ -277,15 +315,9 @@ test("コード確認の画面でヘッダーの戻るのリンクを押すと�
   await openChangeEmail(page);
   await requestChange(page, addresses);
 
-  // ヘッダーの戻るのリンクを押して、設定画面へ進む。
-  await page
-    .locator("header")
-    .getByRole("link", { name: authText("back") })
-    .click();
-  await expect(page).toHaveURL(/\/settings$/);
-  await expect(
-    page.getByRole("heading", { name: settingsText("title") }),
-  ).toBeVisible();
+  // ヘッダーの戻るのリンクを押して、分類「アカウント」へ進む。
+  await panelBackLink(page).click();
+  await expectAccountCategory(page);
 });
 
 test("別の端末でサインインしているとき、この端末が変更を完了しても、この端末と別の端末はサインインしたままである", async ({

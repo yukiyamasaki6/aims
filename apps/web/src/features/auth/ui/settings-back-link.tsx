@@ -1,14 +1,20 @@
 import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
-import { SETTINGS_PATH } from "@/routes";
+import { SETTINGS_ACCOUNT_HASH } from "@/routes";
 
 const CLASS_NAME =
   "inline-flex w-fit items-center gap-1 p-1.5 text-muted-foreground text-sm";
 
-// 設定へ戻るリンク。disabledの間は、リンクではない要素にして、押下もフォーカスも受けない。
-export function SettingsBackLink({ disabled }: { disabled: boolean }) {
+// 設定パネルの分類「アカウント」へ戻るリンク。押下は既定の動作を止めて、onBack(設定パネルの移る操作)を呼ぶ。
+// disabledの間は、リンクではない要素にして、押下もフォーカスも受けない。
+export function SettingsBackLink({
+  disabled,
+  onBack,
+}: {
+  disabled: boolean;
+  onBack: () => void;
+}) {
   const t = useTranslations("auth");
   const content = (
     <>
@@ -24,11 +30,15 @@ export function SettingsBackLink({ disabled }: { disabled: boolean }) {
     );
   }
   return (
-    <Link
-      href={SETTINGS_PATH}
+    <a
+      href={SETTINGS_ACCOUNT_HASH}
+      onClick={(event) => {
+        event.preventDefault();
+        onBack();
+      }}
       className={cn(CLASS_NAME, "hover:text-foreground")}
     >
       {content}
-    </Link>
+    </a>
   );
 }

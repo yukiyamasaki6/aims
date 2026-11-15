@@ -20,7 +20,7 @@ import {
   HOME_PATH,
   ROUNDS_HISTORY_PATH,
   ROUNDS_HOME_PATH,
-  SETTINGS_PATH,
+  SETTINGS_ACCOUNT_HASH,
 } from "@/routes";
 
 // 画面の幅768px未満のドロワーと、768px以上の縦の列は別の枠で、それぞれの開閉を持つ。初期値は固定で、幅で分岐しない。
@@ -96,15 +96,19 @@ function useDrawerSwipe(onClose: () => void) {
 
 // パネル(ドロワーか縦の列)を開いたらパネルの中へフォーカスを移し、閉じたらメニューボタンへ戻す。初回は移さない。
 // メニューボタンは本文側(DOMでパネルより後)にあり、Tabだけではパネルに入れないため。
+// skipReturn: 真のとき、閉じてもメニューボタンへ戻さない(「設定」項目で閉じたとき。フォーカスは開いた設定パネルが受け取る)。閉じたときに偽へ戻す。
 function usePanelFocus(
   open: boolean,
   panelRef: RefObject<HTMLElement | null>,
   menuRef: RefObject<HTMLButtonElement | null>,
+  skipReturn?: RefObject<boolean>,
 ) {
   const wasOpen = useRef(open);
   useEffect(() => {
     const panel = panelRef.current;
-    if (open && !wasOpen.current) {
+    if (!open && wasOpen.current && skipReturn?.current) {
+      skipReturn.current = false;
+    } else if (open && !wasOpen.current) {
       // 幅の動き始めに焦点を当てると、overflow-hiddenの外枠が焦点の要素を見せようと内側へスクロールし、開く途中で中身がずれて動く。スクロールさせない。
       panel
         ?.querySelector<HTMLElement>("button")
@@ -115,7 +119,7 @@ function usePanelFocus(
         menuRef.current?.focus();
     }
     wasOpen.current = open;
-  }, [open, panelRef, menuRef]);
+  }, [open, panelRef, menuRef, skipReturn]);
 }
 
 const WIDE_QUERY = "(min-width: 768px)";
@@ -170,9 +174,109 @@ function useDrawerTrap(
   }, [active, drawerRef, onClose]);
 }
 
-export function LeftPanel({ children }: { children: ReactNode }) {
+// 設定パネルが閉じたときの、キーボードのフォーカスの戻し先の種類。
+// opener: 開き口(幅768px以上で列が開いていれば列の「設定」項目、列が閉じていれば列用のメニューボタン、幅768px未満ではドロワー用のメニューボタン)。
+// content: 背景の画面の先頭(本文領域)。
+type SettingsCloseFocus = "opener" | "content";
+
+// 設定パネルとの接点。入口が設定の経路の操作から渡す。
+// open: 設定パネルが開いているか。onOpen: 開く操作。closeFocus: 閉じたときの戻し先の種類。
+export type LeftPanelSettings = {
+  open: boolean;
+  onOpen: () => void;
+  closeFocus: SettingsCloseFocus;
+};
+
+type SettingsFocusTargets = {
+  wide: boolean;
+  railOpen: boolean;
+  railSettingsRef: RefObject<HTMLAnchorElement | null>;
+  railMenuRef: RefObject<HTMLButtonElement | null>;
+  drawerMenuRef: RefObject<HTMLButtonElement | null>;
+  contentRef: RefObject<HTMLDivElement | null>;
+};
+
+function settingsFocusTarget(
+  closeFocus: SettingsCloseFocus,
+  targets: SettingsFocusTargets,
+): HTMLElement | null {
+  if (closeFocus === "content") return targets.contentRef.current;
+  if (!targets.wide) return targets.drawerMenuRef.current;
+  return targets.railOpen
+    ? targets.railSettingsRef.current
+    : targets.railMenuRef.current;
+}
+
+// 設定パネルが閉じたら、戻し先の種類に従ってフォーカスを移す。ドロワーと列の開閉は変えない。初回は移さない。
+function useSettingsCloseFocus(
+  { open, closeFocus }: LeftPanelSettings,
+  targets: SettingsFocusTargets,
+) {
+  const wasOpen = useRef(open);
+  // 戻し先は閉じた時点の幅と列の開閉で決める。targetsは描画ごとに作るため、閉じた描画のものを使う。
+  useEffect(() => {
+    if (!open && wasOpen.current)
+      settingsFocusTarget(closeFocus, targets)?.focus({ preventScroll: true });
+    wasOpen.current = open;
+  }, [open, closeFocus, targets]);
+}
+
+// 「設定」項目と、設定パネルが閉じたときのフォーカス。
+// nav: 項目の押下と現在のビュー。「設定」項目の押下は、ドロワーを閉じ(列は変えない)、設定パネルを開く。ドロワーを閉じるときは、フォーカスをメニューボタンへ移さない(開いた設定パネルが受け取る)。
+// skipDrawerReturn: ドロワーを閉じたときにメニューボタンへ戻さない印。
+function useSettingsItem(
+  settings: LeftPanelSettings,
+  panel: {
+    drawerOpen: boolean;
+    closeDrawer: () => void;
+    wide: boolean;
+    railOpen: boolean;
+    drawerMenuRef: RefObject<HTMLButtonElement | null>;
+    railMenuRef: RefObject<HTMLButtonElement | null>;
+  },
+) {
+  const railSettingsRef = useRef<HTMLAnchorElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const skipDrawerReturn = useRef(false);
+  const {
+    drawerOpen,
+    closeDrawer,
+    wide,
+    railOpen,
+    drawerMenuRef,
+    railMenuRef,
+  } = panel;
+  useSettingsCloseFocus(settings, {
+    wide,
+    railOpen,
+    railSettingsRef,
+    railMenuRef,
+    drawerMenuRef,
+    contentRef,
+  });
+  const openSettings = () => {
+    if (drawerOpen) skipDrawerReturn.current = true;
+    closeDrawer();
+    settings.onOpen();
+  };
+  const nav: PanelNav = {
+    onNavigate: closeDrawer,
+    onOpenSettings: openSettings,
+    settingsOpen: settings.open,
+  };
+  return { railSettingsRef, contentRef, skipDrawerReturn, nav };
+}
+
+// children: 本文領域。settings: 設定パネルとの接点。
+export function LeftPanel({
+  children,
+  settings,
+}: {
+  children: ReactNode;
+  settings: LeftPanelSettings;
+}) {
   const { drawerOpen, setDrawerOpen, railOpen, setRailOpen } = useOpenState();
-  // ホーム・履歴の項目の押下は、ドロワーの値だけを閉にする。列の値は変えない。
+  // ホーム・点数一覧・設定の項目の押下は、ドロワーの値だけを閉にする。列の値は変えない。
   const closeDrawer = () => setDrawerOpen(false);
   const closeRail = () => setRailOpen(false);
   const wide = useWide();
@@ -182,7 +286,15 @@ export function LeftPanel({ children }: { children: ReactNode }) {
   const railRef = useRef<HTMLElement>(null);
   const drawerMenuRef = useRef<HTMLButtonElement>(null);
   const railMenuRef = useRef<HTMLButtonElement>(null);
-  usePanelFocus(drawerOpen, drawerRef, drawerMenuRef);
+  const item = useSettingsItem(settings, {
+    drawerOpen,
+    closeDrawer,
+    wide,
+    railOpen,
+    drawerMenuRef,
+    railMenuRef,
+  });
+  usePanelFocus(drawerOpen, drawerRef, drawerMenuRef, item.skipDrawerReturn);
   usePanelFocus(railOpen, railRef, railMenuRef);
   useDrawerTrap(trapActive, drawerRef, closeDrawer);
 
@@ -200,7 +312,7 @@ export function LeftPanel({ children }: { children: ReactNode }) {
         drawerRef={drawerRef}
         open={drawerOpen}
         onClose={closeDrawer}
-        onNavigate={closeDrawer}
+        nav={item.nav}
         swipe={swipe.handlers}
         offset={swipe.offset}
         dragging={swipe.dragging}
@@ -210,32 +322,73 @@ export function LeftPanel({ children }: { children: ReactNode }) {
         railRef={railRef}
         open={railOpen}
         onClose={closeRail}
-        onNavigate={closeDrawer}
+        nav={{ ...item.nav, settingsRef: item.railSettingsRef }}
       />
 
-      <div inert={trapActive} className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <ScreenMenuProvider
-          menu={
-            <>
-              <MenuButton
-                buttonRef={drawerMenuRef}
-                onOpen={() => setDrawerOpen(true)}
-                className="md:hidden"
-              />
-              {!railOpen && (
-                <MenuButton
-                  buttonRef={railMenuRef}
-                  onOpen={() => setRailOpen(true)}
-                  className="max-md:hidden"
-                />
-              )}
-            </>
-          }
-        >
-          {children}
-        </ScreenMenuProvider>
-      </div>
+      <ContentArea
+        contentRef={item.contentRef}
+        inert={trapActive}
+        drawerMenuRef={drawerMenuRef}
+        railMenuRef={railMenuRef}
+        railOpen={railOpen}
+        onOpenDrawer={() => setDrawerOpen(true)}
+        onOpenRail={() => setRailOpen(true)}
+      >
+        {children}
+      </ContentArea>
     </>
+  );
+}
+
+// 本文領域。メニューの部品(ドロワー用と、列が閉じている間の列用のメニューボタン)を文脈で画面へ渡す。
+// 設定パネルを読み込み時の表示で閉じたときに、フォーカスを受ける(tabIndex=-1)。
+function ContentArea({
+  contentRef,
+  inert,
+  drawerMenuRef,
+  railMenuRef,
+  railOpen,
+  onOpenDrawer,
+  onOpenRail,
+  children,
+}: {
+  contentRef: RefObject<HTMLDivElement | null>;
+  inert: boolean;
+  drawerMenuRef: RefObject<HTMLButtonElement | null>;
+  railMenuRef: RefObject<HTMLButtonElement | null>;
+  railOpen: boolean;
+  onOpenDrawer: () => void;
+  onOpenRail: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      ref={contentRef}
+      tabIndex={-1}
+      inert={inert}
+      className="flex min-h-0 min-w-0 flex-1 flex-col outline-none"
+    >
+      <ScreenMenuProvider
+        menu={
+          <>
+            <MenuButton
+              buttonRef={drawerMenuRef}
+              onOpen={onOpenDrawer}
+              className="md:hidden"
+            />
+            {!railOpen && (
+              <MenuButton
+                buttonRef={railMenuRef}
+                onOpen={onOpenRail}
+                className="max-md:hidden"
+              />
+            )}
+          </>
+        }
+      >
+        {children}
+      </ScreenMenuProvider>
+    </div>
   );
 }
 
@@ -243,7 +396,7 @@ function DrawerFrame({
   drawerRef,
   open,
   onClose,
-  onNavigate,
+  nav,
   swipe,
   offset,
   dragging,
@@ -251,7 +404,7 @@ function DrawerFrame({
   drawerRef: RefObject<HTMLElement | null>;
   open: boolean;
   onClose: () => void;
-  onNavigate: () => void;
+  nav: PanelNav;
   swipe: ReturnType<typeof useDrawerSwipe>["handlers"];
   offset: number;
   dragging: boolean;
@@ -277,7 +430,7 @@ function DrawerFrame({
     >
       <PanelTopRow onClose={onClose} />
 
-      <PanelBody onNavigate={onNavigate} />
+      <PanelBody nav={nav} />
     </aside>
   );
 }
@@ -287,12 +440,12 @@ function RailFrame({
   railRef,
   open,
   onClose,
-  onNavigate,
+  nav,
 }: {
   railRef: RefObject<HTMLElement | null>;
   open: boolean;
   onClose: () => void;
-  onNavigate: () => void;
+  nav: PanelNav;
 }) {
   return (
     <aside
@@ -307,7 +460,7 @@ function RailFrame({
     >
       <div className="flex h-full w-56 flex-col overflow-y-auto border-r bg-card text-card-foreground">
         <PanelTopRow onClose={onClose} />
-        <PanelBody onNavigate={onNavigate} />
+        <PanelBody nav={nav} />
       </div>
     </aside>
   );
@@ -342,53 +495,87 @@ function LogoLink({ className }: { className?: string }) {
   );
 }
 
-// 現在のビュー(パスが項目の行き先と等しい)の項目に、aria-current="page"と現在の見た目を付ける。詳細・作成ではどの項目にも付かない。
+function navItemClassName(current: boolean) {
+  return cn(
+    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
+    current && "bg-muted font-medium",
+  );
+}
+
+// 現在のビューの項目に、aria-current="page"と現在の見た目を付ける。
+// 設定パネルが開いている間は「設定」項目だけに、それ以外はパスが項目の行き先と等しい項目に付ける。詳細・作成ではホーム・履歴のどちらにも付かない。
 function NavItem({
   href,
   onNavigate,
+  settingsOpen,
   children,
 }: {
   href: string;
   onNavigate: () => void;
+  settingsOpen: boolean;
   children: ReactNode;
 }) {
-  const current = usePathname() === href;
+  const pathname = usePathname();
+  const current = !settingsOpen && pathname === href;
   return (
     <Link
       href={href}
       onClick={onNavigate}
       aria-current={current ? "page" : undefined}
-      className={cn(
-        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
-        current && "bg-muted font-medium",
-      )}
+      className={navItemClassName(current)}
     >
       {children}
     </Link>
   );
 }
 
-// onNavigate: ホーム・履歴の項目の押下で呼ぶ。
-function PanelBody({ onNavigate }: { onNavigate: () => void }) {
+// 項目の押下と現在のビュー。onNavigate: ホーム・点数一覧の項目の押下。onOpenSettings: 「設定」項目の押下。
+// settingsOpen: 設定パネルが開いているか。settingsRef: 「設定」項目の要素(列だけが渡す。閉じたときのフォーカスの戻し先)。
+type PanelNav = {
+  onNavigate: () => void;
+  onOpenSettings: () => void;
+  settingsOpen: boolean;
+  settingsRef?: RefObject<HTMLAnchorElement | null>;
+};
+
+function PanelBody({ nav }: { nav: PanelNav }) {
   const t = useTranslations("navigation");
   return (
     <>
       <nav className="flex flex-1 flex-col gap-1 px-4 pt-1">
-        <NavItem href={ROUNDS_HOME_PATH} onNavigate={onNavigate}>
+        <NavItem
+          href={ROUNDS_HOME_PATH}
+          onNavigate={nav.onNavigate}
+          settingsOpen={nav.settingsOpen}
+        >
           <House aria-hidden="true" className="size-5 shrink-0" />
           {t("leftPanelHome")}
         </NavItem>
-        <NavItem href={ROUNDS_HISTORY_PATH} onNavigate={onNavigate}>
+        <NavItem
+          href={ROUNDS_HISTORY_PATH}
+          onNavigate={nav.onNavigate}
+          settingsOpen={nav.settingsOpen}
+        >
           <ListOrdered aria-hidden="true" className="size-5 shrink-0" />
           {t("leftPanelHistory")}
         </NavItem>
       </nav>
 
       <div className="flex flex-col p-4">
-        <NavItem href={SETTINGS_PATH} onNavigate={onNavigate}>
+        {/* 画面を移らずに設定パネルを開く。hrefは開いたときのハッシュで、押下は既定の動作を止める。 */}
+        <a
+          ref={nav.settingsRef}
+          href={SETTINGS_ACCOUNT_HASH}
+          onClick={(event) => {
+            event.preventDefault();
+            nav.onOpenSettings();
+          }}
+          aria-current={nav.settingsOpen ? "page" : undefined}
+          className={navItemClassName(nav.settingsOpen)}
+        >
           <Settings aria-hidden="true" className="size-5 shrink-0" />
           {t("leftPanelSettings")}
-        </NavItem>
+        </a>
       </div>
     </>
   );

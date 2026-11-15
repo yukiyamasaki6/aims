@@ -1,5 +1,7 @@
+import { SETTINGS_ACCOUNT_HASH } from "@/routes";
 import { expect, test } from "../fixtures";
 import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
+import { settingsPanel } from "../helpers/settings";
 
 // サインインする新しい利用者を使うため、共有の認証状態を使わない。
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -29,7 +31,8 @@ test("端末の識別情報がサインイン中の利用者と違う状態で�
   page.on("load", () => {
     loads += 1;
   });
-  await page.goto("/rounds");
+  // 同じ文書内の移動にならないよう、別の画面でパネルを開いたURLを開く。
+  await page.goto(`/rounds/new${SETTINGS_ACCOUNT_HASH}`);
 
   // ルートの識別情報の記録(localIdentity)も、起動時の通知で識別情報を直す。この確認だけでは見張りの働きの証拠にならない。
   // 見張りの働きの証拠は、読み込みの回数である(1回目のgotoと、見張りによる1回の読み込み直し)。
@@ -42,7 +45,11 @@ test("端末の識別情報がサインイン中の利用者と違う状態で�
     )
     .toBe(userId);
   await waitForHydration(page);
-  await expect(page).toHaveURL(/\/rounds$/);
+  // 読み込み直した後も、同じ表示のパネルが開く(読み込み直しはハッシュを保つ)。
+  await expect(page).toHaveURL(
+    new RegExp(`/rounds/new${SETTINGS_ACCOUNT_HASH}$`),
+  );
+  await expect(settingsPanel(page)).toBeVisible();
   // 2回目の文書の識別情報とセッションが一致するため、さらに読み込み直さない(合計2回)。
   await page.waitForTimeout(2_000);
   expect(loads).toBe(2);

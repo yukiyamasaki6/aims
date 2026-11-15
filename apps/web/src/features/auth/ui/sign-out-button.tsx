@@ -9,6 +9,7 @@ import type { AuthFailureKind } from "../domain/auth-failure";
 import { useAuthTexts } from "./use-auth-texts";
 
 // サインアウトのボタンと確認ダイアログ。実行中の判定(二重実行の拒否)は手続きの集約が持ち、ここは実行中の表示と、失敗の表示と再試行を担う。
+// 確認ダイアログは設定パネルのダイアログの中で開く入れ子のダイアログで、Escと外側の押下は確認ダイアログだけを閉じる。
 // 完了後の遷移は行わない(手続きが行う)。
 export function SignOutButton({ signOut }: { signOut: Session["signOut"] }) {
   const t = useTranslations("auth");
@@ -49,6 +50,7 @@ export function SignOutButton({ signOut }: { signOut: Session["signOut"] }) {
         onConfirm={handleConfirm}
         busy={busy}
         error={texts.failure(error)}
+        nested
       />
     </>
   );
