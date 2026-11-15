@@ -3,6 +3,7 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { ScreenFrame } from "@/components/screen-frame";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { NEW_ROUND_PATH } from "@/routes";
 import { homeView } from "../domain/rounds-list-view";
@@ -20,28 +21,32 @@ export function RoundsHome() {
   const rounds = homeView(local, removed);
 
   return (
-    <>
-      {rounds !== null &&
-        (rounds.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{t("homeEmpty")}</p>
-        ) : (
-          <section data-testid="in-progress-rounds">
-            <RoundCards
-              rounds={rounds}
-              origin="home"
-              onDelete={requestDelete}
-            />
-          </section>
-        ))}
+    <ScreenFrame title={t("homeTitle")}>
+      <div className="h-full overflow-y-auto">
+        <main className="mx-auto flex min-h-full max-w-xl flex-col gap-6 p-8">
+          {rounds !== null &&
+            (rounds.length === 0 ? (
+              <p className="text-muted-foreground text-sm">{t("homeEmpty")}</p>
+            ) : (
+              <section data-testid="in-progress-rounds">
+                <RoundCards
+                  rounds={rounds}
+                  origin="home"
+                  onDelete={requestDelete}
+                />
+              </section>
+            ))}
 
-      <RoundDeleteDialog
-        target={target}
-        onCancel={cancel}
-        onConfirm={confirmDelete}
-      />
+          <RoundDeleteDialog
+            target={target}
+            onCancel={cancel}
+            onConfirm={confirmDelete}
+          />
+        </main>
+      </div>
 
       <NewRoundLink hydrated={hydrated} />
-    </>
+    </ScreenFrame>
   );
 }
 

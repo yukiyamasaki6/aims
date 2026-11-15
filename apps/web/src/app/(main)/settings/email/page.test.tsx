@@ -14,9 +14,6 @@ const auth = vi.hoisted(() => ({
   getSession: vi.fn(),
   verifyOtp: vi.fn(),
 }));
-// ルーターは境界のため差し替える。入口が渡す遷移の実装が、これを呼ぶ。
-const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
 const connection = vi.hoisted(() => ({
   createBrowserClient: vi.fn(() => ({ auth })),
 }));
@@ -108,43 +105,15 @@ describe("メールアドレス変更画面の入口", () => {
     expect(emailInput()).toHaveValue("");
   });
 
-  it("完了まで進めて、完了の表示の戻るを押すと、入口が渡した遷移で、ルーターが設定画面へ進む", async () => {
+  it("ヘッダーに、設定画面へ戻るリンクを表示する", () => {
     // Given
-    auth.updateUser.mockResolvedValue({
-      data: { user: { email: "current@example.com" } },
-      error: null,
-    });
-    auth.verifyOtp.mockResolvedValue({
-      data: { user: { id: "u" }, session: { access_token: "t" } },
-      error: null,
-    });
-    const user = userEvent.setup();
-    render(<ChangeEmailPage />, { wrapper: IntlTestProvider });
-    await user.type(emailInput(), "new@example.com");
-    await user.click(sendButton());
-    await user.type(
-      await screen.findByLabelText(
-        authText("changeEmailCurrentCodeLabel", {
-          email: "current@example.com",
-        }),
-      ),
-      "111111",
-    );
-    await user.type(
-      screen.getByLabelText(
-        authText("changeEmailNewCodeLabel", { email: "new@example.com" }),
-      ),
-      "222222",
-    );
-    await user.click(
-      screen.getByRole("button", { name: authText("otpVerify") }),
-    );
-    await screen.findByText(authText("changeEmailDone"));
 
     // When
-    await user.click(screen.getByRole("button", { name: authText("back") }));
+    render(<ChangeEmailPage />, { wrapper: IntlTestProvider });
 
     // Then
-    expect(router.push).toHaveBeenCalledExactlyOnceWith(SETTINGS_PATH);
+    const back = screen.getByRole("link", { name: authText("back") });
+    expect(back).toHaveAttribute("href", SETTINGS_PATH);
+    expect(back.closest("header")).not.toBeNull();
   });
 });

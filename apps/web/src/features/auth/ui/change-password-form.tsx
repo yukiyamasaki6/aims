@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import type { FormEvent } from "react";
+import { ScreenFrame } from "@/components/screen-frame";
 import { BusyButton } from "@/components/ui/busy-button";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { ChangePassword } from "../application/change-password";
@@ -12,6 +13,7 @@ import {
 } from "../domain/change-password-flow";
 import { AuthField } from "./auth-field";
 import { PasswordInput } from "./password-input";
+import { SettingsBackLink } from "./settings-back-link";
 import { useAuthTexts } from "./use-auth-texts";
 import { useScreenView } from "./use-screen-view";
 
@@ -32,25 +34,29 @@ export function ChangePasswordForm({
   const t = useTranslations("auth");
   const texts = useAuthTexts();
   return (
-    <main className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8">
-      <h1 className="font-heading text-2xl leading-snug font-medium">
-        {t("changePasswordTitle")}
-      </h1>
-      <ChangePasswordFields
-        flow={flow}
-        hydrated={hydrated}
-        onSubmit={(input) => void changePassword.submit(input, view)}
-      />
-      {flow.error && (
-        <p className="text-center text-destructive text-sm">
-          {texts.failure(flow.error)}
-        </p>
-      )}
-      {/* 領域は常に描画し、完了の文言だけを差し込む(後から挿入された領域は、読み上げられない場合があるため)。 */}
-      <p role="status" className="text-center text-sm">
-        {flow.completed ? t("changePasswordDone") : null}
-      </p>
-    </main>
+    <ScreenFrame
+      title={t("changePasswordTitle")}
+      leading={<SettingsBackLink disabled={flow.submitting} />}
+    >
+      <div className="h-full overflow-y-auto">
+        <main className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8">
+          <ChangePasswordFields
+            flow={flow}
+            hydrated={hydrated}
+            onSubmit={(input) => void changePassword.submit(input, view)}
+          />
+          {flow.error && (
+            <p className="text-center text-destructive text-sm">
+              {texts.failure(flow.error)}
+            </p>
+          )}
+          {/* 領域は常に描画し、完了の文言だけを差し込む(後から挿入された領域は、読み上げられない場合があるため)。 */}
+          <p role="status" className="text-center text-sm">
+            {flow.completed ? t("changePasswordDone") : null}
+          </p>
+        </main>
+      </div>
+    </ScreenFrame>
   );
 }
 

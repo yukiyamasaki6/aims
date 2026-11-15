@@ -14,8 +14,10 @@ import { DistanceSection } from "./distance-section";
 import { KeypadButtons } from "./keypad-buttons";
 import { KeypadPanel } from "./keypad-panel";
 import { RoundConfigPanel } from "./round-config-panel";
+import { RoundDetailFrame } from "./round-detail-frame";
+import { RoundMenu } from "./round-menu";
 import { RoundSummaryBar } from "./round-summary-bar";
-import { ScorecardHeaderBar } from "./scorecard-header-bar";
+import { SavePresetDialog } from "./save-preset-dialog";
 import { type ScorecardModel, useScorecard } from "./use-scorecard";
 
 export function ScorecardClient({
@@ -43,57 +45,63 @@ export function ScorecardClient({
   );
 
   return (
-    // h-fullにすることで、この行の高さが常に根の枠の高さ（--app-height）に
-    // 従い、実際の可視領域（レフトパネルのモバイルヘッダー分を除いた高さ）に
-    // 一致する。KeypadPanelはこの行の
+    // h-fullにすることで、この行の高さがヘッダーの下の本文領域の高さ
+    // （--app-heightからヘッダー分を除いた高さ）に一致する。KeypadPanelはこの行の
     // flexアイテムとしてデフォルトのstretchで高さを得ており、この値が
     // 正しくないと横向き時にパネル下端が画面外へはみ出す（h-screen固定に
-    // していた際の不具合）。縦の列の中で、ヘッダーと完了の帯・テンキーは
+    // していた際の不具合）。縦の列の中で、完了の帯・テンキーは
     // スクロール領域（<main>）の外に置き、<main>がその間の高さで内部スクロール
     // する。<main>の矩形が、行が見える範囲そのものになる。
-    <div data-hydrated={model.hydrated} className="flex h-full">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="mx-auto w-full max-w-xl shrink-0">
-          <ScorecardHeaderBar
-            roundId={roundId}
-            roundConfig={roundConfig}
+    <RoundDetailFrame
+      actions={
+        <>
+          <SavePresetDialog
+            roundName={roundConfig.name}
+            format={roundConfig.format}
+            bowType={roundConfig.bowType}
             distances={distances}
             targetFaces={targetFaces}
           />
-        </div>
-        <main
-          ref={keypad.observeContainer}
-          data-follow-container
-          className="flex min-h-0 flex-1 flex-col overflow-y-auto"
-        >
-          <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
-            <ScorecardBody model={model} />
-          </div>
-        </main>
+          <RoundMenu roundId={roundId} />
+        </>
+      }
+    >
+      <div data-hydrated={model.hydrated} className="flex h-full">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main
+            ref={keypad.observeContainer}
+            data-follow-container
+            className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+          >
+            <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
+              <ScorecardBody model={model} />
+            </div>
+          </main>
 
-        <BottomFrame
-          keypad={keypad}
-          completeBar={
-            <CompleteRoundBar
-              status={status}
-              confirmation={completionConfirmation(distances, shots)}
-              onComplete={model.onComplete}
-            />
-          }
-        >
-          {keypadButtons}
-        </BottomFrame>
+          <BottomFrame
+            keypad={keypad}
+            completeBar={
+              <CompleteRoundBar
+                status={status}
+                confirmation={completionConfirmation(distances, shots)}
+                onComplete={model.onComplete}
+              />
+            }
+          >
+            {keypadButtons}
+          </BottomFrame>
+        </div>
+        {keypad.isLandscape && (
+          <KeypadPanel
+            open={keypad.keypadOpen}
+            onNodeChange={keypad.setKeypadNode}
+            onClose={keypad.closeKeypad}
+          >
+            {keypadButtons}
+          </KeypadPanel>
+        )}
       </div>
-      {keypad.isLandscape && (
-        <KeypadPanel
-          open={keypad.keypadOpen}
-          onNodeChange={keypad.setKeypadNode}
-          onClose={keypad.closeKeypad}
-        >
-          {keypadButtons}
-        </KeypadPanel>
-      )}
-    </div>
+    </RoundDetailFrame>
   );
 }
 
@@ -104,7 +112,7 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
   const { roundConfig, distances, shots } = sync.state;
 
   return (
-    <div className="flex flex-1 flex-col gap-6 px-8 pb-8">
+    <div className="flex flex-1 flex-col gap-6 p-8">
       <RoundConfigPanel
         roundId={model.roundId}
         initial={roundConfig}

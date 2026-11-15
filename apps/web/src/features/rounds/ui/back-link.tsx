@@ -17,7 +17,7 @@ export function BackLink({
     <Link
       href={originPathOf(origin)}
       className={cn(
-        "inline-flex w-fit items-center gap-1 text-muted-foreground text-sm hover:text-foreground",
+        "inline-flex w-fit items-center gap-1 p-1.5 text-muted-foreground text-sm hover:text-foreground",
         className,
       )}
     >

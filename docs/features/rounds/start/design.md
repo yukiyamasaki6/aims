@@ -25,13 +25,13 @@
 | 保存中 | 開始ボタン(`BusyButton`)にスピナーを出し`aria-disabled`にする。保存後も遷移完了まで解除しない | `submitting`が`true` |
 | 開始失敗 | 開始ボタンの上に「サインインが必要です。」を出し、再び押せる | 未認証が確認された（`unauthenticated`が真） |
 
-- 「戻る」は通常のリンクで、常にホームへ移動する(遷移元`home`の`BackLink`)。画面に見出し「ラウンドを作成」は置かない。
+- 「戻る」は通常のリンクで、共用のヘッダー(`app/navigation`)の`leading`に置き、常にホームへ移動する(遷移元`home`の`BackLink`)。本文には戻るを置かない。ヘッダーの現在地は「作成」で、見出し「ラウンドを作成」は置かない。
 - 未認証のアクセスは`proxy.ts`が`/signin`へ送る。
 
 ## 構成とデータの流れ
 
 - `app/(main)/rounds/new/page.tsx`: 入口。何も生成せず、`RoundPresetSelect`を描くだけである。
-- `features/rounds/ui/round-preset-select.tsx`: UI層。取得と選択の状態を持ち、一覧、開始の帯、削除の確認を描く。手続きの入れ物(`RoundProcedures`)を文脈で受け取り、`fetching.fetchPresets()`で一覧を得て、`whenOnline`で通信の復帰を受ける。「戻る」は`BackLink`(`origin="home"`)を使う。削除の部品は`rounds/preset`が扱う。
+- `features/rounds/ui/round-preset-select.tsx`: UI層。取得と選択の状態を持ち、一覧、開始の帯、削除の確認を描く。手続きの入れ物(`RoundProcedures`)を文脈で受け取り、`fetching.fetchPresets()`で一覧を得て、`whenOnline`で通信の復帰を受ける。共用のヘッダー枠(`ScreenFrame`)に現在地「作成」と`BackLink`(`origin="home"`)を入れ、本文領域に、一覧(作成が持つスクロールの入れ物。この画面のスクロールはここだけ)と開始の帯を縦に置く(`h-full`)。削除の部品は`rounds/preset`が扱う。
 - `features/rounds/ui/use-start-round.ts`: UI層。作成中と未認証の状態を持ち、実行中は2回目の開始を無視して、手続きの入れ物の`roundStart.startRound`を呼ぶ。失敗は一様に実行中を戻し、未認証のときだけ未認証の表示を立てる。画面を離れた（`left`）ときの状態の更新は、離れた画面に見えない。
 - `features/rounds/ui/preset-info.tsx`、`target-face-info.tsx`: UI層。プリセットと距離、的の情報の表示。
 - `features/rounds/application/round-fetching.ts`の`RoundFetching.fetchPresets`(手続きの入れ物の`fetching`): 取得の順序(手続き)。取得の結果だけを返し、成功した結果を取得に使った利用者のキーへ保存する。保存済みは`savedPresets`が返し、画面が先に出す(`withSaved`)。

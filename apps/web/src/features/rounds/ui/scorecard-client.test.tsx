@@ -2768,6 +2768,40 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
   });
 });
 
+describe("ScorecardClient ヘッダー", () => {
+  it("表示中のヘッダーに、戻るのリンク、プリセット保存、ラウンドのメニューが1つずつあり、ヘッダーは二重に出ない", async () => {
+    // Given
+    // When
+    await setup();
+
+    // Then
+    const backs = screen.getAllByRole("link", { name: roundsText("back") });
+    expect(backs).toHaveLength(1);
+    const header = backs[0].closest("header");
+    expect(header).not.toBeNull();
+    expect(screen.getAllByRole("banner")).toHaveLength(1);
+    expect(
+      within(header as HTMLElement).getByTestId("save-as-preset-trigger"),
+    ).toBeInTheDocument();
+    expect(
+      within(header as HTMLElement).getByTestId("round-menu-trigger"),
+    ).toBeInTheDocument();
+  });
+
+  it("LeftPanelの外では、ドロワーのメニューを開くボタンは出ない", async () => {
+    // Given
+    // When
+    await setup();
+
+    // Then
+    expect(
+      screen.queryByRole("button", {
+        name: translatorFor("navigation")("leftPanelOpenMenu"),
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("ScorecardClient プリセット保存", () => {
   it("プリセット保存ダイアログから保存すると、ラウンド名とスコアカードの現在の構成がSDKへ届く", async () => {
     // Given

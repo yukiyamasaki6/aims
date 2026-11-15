@@ -233,6 +233,41 @@ test("横向きでテンキーの側パネルを閉じると、点数のキー�
   await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
 });
 
+for (const viewport of [
+  { width: 667, height: 375 },
+  { width: 740, height: 360 },
+]) {
+  test(`横向き(${viewport.width}×${viewport.height})でテンキーを開くと、点数のキーが最前面にあり、押すと点数が入る`, async ({
+    page,
+  }) => {
+    // 横向きで開き、全ての点数のキーが他の要素に覆われずに最前面にあることを確かめる。
+    await openRound(page, {}, viewport);
+    const scoreKeys = [
+      "X",
+      "10",
+      "9",
+      "8",
+      "7",
+      "6",
+      "5",
+      "4",
+      "3",
+      "2",
+      "1",
+      "M",
+    ];
+    await expect(page.getByTestId("score-button-X")).toBeVisible();
+    for (const key of scoreKeys) {
+      // 角が丸いため、内側の点で確かめる。
+      await expectUncovered(page.getByTestId(`score-button-${key}`), 8);
+    }
+
+    // 点数のキーを押し、点数が入ることを確かめる。
+    await page.getByTestId("score-button-X").click();
+    await expect(ball(page, 1, 1, 1)).toHaveText("X");
+  });
+}
+
 test("点数を入力した後、次に指す行が固定表示とテンキーに隠れずに見える", async ({
   page,
 }) => {

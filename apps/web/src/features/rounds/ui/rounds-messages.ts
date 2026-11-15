@@ -34,6 +34,9 @@ export const roundsMessages = {
       failed: "読み込めませんでした。",
     } satisfies Record<FetchFailure, string>,
     // ホームと履歴
+    homeTitle: "ホーム",
+    historyTitle: "履歴",
+    newRoundTitle: "作成",
     homeEmpty: "入力中のラウンドはありません",
     historyEmpty: "該当するラウンドがありません",
     historyEnd: "該当するラウンドは以上です",

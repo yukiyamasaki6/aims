@@ -1,7 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { ScreenFrame } from "@/components/screen-frame";
 import { BusyButton } from "@/components/ui/busy-button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -48,39 +49,51 @@ export function RoundPresetSelect() {
   }
 
   return (
-    <main
-      data-hydrated={hydrated}
-      className="flex h-full flex-col overflow-hidden"
+    <NewRoundFrame>
+      <main
+        data-hydrated={hydrated}
+        className="flex h-full flex-col overflow-hidden"
+      >
+        <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 overflow-y-auto px-8 py-4">
+          {view.status === "ok" ? (
+            <PresetSections
+              personalPresets={personalPresets}
+              globalPresets={globalPresets}
+              selectedId={selectedId}
+              onToggle={toggleSelect}
+              onDelete={setPresetToDelete}
+            />
+          ) : (
+            <FetchState
+              view={view}
+              onRetry={retry}
+              loading={<PresetListSkeleton />}
+            />
+          )}
+        </div>
+
+        <StartBar
+          unauthenticated={unauthenticated}
+          submitting={submitting}
+          selectedPreset={selectedPreset}
+          onStart={handleStart}
+        />
+
+        <DeletePresetDialog {...dialog} />
+      </main>
+    </NewRoundFrame>
+  );
+}
+
+function NewRoundFrame({ children }: { children: ReactNode }) {
+  const t = useTranslations("rounds");
+  return (
+    <ScreenFrame
+      title={t("newRoundTitle")}
+      leading={<BackLink origin="home" />}
     >
-      <PageHeader />
-
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 overflow-y-auto px-8 py-4">
-        {view.status === "ok" ? (
-          <PresetSections
-            personalPresets={personalPresets}
-            globalPresets={globalPresets}
-            selectedId={selectedId}
-            onToggle={toggleSelect}
-            onDelete={setPresetToDelete}
-          />
-        ) : (
-          <FetchState
-            view={view}
-            onRetry={retry}
-            loading={<PresetListSkeleton />}
-          />
-        )}
-      </div>
-
-      <StartBar
-        unauthenticated={unauthenticated}
-        submitting={submitting}
-        selectedPreset={selectedPreset}
-        onStart={handleStart}
-      />
-
-      <DeletePresetDialog {...dialog} />
-    </main>
+      {children}
+    </ScreenFrame>
   );
 }
 
@@ -116,14 +129,6 @@ function StartBar({
             : t("startWithoutPreset")}
         </BusyButton>
       </div>
-    </div>
-  );
-}
-
-function PageHeader() {
-  return (
-    <div className="mx-auto w-full max-w-xl px-8 pt-8">
-      <BackLink origin="home" />
     </div>
   );
 }

@@ -1,14 +1,22 @@
 import { randomUUID } from "node:crypto";
 import type { Locator, Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import { ROUNDS_PATH } from "@/routes";
+import {
+  NEW_ROUND_PATH,
+  ROUNDS_HISTORY_PATH,
+  ROUNDS_PATH,
+  SETTINGS_PATH,
+} from "@/routes";
 import { expect, test } from "../fixtures";
 import {
+  getSharedEmail,
   SHARED_AUTH_STATE_PATH,
+  SHARED_PASSWORD,
   signOutFromSettings,
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
+import { createRound } from "../helpers/rounds";
 import { comeBackOnline, goOffline } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
 import { revokeAllSessions } from "../helpers/session-revoke";
@@ -16,6 +24,7 @@ import { expectUncovered } from "../helpers/visibility";
 
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
+const roundsText = translatorFor("rounds");
 const settingsText = translatorFor("settings");
 
 const MOBILE_VIEWPORT = { width: 375, height: 667 };
@@ -211,7 +220,7 @@ test.describe("認証済み", () => {
   test("縦向きで狭い画面でレフトパネルを展開してホームの項目を押すと、ホームへ移動し、レフトパネルが格納される", async ({
     page,
   }) => {
-    // 縦向きで狭い画面でラウンド作成画面を開き、ハンバーガーボタンでレフトパネルを展開する。
+    // 縦向きで狭い画面でラウンド作成画面を開き、ヘッダーのメニューボタンでレフトパネルを展開する。
     await page.setViewportSize(MOBILE_VIEWPORT);
     await page.goto("/rounds/new");
     await waitForHydration(page);
@@ -280,7 +289,7 @@ test.describe("認証済み", () => {
   test("縦向きで狭い画面でレフトパネルを展開して設定の項目を押すと、設定画面へ移動し、レフトパネルが格納される", async ({
     page,
   }) => {
-    // 縦向きで狭い画面でラウンド作成画面を開き、ハンバーガーボタンでレフトパネルを展開する。
+    // 縦向きで狭い画面でラウンド作成画面を開き、ヘッダーのメニューボタンでレフトパネルを展開する。
     await page.setViewportSize(MOBILE_VIEWPORT);
     await page.goto("/rounds/new");
     await waitForHydration(page);
@@ -321,7 +330,7 @@ test.describe("認証済み", () => {
   });
 
   test.describe("レフトパネルの開閉", () => {
-    test("縦向きで狭い画面では、レフトパネルが格納された状態で始まり、ハンバーガーボタンで展開し、閉じるボタンで格納する", async ({
+    test("縦向きで狭い画面では、レフトパネルが格納された状態で始まり、ヘッダーのメニューボタンで展開し、閉じるボタンで格納する", async ({
       page,
     }) => {
       // 縦向きで狭い画面でラウンド一覧を開き、レフトパネルが格納されていることを確かめる。
@@ -329,7 +338,7 @@ test.describe("認証済み", () => {
       await openRounds(page);
       await expectPanelCollapsed(page);
 
-      // ハンバーガーボタンを押して、レフトパネルを展開する。
+      // ヘッダーのメニューボタンを押して、レフトパネルを展開する。
       await page
         .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
         .click();
@@ -364,7 +373,7 @@ test.describe("認証済み", () => {
       await expectPanelExpanded(page);
     });
 
-    test("横向きで狭い画面では、レフトパネルが格納された状態で始まり、ハンバーガーボタンで展開し、閉じるボタンで格納する", async ({
+    test("横向きで狭い画面では、レフトパネルが格納された状態で始まり、ヘッダーのメニューボタンで展開し、閉じるボタンで格納する", async ({
       page,
     }) => {
       // 横向きで狭い画面でラウンド一覧を開き、レフトパネルが格納されていることを確かめる。
@@ -372,7 +381,7 @@ test.describe("認証済み", () => {
       await openRounds(page);
       await expectPanelCollapsed(page);
 
-      // 左端の縦の帯のハンバーガーボタンを押して、レフトパネルを展開する。
+      // ヘッダーのメニューボタンを押して、レフトパネルを展開する。
       await page
         .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
         .click();
@@ -411,7 +420,7 @@ test.describe("認証済み", () => {
     test("縦向きで狭い画面でレフトパネルを展開した後は、画面の向きや幅を変えても、展開されたまま表示される", async ({
       page,
     }) => {
-      // 縦向きで狭い画面でラウンド一覧を開き、ハンバーガーボタンでレフトパネルを展開する。
+      // 縦向きで狭い画面でラウンド一覧を開き、ヘッダーのメニューボタンでレフトパネルを展開する。
       await page.setViewportSize(MOBILE_VIEWPORT);
       await openRounds(page);
       await page
@@ -465,12 +474,12 @@ test.describe("認証済み", () => {
       await expectPanelContentsAbsent(page);
       await expectTabNeverEntersPanel(page);
 
-      // ハンバーガーボタンで展開し、Tabでホームの項目まで届く。
-      const hamburger = page.getByRole("button", {
+      // ヘッダーのメニューボタンで展開し、Tabでホームの項目まで届く。
+      const menuButton = page.getByRole("button", {
         name: navigationText("leftPanelOpenMenu"),
       });
-      await hamburger.focus();
-      await hamburger.click();
+      await menuButton.focus();
+      await menuButton.click();
       const homeLink = page.getByRole("link", {
         name: navigationText("leftPanelHome"),
       });
@@ -489,7 +498,7 @@ test.describe("認証済み", () => {
       await expectPanelContentsAbsent(page);
       await expectTabNeverEntersPanel(page);
 
-      // 横向きで狭い画面へ回しても、格納されたままパネルの中に届かず、縦の帯のハンバーガーボタンには届く。
+      // 横向きで狭い画面へ回しても、格納されたままパネルの中に届かず、ヘッダーのメニューボタンには届く。
       await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
       await expectPanelContentsAbsent(page);
       await expectTabNeverEntersPanel(page);
@@ -497,11 +506,11 @@ test.describe("認証済み", () => {
         (document.activeElement as HTMLElement)?.blur(),
       );
       for (let i = 0; i < 5; i++) {
-        if (await hamburger.evaluate((el) => el === document.activeElement))
+        if (await menuButton.evaluate((el) => el === document.activeElement))
           break;
         await page.keyboard.press("Tab");
       }
-      await expect(hamburger).toBeFocused();
+      await expect(menuButton).toBeFocused();
 
       // 広い画面へ変えると、ホームの項目に1回だけ届く。
       await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
@@ -522,7 +531,7 @@ test.describe("認証済み", () => {
         .click();
       await expectPanelCollapsed(page);
 
-      // 縦向きで狭い画面へ変えて、ハンバーガーボタンでドロワーを展開し、中身が見えることを確かめる。
+      // 縦向きで狭い画面へ変えて、ヘッダーのメニューボタンでドロワーを展開し、中身が見えることを確かめる。
       await page.setViewportSize(MOBILE_VIEWPORT);
       await page
         .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
@@ -532,6 +541,130 @@ test.describe("認証済み", () => {
       // 広い画面へ戻して、広い画面のレフトパネルが格納されたままであることを確かめる。
       await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
       await expectPanelCollapsed(page);
+    });
+  });
+
+  test.describe("ヘッダーのメニューボタン", () => {
+    test("縦向きで狭い画面でメニューボタンを押すと、フォーカスがレフトパネルの中へ移り、閉じるとメニューボタンへ戻る", async ({
+      page,
+    }) => {
+      // メニューボタンを押して展開し、フォーカスがレフトパネルの中にあることを確かめる。
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await openRounds(page);
+      const menuButton = page.getByRole("button", {
+        name: navigationText("leftPanelOpenMenu"),
+      });
+      await menuButton.click();
+      await expectPanelExpanded(page);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.activeElement?.closest("aside") !== null,
+          ),
+        )
+        .toBe(true);
+
+      // 閉じるボタンで格納し、フォーカスがメニューボタンへ戻ることを確かめる。
+      await page
+        .getByRole("button", { name: navigationText("leftPanelCloseMenu") })
+        .last()
+        .click();
+      await expectPanelCollapsed(page);
+      await expect(menuButton).toBeFocused();
+    });
+
+    const Screens = [
+      ROUNDS_PATH,
+      ROUNDS_HISTORY_PATH,
+      NEW_ROUND_PATH,
+      SETTINGS_PATH,
+    ];
+
+    for (const [name, viewport] of [
+      ["縦向き", MOBILE_VIEWPORT],
+      ["横向き", COMPACT_LANDSCAPE_VIEWPORT],
+    ] as const) {
+      test(`${name}で狭い画面では、ホーム・履歴・作成・設定のどの画面にも「メニューを開く」が表示され、押すとレフトパネルが展開される`, async ({
+        page,
+      }) => {
+        await page.setViewportSize(viewport);
+        for (const path of Screens) {
+          await page.goto(path);
+          const menuButton = page.getByRole("button", {
+            name: navigationText("leftPanelOpenMenu"),
+          });
+          await expect(menuButton).toBeVisible();
+          // 履歴・設定には水和の目印が無いため、押しても開かない間は押し直す。
+          await expect(async () => {
+            await menuButton.click();
+            await expectPanelExpanded(page);
+          }).toPass();
+        }
+      });
+    }
+
+    test("幅768px以上では、どの画面にも「メニューを開く」が表示されない", async ({
+      page,
+    }) => {
+      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
+      for (const path of Screens) {
+        await page.goto(path);
+        await expect(
+          page.getByRole("button", {
+            name: navigationText("leftPanelCollapse"),
+          }),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("button", {
+            name: navigationText("leftPanelOpenMenu"),
+          }),
+        ).toBeHidden();
+      }
+    });
+
+    test("横向きで狭い画面でスコア入力を開いてレフトパネルを展開すると、ヘッダーの戻るとテンキーのキーの位置の最前面は、レフトパネルか背景である", async ({
+      page,
+    }) => {
+      // 横向きで狭い画面でスコア入力を開き、ヘッダーとテンキーが見えることを確かめる。
+      const roundId = await createRound({
+        email: getSharedEmail(),
+        password: SHARED_PASSWORD,
+        name: "ドロワーの重なり",
+        roundDate: "2026-08-24",
+        distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+      });
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+      await page.goto(`/rounds/${roundId}`);
+      await waitForHydration(page);
+      const back = page.getByRole("link", { name: roundsText("back") });
+      const key = page.getByTestId("score-button-X");
+      await expect(back).toBeVisible();
+      await expect(key).toBeVisible();
+
+      // メニューボタンを押してレフトパネルを展開し、2つの位置の最前面がレフトパネルか背景であることを確かめる。
+      await page
+        .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
+        .click();
+      await expectPanelExpanded(page);
+      const closeLabel = navigationText("leftPanelCloseMenu");
+      for (const target of [back, key]) {
+        await expect
+          .poll(() =>
+            target.evaluate((el, label) => {
+              const r = el.getBoundingClientRect();
+              const hit = document.elementFromPoint(
+                r.left + r.width / 2,
+                r.top + r.height / 2,
+              );
+              return (
+                hit !== null &&
+                (hit.closest("aside") !== null ||
+                  hit.getAttribute("aria-label") === label)
+              );
+            }, closeLabel),
+          )
+          .toBe(true);
+      }
     });
   });
 });

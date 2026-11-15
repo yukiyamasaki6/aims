@@ -1,6 +1,7 @@
 "use client";
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
+import { ChevronLeft } from "lucide-react";
 import { useTranslations } from "next-intl";
 import {
   type FormEvent,
@@ -9,9 +10,11 @@ import {
   useId,
   useState,
 } from "react";
+import { ScreenFrame } from "@/components/screen-frame";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { cn } from "@/lib/utils";
 import type { ChangeEmail, ChangeEmailView } from "../application/change-email";
 import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 import {
@@ -21,8 +24,8 @@ import {
   initialChangeEmailFlow,
 } from "../domain/change-email-flow";
 import { AuthField } from "./auth-field";
-import { AuthHeader } from "./auth-header";
 import { ResendSection } from "./otp-code-step";
+import { SettingsBackLink } from "./settings-back-link";
 import { Turnstile } from "./turnstile";
 import { useAuthTexts } from "./use-auth-texts";
 import { useScreenView } from "./use-screen-view";
@@ -59,41 +62,43 @@ export function ChangeEmailForm({
     [flow.resendCooldown, changeEmail, dispatch],
   );
   const [email, setEmail] = useState("");
-  // 完了では、見出しと設定へ戻る操作と完了の文言だけを描く。
+  // 完了では、本文に完了の文言だけを描く。ヘッダーの戻るは処理中だけ押せない。
   return (
-    <main className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8">
-      {flow.completed ? (
-        <AuthHeader
-          title={t("changeEmailTitle")}
-          onBack={() => changeEmail.leave()}
-        />
-      ) : flow.step === "email" ? (
-        <EmailStep
-          changeEmail={changeEmail}
-          flow={flow}
-          view={view}
-          email={email}
-          onEmailChange={setEmail}
-        />
-      ) : (
-        <CodeStep
-          changeEmail={changeEmail}
-          flow={flow}
-          view={view}
-          siteKey={siteKey}
-          checkRef={checkRef}
-        />
-      )}
-      {flow.error && (
-        <p className="text-center text-destructive text-sm">
-          {texts.failure(flow.error)}
-        </p>
-      )}
-      {/* 領域は常に描画し、完了の文言だけを差し込む(後から挿入された領域は、読み上げられない場合があるため)。 */}
-      <p role="status" className="text-center text-sm">
-        {flow.completed ? t("changeEmailDone") : null}
-      </p>
-    </main>
+    <ScreenFrame
+      title={t("changeEmailTitle")}
+      leading={<SettingsBackLink disabled={flow.pending !== null} />}
+    >
+      <div className="h-full overflow-y-auto">
+        <main className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8">
+          {flow.completed ? null : flow.step === "email" ? (
+            <EmailStep
+              changeEmail={changeEmail}
+              flow={flow}
+              view={view}
+              email={email}
+              onEmailChange={setEmail}
+            />
+          ) : (
+            <CodeStep
+              changeEmail={changeEmail}
+              flow={flow}
+              view={view}
+              siteKey={siteKey}
+              checkRef={checkRef}
+            />
+          )}
+          {flow.error && (
+            <p className="text-center text-destructive text-sm">
+              {texts.failure(flow.error)}
+            </p>
+          )}
+          {/* 領域は常に描画し、完了の文言だけを差し込む(後から挿入された領域は、読み上げられない場合があるため)。 */}
+          <p role="status" className="text-center text-sm">
+            {flow.completed ? t("changeEmailDone") : null}
+          </p>
+        </main>
+      </div>
+    </ScreenFrame>
   );
 }
 
@@ -116,12 +121,21 @@ function CodeStep({
   const busy = flow.pending !== null;
   return (
     <>
-      <AuthHeader
-        title={t("changeEmailTitle")}
-        description={t("changeEmailCodeDescription")}
-        onBack={() => view.dispatch({ type: "backed" })}
-        backDisabled={busy}
-      />
+      <button
+        type="button"
+        onClick={() => view.dispatch({ type: "backed" })}
+        aria-disabled={busy}
+        className={cn(
+          "inline-flex w-fit items-center gap-1 self-start text-muted-foreground text-sm hover:text-foreground",
+          busy && "pointer-events-none opacity-50",
+        )}
+      >
+        <ChevronLeft className="size-4" />
+        {t("back")}
+      </button>
+      <p className="text-center text-muted-foreground text-sm">
+        {t("changeEmailCodeDescription")}
+      </p>
       <CodeForm changeEmail={changeEmail} flow={flow} view={view} />
       <p className="text-center text-muted-foreground text-sm">
         {t("otpSpamNote")}
@@ -267,14 +281,11 @@ function EmailStep({
 
   return (
     <>
-      <AuthHeader
-        title={t("changeEmailTitle")}
-        description={
-          flow.currentEmail === null
-            ? undefined
-            : t("changeEmailCurrent", { email: flow.currentEmail })
-        }
-      />
+      {flow.currentEmail !== null && (
+        <p className="text-center text-muted-foreground text-sm">
+          {t("changeEmailCurrent", { email: flow.currentEmail })}
+        </p>
+      )}
       <form
         onSubmit={submit}
         noValidate

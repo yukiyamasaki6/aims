@@ -121,7 +121,7 @@ test("新しいメールアドレスを送り、現在と新しいアドレス�
   await expect(page).toHaveURL(/\/settings\/email$/);
 
   // 戻るを押して、設定画面へ進む。
-  await page.getByRole("button", { name: authText("back") }).click();
+  await page.getByRole("link", { name: authText("back") }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(
     page.getByRole("heading", { name: settingsText("title") }),
@@ -263,6 +263,29 @@ test("現在と同じアドレスを入力すると、同じアドレスには�
   await sendNewEmail(page, email);
   await expect(page.getByText(authText("failure.same_email"))).toBeVisible();
   await expect(verifyButton(page)).not.toBeVisible();
+});
+
+test("コード確認の画面でヘッダーの戻るのリンクを押すと、設定画面へ移動する", async ({
+  page,
+}) => {
+  // 新しいメールアドレスを送って、コード確認の画面へ進む。
+  const addresses = {
+    current: uniqueEmail("change-email-leave"),
+    next: uniqueEmail("change-email-leave-next"),
+  };
+  await signUpAndSignIn(page, { email: addresses.current, password: PASSWORD });
+  await openChangeEmail(page);
+  await requestChange(page, addresses);
+
+  // ヘッダーの戻るのリンクを押して、設定画面へ進む。
+  await page
+    .locator("header")
+    .getByRole("link", { name: authText("back") })
+    .click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(
+    page.getByRole("heading", { name: settingsText("title") }),
+  ).toBeVisible();
 });
 
 test("別の端末でサインインしているとき、この端末が変更を完了しても、この端末と別の端末はサインインしたままである", async ({

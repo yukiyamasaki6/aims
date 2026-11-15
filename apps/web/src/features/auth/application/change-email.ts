@@ -1,7 +1,5 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
-import { SETTINGS_PATH } from "@/routes";
 import type { AuthFailure } from "../domain/auth-failure";
 import {
   beginConfirmEmailChange,
@@ -60,8 +58,6 @@ export type ChangeEmail = {
   resend(view: ChangeEmailView): Promise<void>;
   // 再送の待ちを1秒進める出来事を、1秒後に1回送る予約。返す関数で取り消す。
   tickCooldown(dispatch: ChangeEmailView["dispatch"]): () => void;
-  // 完了の後の戻る。設定の画面へ移る。集約の状態は変えない(コード確認から入力へ戻る操作とは別)。
-  leave(): void;
 };
 
 // 再送の待ちの1秒の予約(業務の時間)。
@@ -76,10 +72,8 @@ export function createChangeEmail({
   authenticator,
   connectivity,
   clock,
-  pageNavigation,
 }: Dependencies & {
   clock: Clock;
-  pageNavigation: Pick<PageNavigation, "go">;
 }): ChangeEmail {
   const dependencies = { authenticator, connectivity };
   return {
@@ -87,7 +81,6 @@ export function createChangeEmail({
     request: (input, view) => request(dependencies, input, view),
     confirm: (input, view) => confirm(dependencies, input, view),
     resend: (view) => resend(dependencies, view),
-    leave: () => pageNavigation.go(SETTINGS_PATH),
     tickCooldown: (dispatch) =>
       clock.after(COOLDOWN_TICK_MS, () => dispatch({ type: "cooldownTicked" })),
   };

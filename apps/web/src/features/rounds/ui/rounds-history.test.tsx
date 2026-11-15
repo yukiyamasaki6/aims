@@ -380,7 +380,7 @@ describe("RoundsHistory", () => {
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
 
-    it("新規作成ボタンと見出しを持たない", async () => {
+    it("見出し「履歴」のレベル1がヘッダーにあり、新規作成ボタンは持たない", async () => {
       // Given
       fetchResolves(completed);
 
@@ -389,8 +389,13 @@ describe("RoundsHistory", () => {
       await screen.findByText("午前練習");
 
       // Then
+      const heading = screen.getByRole("heading", {
+        level: 1,
+        name: roundsText("historyTitle"),
+      });
+      expect(heading.closest("header")).not.toBeNull();
+      expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
       expect(screen.queryByTestId("new-round-fab")).toBeNull();
-      expect(screen.queryByRole("heading")).toBeNull();
     });
 
     it("サーバーが返した並びのまま表示し、端末で並べ直さない", async () => {
@@ -3099,11 +3104,12 @@ describe("RoundsHistory", () => {
         renderHistory();
 
         // Then
-        expect(
-          await screen.findByRole("button", {
-            name: roundsText("historyFilterTitle"),
-          }),
-        ).toBeVisible();
+        const filter = await screen.findByRole("button", {
+          name: roundsText("historyFilterTitle"),
+        });
+        expect(filter).toBeVisible();
+        expect(filter.closest("header")).not.toBeNull();
+        expect(filter.closest("main")).toBeNull();
       },
     );
 
