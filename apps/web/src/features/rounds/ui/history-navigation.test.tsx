@@ -117,7 +117,11 @@ async function prepare(state = "成功", home = false) {
       <RoundWindowProvider roundWindow={tab.roundWindow}>
         <RoundsListStoreProvider store={store}>
           <RoundProceduresProvider procedures={procedures}>
-            <LeftPanel>{home ? <RoundsHome /> : <RoundsHistory />}</LeftPanel>
+            <LeftPanel
+              settings={{ open: false, onOpen: () => {}, closeFocus: "opener" }}
+            >
+              {home ? <RoundsHome /> : <RoundsHistory />}
+            </LeftPanel>
           </RoundProceduresProvider>
         </RoundsListStoreProvider>
       </RoundWindowProvider>,

@@ -6,7 +6,8 @@
 Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えてブラウザから直接呼ぶ。
 認証済みの`/signin`のリダイレクトは`proxy.ts`が担う。
 成功時は送信中のまま、遷移元があればそこへ、無ければ`/rounds`へ、ページ全体を読み込んで置き換え(`window.location.replace`)、送信中を解除しない。読み込みは1回で、一覧が開いた後の読み込み直しは起きない。
-遷移元は、クエリ`returnTo`で渡された`/rounds`配下のパスに限る。送信時に、入口が渡す1行の読み出し(`window.location.search`の`returnTo`)を画面が呼び、その結果を`from`として手続きへ渡す。描画時には読まないので、`/signin`は静的に事前描画される。
+遷移元は、クエリ`returnTo`で渡された`/rounds`配下のパス(クエリとハッシュを含む)に限る。送信時に、入口が渡す読み出し(クエリの`returnTo`に、それがハッシュを持たないときだけ今のURLのハッシュを足す)を画面が呼び、その結果を`from`として手続きへ渡す。描画時には読まないので、`/signin`は静的に事前描画される。
+`proxy.ts`はハッシュを見られないため、未認証でハッシュ付きの画面を開くと、`/signin?returnTo=<パスとクエリ>#<ハッシュ>`の形で届く(リダイレクト先にハッシュが無いと、ブラウザは元のハッシュを引き継ぐ)。見張りが移すときは、ハッシュを`returnTo`の中に含めて届く。
 
 ## 画面と状態
 
@@ -20,7 +21,8 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 | オフライン | 送信の直前にオフラインと判定した。入力に不備が無いとき、「ネットワークに接続されていません。…」を全体のエラーに表示する。トークンは消費せず送らない | 再送信 |
 | 認証失敗(通信の断を含む) | エラーを表示し、ボタンを再度有効にし、captchaを未完了に戻す | 再送信 |
 
-- 認証済みで`/signin`を開くと、有効な遷移元があればそこへ、無ければ`/rounds`へ送る。
+- 認証済みで`/signin`を開くと、有効な遷移元があればそこへ、無ければ`/rounds`へ送る。遷移元のハッシュはリダイレクト先に含める。URLのハッシュだけで届いたときは、ブラウザがリダイレクト先へ引き継ぐ。
+- サインイン画面は設定パネルを描かないため、ハッシュ`#settings…`が付いていても設定パネルは開かない(`app/settings`)。
 - パスワードの入力欄は`PasswordInput`で、表示・非表示を切り替えても入力値を保つ。
 - メールアドレス欄で変換中でないEnterを押すと、送信せずにパスワード欄へ移る(画面キーボードの確定キーは「次へ」)。送信はパスワード欄のEnterとボタンで行う。
 
@@ -28,19 +30,19 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 
 構造の方針は`docs/architecture.md`に従う。
 
-- `src/app/(auth)/signin/page.tsx`: 入口。認証の実装(接続を作る関数`createClient`を渡す)、ページ全体の置き換えの実装(`createBrowserPageLoad`)、送信時のURLのクエリの遷移元の読み出しを持ち、手続きを生成し、手続きと読み出しを画面へ渡す。
+- `src/app/(auth)/signin/page.tsx`: 入口。認証の実装(接続を作る関数`createClient`を渡す)、ページ全体の置き換えの実装(`createBrowserPageLoad`)、送信時の遷移元の読み出し(`window.location.search`の`returnTo`と`window.location.hash`を、`auth-routes.ts`のハッシュを足す規則に渡す)を持ち、手続きを生成し、手続きと読み出しを画面へ渡す。
 - `src/features/auth/ui/signin-form.tsx`: フォームの描画。状態を`useScreenView`で持ち、入力欄は`value`と`onChange`で制御する。送信時に、遷移元の読み出しを呼び、手続きへ入力(その結果の遷移元`from`を含む)と画面の約束(`ScreenView`。`begin`、`dispatch`、`resetCheck`、`isMounted`)を渡す。失敗の後に、手続きの頼み(`resetCheck`)でウィジェットをやり直す。
 - `src/features/auth/application/sign-in.ts`: 手続き。状態を持たず、送信の直前に通信の可否の約束(`Connectivity`。入口で組み立てる)でオフラインを1回読み(購読しない)、画面の約束の`begin`で開始し(実行中と入力の不備とオフラインは集約が拒否する)、照合、離脱の判定、失敗とチェックのやり直し、または置き換えの順序と、サインインの照合の約束(`SignInAuthenticator`)を持つ。失敗は全て、トークンを消費してチェックのやり直しを頼む。
 - `src/features/auth/domain/sign-in-flow.ts`: 集約。開始の命令`beginSignIn`が、送信の可否と判定の順序(入力判定 → オフライン判定 → チェック判定)を守り、`Start`(新しい状態と、開始するときだけ依頼。開始しないときの依頼は`null`で、実行中か入力の不備かは状態が示す)を返す。事実(`captchaChecked`、`failed`)は`reducer`で反映し、失敗の後の状態とcaptchaトークンの消費を守る。`failed`は全ての失敗でトークンを消費する。
 - `src/features/auth/domain/email-address.ts`: メールアドレスの規則(domain)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(domain)。利用者向けの文言は持たない。認証サービスの語彙も持たない。
 - `src/features/auth/domain/captcha-token.ts`、`password.ts`: セキュリティチェックのトークンと、パスワードの入力と文字種の規則(domain。誤りの種類を返す)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
-- `src/features/auth/domain/auth-routes.ts`: 経路の規則(domain。`SIGN_IN_PATH`などの経路の文字列は経路表(`src/routes.ts`)が持つ)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(ラウンドの画面の根の経路`ROUNDS_PATH`と設定画面の経路`SETTINGS_PATH`)の配下の同一オリジンのパスだけ。根は経路表の`ROUNDS_PATH`と`SETTINGS_PATH`を読む)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`。書く側は検証せず符号化して付ける。検証は読む側の`destinationOf`だけが行う)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
+- `src/features/auth/domain/auth-routes.ts`: 経路の規則(domain。`SIGN_IN_PATH`などの経路の文字列は経路表(`src/routes.ts`)が持つ)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(経路表の`ROUNDS_PATH`)の配下の同一オリジンのパスだけで、検証して正規化したパス、クエリ、ハッシュを返す)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`。書く側は検証せず符号化して付ける。検証は読む側の`destinationOf`だけが行う)、要求のリダイレクト先(`redirectFor`)、クエリの遷移元に今のURLのハッシュを足す規則(遷移元がハッシュを持たず、今のURLがハッシュを持つときだけ足す)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
 - `src/features/auth/index.ts`: 認証の機能の入口。他の機能が使う型を、別名なしで再公開する。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の7機能で共通。`docs/features/auth/design.md`)。`signInWithPassword`の呼び出しと、エラーを失敗の種類に写す変換(通信の断は名前で先に判定する)、例外(接続を作れない場合を含む)を通信エラーの失敗に変える変換を含む。接続は、渡された関数で照合のたびに取得する。
 - ページ全体の置き換えは `src/features/auth/infrastructure/browser-page-load.ts` が持つ(`window.location.replace`。履歴からサインイン画面を外し、新しい文書が、サインインした利用者の端末の識別情報で起動するので、一覧の見張りは読み込み直さない)。遷移元(`from`)は検証せずに入口から手続きへ渡り、検証は読む側の`destinationOf`が行う。
 - `src/features/auth/ui/use-screen-view.ts`: 画面の状態を持つ汎用のフック。`reducer`で遷移させる状態を`useState`で持ち、画面の約束`ScreenView`を作る。約束は描画ごとに作り、`dispatch`、`resetCheck`、`isMounted`は同じ参照にする。
-- `src/features/auth/application/page-replace.ts`: ページ全体を読み込んで今の場所を置き換える約束(`PageReplace`)。サインイン、サインアップ、セッション(サインアウト、喪失、利用者の不一致)の3つの手続きが使う。
+- `src/features/auth/application/page-replace.ts`: ページ全体を読み込む約束(`PageReplace`)。行き先への置き換え(`replace`)、今の文書の読み込み直し(`reload`)、今の場所(パス、クエリ、ハッシュ)の読み出し(`here`)を持つ。サインイン、サインアップ、セッション(サインアウト、喪失、利用者の不一致)の3つの手続きが使う。
 - `src/features/auth/application/screen-view.ts`: 手続きが画面に頼む約束。開始の命令の適用(`begin`)、事実の送信、チェックのやり直しの依頼、表示中かの確認。`begin`は描画済みの状態に、`dispatch`は直前の状態に適用する契約をここに書く。
 - `src/features/auth/ui/turnstile.tsx`: Turnstileの部品。`interaction-only`で描画し、操作が必要な間だけ領域を出し、それ以外は畳む。未完了のエラーの文言も、呼び出し側が渡して表示する。サイトキーは引数で受ける(環境変数`NEXT_PUBLIC_TURNSTILE_SITE_KEY`の読み出しは各入口が行い、画面の部品を通して渡す)。
 - `src/features/auth/ui/auth-header.tsx`: 認証画面の見出し。
@@ -67,7 +69,8 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 | サインインのパスワードに、サインアップのパスワード規則を適用しない | 規則の変更前に作った既存アカウントでも、サインインできるようにするため | 既存アカウントが規則を満たすことを確認できたとき |
 | Turnstileを使い、ローカル、CI、previewでは常に成功するテスト用キーを使う | ブルートフォースを抑えつつ、E2Eを外部に依存させないため | captchaの方式を変えるとき |
 | Turnstileはinteraction-onlyで描画し、操作が必要なときだけ領域を出す | 通常の利用者にチェックの枠を見せないため。Invisibleは操作が必要な利用者を救えないため採らない。 | Cloudflareが表示方式を変えたとき |
-| 遷移元を保護の範囲(`/rounds`と`/settings`の配下)の許可リストで検証し、クエリ`returnTo`で渡す | 保護対象外の`/signin`へのループとオープンリダイレクトを同時に避け、保存を持たずURLだけで完結させるため | 保護対象の画面が`/rounds`と`/settings`の外にできたとき |
+| 遷移元を保護の範囲(`/rounds`の配下)の許可リストで検証し、クエリ`returnTo`で渡す。ハッシュは検証の対象外で、そのまま含める | 保護対象外の`/signin`へのループとオープンリダイレクトを同時に避け、保存を持たずURLだけで完結させるため。ハッシュは同じ文書の中の表示(設定パネル)だけを決め、行き先のオリジンとパスを変えない | 保護対象の画面が`/rounds`の外にできたとき |
+| `proxy.ts`の遷移元に付かないハッシュを、サインインの送信時に今のURLから足す | `proxy.ts`はハッシュを受け取れず、リダイレクトでブラウザが引き継いだハッシュは`/signin`のURLにしか残らないため。読み込み時に`returnTo`へ書き換える案は、送信時の読み出しだけで足り、事前描画と別の書き換えが増えるため採らない | `proxy.ts`の外でリダイレクトするようになったとき |
 | 送信の直前にオフライン状態を1回読み、購読しない。オフライン専用の失敗の種類を持つ | 全失敗でトークンを消費するため、オフラインの再送信がチェック未完了の表示になり原因が分からなくなるのを防ぐ。通信断でトークンを保持する分岐を持たず、判断を1か所にする。「通信エラー」では端末の回線が切れていることが分からない | `navigator.onLine`がtrueのまま通信できない場合も扱いたいとき |
 | 認証済みのリダイレクトを`proxy.ts`へ集約し、画面ごとのE2Eは残す | 実装を一箇所にまとめつつ、各画面の挙動を保証するため | ガードの実装を変えるとき |
 | 規則を集約に、順序を手続きに分け、手続きを入口で生成して画面へ渡す。メールアドレスの規則と認証の失敗の種類と遷移元の規則は、認証の機能が1か所で持ち、サインアップとパスワード再設定が同じ機能の中から相対パスで使う。水和の完了を`data-hydrated`で示す | 規則と順序を画面から切り離し、規則の持ち主を1つにし、水和前の操作によるE2Eの不安定さを避けるため | E2Eが水和を別の方法で待てるとき |

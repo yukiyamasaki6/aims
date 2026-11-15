@@ -1,32 +1,41 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import { SETTINGS_PATH } from "@/routes";
 import { SettingsBackLink } from "./settings-back-link";
 
 const authText = translatorFor("auth");
 
 describe("SettingsBackLink", () => {
-  it("通常は、名前「戻る」のリンクで、設定画面へ向かう", () => {
+  it("通常は、名前「戻る」のリンクで、押すと既定の動作を止めてonBackを呼ぶ", async () => {
     // Given
-    // When
-    render(<SettingsBackLink disabled={false} />, {
+    const user = userEvent.setup();
+    const onBack = vi.fn();
+    const onNavigate = vi.fn((event: Event) => event.defaultPrevented);
+    render(<SettingsBackLink disabled={false} onBack={onBack} />, {
       wrapper: IntlTestProvider,
     });
+    const link = screen.getByRole("link", { name: authText("back") });
+    // イベントが伝わりきった後の既定の動作の停止を、ドキュメントで受けて確かめる。
+    document.addEventListener("click", onNavigate);
+
+    // When
+    await user.click(link);
 
     // Then
-    expect(
-      screen.getByRole("link", { name: authText("back") }),
-    ).toHaveAttribute("href", SETTINGS_PATH);
+    document.removeEventListener("click", onNavigate);
+    expect(onBack).toHaveBeenCalledOnce();
+    expect(onNavigate).toHaveReturnedWith(true);
   });
 
   describe("disabled", () => {
     it("リンクではなく、aria-disabledの表示になる", () => {
       // Given
       // When
-      render(<SettingsBackLink disabled />, { wrapper: IntlTestProvider });
+      render(<SettingsBackLink disabled onBack={vi.fn()} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
       expect(screen.queryByRole("link")).toBeNull();
@@ -36,17 +45,33 @@ describe("SettingsBackLink", () => {
       );
     });
 
-    it("押しても遷移先を持たず、Tabでフォーカスが入らない", async () => {
+    it("押しても、onBackを呼ばない", async () => {
       // Given
       const user = userEvent.setup();
-      render(<SettingsBackLink disabled />, { wrapper: IntlTestProvider });
+      const onBack = vi.fn();
+      render(<SettingsBackLink disabled onBack={onBack} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
       await user.click(screen.getByText(authText("back")));
+
+      // Then
+      expect(onBack).not.toHaveBeenCalled();
+      expect(screen.getByText(authText("back")).closest("a")).toBeNull();
+    });
+
+    it("Tabでフォーカスが入らない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SettingsBackLink disabled onBack={vi.fn()} />, {
+        wrapper: IntlTestProvider,
+      });
+
+      // When
       await user.tab();
 
       // Then
-      expect(screen.getByText(authText("back")).closest("a")).toBeNull();
       expect(screen.getByText(authText("back"))).not.toHaveFocus();
       expect(document.body).toHaveFocus();
     });

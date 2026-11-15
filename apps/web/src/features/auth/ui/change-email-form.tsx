@@ -33,13 +33,18 @@ import { useScreenView } from "./use-screen-view";
 // エラー文の要素のidの接頭辞(`${ID_PREFIX}-email-error`)。
 const ID_PREFIX = "change-email";
 
-// メールアドレス変更の画面。入力とコード確認の2段階で、完了では見出しと設定へ戻る操作と完了の文言だけを描き、画面に留まる。
+// メールアドレス変更の画面。入力とコード確認の2段階で、完了では見出しと分類「アカウント」へ戻る操作と完了の文言だけを描き、画面に留まる。
+// onBack: 設定パネルの分類「アカウント」へ戻る。onBusyChange: 実行中の操作があるかを設定パネルへ知らせる。
 export function ChangeEmailForm({
   changeEmail,
   siteKey,
+  onBack,
+  onBusyChange,
 }: {
   changeEmail: ChangeEmail;
   siteKey: string;
+  onBack: () => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const {
     state: flow,
@@ -61,12 +66,14 @@ export function ChangeEmailForm({
         : changeEmail.tickCooldown(dispatch),
     [flow.resendCooldown, changeEmail, dispatch],
   );
+  const busy = flow.pending !== null;
+  useEffect(() => onBusyChange(busy), [busy, onBusyChange]);
   const [email, setEmail] = useState("");
   // 完了では、本文に完了の文言だけを描く。ヘッダーの戻るは処理中だけ押せない。
   return (
     <ScreenFrame
       title={t("changeEmailTitle")}
-      leading={<SettingsBackLink disabled={flow.pending !== null} />}
+      leading={<SettingsBackLink disabled={busy} onBack={onBack} />}
     >
       <div className="h-full overflow-y-auto">
         <main className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8">

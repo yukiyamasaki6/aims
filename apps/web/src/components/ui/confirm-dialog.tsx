@@ -78,6 +78,7 @@ export function BlockingConfirmDialog({
   onConfirm,
   busy,
   error,
+  nested = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -87,6 +88,9 @@ export function BlockingConfirmDialog({
   // 実行中は、背景クリック・Escとキャンセルでは閉じさせず、ボタンを無効の表示にする。
   busy: boolean;
   error: string | null;
+  // 他のDialogの中から開かれる場合はtrueにする（設定パネルの中のサインアウト等）。
+  // 詳細はDialogContentのnestedの説明を参照。
+  nested?: boolean;
 }) {
   const t = useTranslations("shared");
   return (
@@ -97,7 +101,7 @@ export function BlockingConfirmDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent>
+      <DialogContent nested={nested}>
         <div className="flex flex-col gap-4">
           <p className="text-sm">{description}</p>
           {error && <p className="text-destructive text-sm">{error}</p>}

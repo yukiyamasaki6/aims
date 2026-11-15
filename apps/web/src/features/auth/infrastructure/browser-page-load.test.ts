@@ -29,17 +29,41 @@ describe("ブラウザのページ全体の読み込み(置き換え)の実装",
     expect(assign).not.toHaveBeenCalled();
   });
 
-  it("今の場所は、パスとクエリをつなげて返す", () => {
+  it("今の場所は、パス、クエリ、ハッシュをつなげて返す", () => {
     // Given
     Object.defineProperty(window, "location", {
       configurable: true,
-      value: { ...originalLocation, pathname: "/rounds/new", search: "?a=1" },
+      value: {
+        ...originalLocation,
+        pathname: "/rounds/new",
+        search: "?a=1",
+        hash: "#settings/account",
+      },
     });
 
     // When
     const here = createBrowserPageLoad().here();
 
     // Then
-    expect(here).toBe("/rounds/new?a=1");
+    expect(here).toBe("/rounds/new?a=1#settings/account");
+  });
+
+  it("読み込み直しは、location.reloadを呼び、assignとreplaceは呼ばない", () => {
+    // Given
+    const assign = vi.fn();
+    const replace = vi.fn();
+    const reload = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...originalLocation, assign, replace, reload },
+    });
+
+    // When
+    createBrowserPageLoad().reload();
+
+    // Then
+    expect(reload).toHaveBeenCalledOnce();
+    expect(assign).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 });

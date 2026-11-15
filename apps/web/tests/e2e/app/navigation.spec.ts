@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { Locator, Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import {
+  CHANGE_PASSWORD_HASH,
   NEW_ROUND_PATH,
   ROUNDS_HISTORY_PATH,
   ROUNDS_PATH,
-  SETTINGS_PATH,
 } from "@/routes";
 import { expect, test } from "../fixtures";
 import {
@@ -20,12 +20,18 @@ import { createRound } from "../helpers/rounds";
 import { comeBackOnline, goOffline } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
 import { revokeAllSessions } from "../helpers/session-revoke";
+import {
+  openSettingsByItem,
+  pressAtCenter,
+  railItem,
+  settingsPanel,
+} from "../helpers/settings";
+import { waitForTurnstileToken } from "../helpers/turnstile";
 import { expectUncovered } from "../helpers/visibility";
 
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
 const roundsText = translatorFor("rounds");
-const settingsText = translatorFor("settings");
 
 const MOBILE_VIEWPORT = { width: 375, height: 667 };
 const COMPACT_LANDSCAPE_VIEWPORT = { width: 667, height: 375 };
@@ -56,7 +62,10 @@ function panelContents(page: Page) {
     page.getByRole("link", { name: "AIMS" }),
     page.getByRole("link", { name: navigationText("leftPanelHome") }),
     page.getByRole("link", { name: navigationText("leftPanelHistory") }),
-    page.getByRole("link", { name: navigationText("leftPanelSettings") }),
+    page.getByRole("link", {
+      name: navigationText("leftPanelSettings"),
+      exact: true,
+    }),
   ];
 }
 
@@ -262,53 +271,60 @@ test.describe("認証済み", () => {
     await expectPanelClosed(page);
   });
 
-  test("ホームでレフトパネルの設定の項目を押すと、設定画面へ移動し、設定の項目だけが現在のページになる", async ({
+  test("ホームでレフトパネルの設定の項目を押すと、設定パネルが開き、設定の項目だけが現在のビューになる", async ({
     page,
   }) => {
     await openRounds(page);
 
-    await page
-      .getByRole("link", { name: navigationText("leftPanelSettings") })
-      .click();
+    await openSettingsByItem(page);
 
-    await expect(page).toHaveURL(/\/settings$/);
-    await expectPanelExpanded(page);
     await expect(
-      page.getByRole("heading", { name: settingsText("title") }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: navigationText("leftPanelSettings") }),
+      railItem(page, navigationText("leftPanelSettings")),
     ).toHaveAttribute("aria-current", "page");
     await expect(
-      page.getByRole("link", { name: navigationText("leftPanelHome") }),
+      railItem(page, navigationText("leftPanelHome")),
     ).not.toHaveAttribute("aria-current", "page");
     await expect(
-      page.getByRole("link", { name: navigationText("leftPanelHistory") }),
+      railItem(page, navigationText("leftPanelHistory")),
     ).not.toHaveAttribute("aria-current", "page");
   });
 
-  test("設定画面でレフトパネルのホームの項目を押すと、ホームへ移動する", async ({
+  test("履歴で設定パネルを開くと、設定の項目だけが現在のビューになり、履歴の項目には付かない", async ({
     page,
   }) => {
-    await page.goto("/settings");
-
-    await page
-      .getByRole("link", { name: navigationText("leftPanelHome") })
-      .click();
-
-    await expect(page).toHaveURL(/\/rounds$/);
-    await expect(page.getByTestId("new-round-fab")).toBeVisible();
-  });
-
-  test("設定画面でレフトパネルの点数一覧の項目を押すと、点数一覧へ移動してパネルを保つ", async ({
-    page,
-  }) => {
-    await page.goto("/settings");
-
+    await openRounds(page);
     await page
       .getByRole("link", { name: navigationText("leftPanelHistory") })
       .click();
+    await expect(
+      page.getByRole("link", { name: navigationText("leftPanelHistory") }),
+    ).toHaveAttribute("aria-current", "page");
 
+    await openSettingsByItem(page);
+
+    await expect(
+      railItem(page, navigationText("leftPanelSettings")),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(
+      railItem(page, navigationText("leftPanelHistory")),
+    ).not.toHaveAttribute("aria-current", "page");
+  });
+
+  test("幅768px以上で設定パネルが開いているとき、背景のレフトパネルのホームの項目を押すと、パネルが閉じるだけで、ホームへは移らない", async ({
+    page,
+  }) => {
+    // 履歴を開き、設定パネルを開く。
+    await openRounds(page);
+    await page
+      .getByRole("link", { name: navigationText("leftPanelHistory") })
+      .click();
+    await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
+    await openSettingsByItem(page);
+
+    // 背景のホームの項目を座標で押すと、パネルが閉じ、履歴に留まる。
+    await pressAtCenter(page, railItem(page, navigationText("leftPanelHome")));
+
+    await expect(settingsPanel(page)).toBeHidden();
     await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
     await expect(
       page.getByRole("heading", { level: 1, name: roundsText("historyTitle") }),
@@ -316,7 +332,24 @@ test.describe("認証済み", () => {
     await expectPanelExpanded(page);
   });
 
-  test("縦向きで狭い画面でドロワーを展開して設定の項目を押すと、設定画面へ移動し、ドロワーが閉じる", async ({
+  test("幅768px以上で設定パネルが開いているとき、背景のレフトパネルの履歴の項目を押すと、パネルが閉じるだけで、履歴へは移らない", async ({
+    page,
+  }) => {
+    // ホームで設定パネルを開く。
+    await openRounds(page);
+    await openSettingsByItem(page);
+
+    // 背景の履歴の項目を座標で押すと、パネルが閉じ、ホームに留まる。
+    await pressAtCenter(
+      page,
+      railItem(page, navigationText("leftPanelHistory")),
+    );
+
+    await expect(settingsPanel(page)).toBeHidden();
+    await expect(page).toHaveURL(/\/rounds$/);
+  });
+
+  test("縦向きで狭い画面でドロワーを展開して設定の項目を押すと、ドロワーが閉じ、設定パネルが開き、フォーカスが対話の中へ移る", async ({
     page,
   }) => {
     // 縦向きで狭い画面でラウンド作成画面を開き、ヘッダーのメニューボタンでドロワーを展開する。
@@ -328,15 +361,16 @@ test.describe("認証済み", () => {
       .click();
     await expectPanelExpanded(page);
 
-    // 設定の項目を押して、設定画面へ移り、ドロワーが閉じていることを確かめる。
-    await page
-      .getByRole("link", { name: navigationText("leftPanelSettings") })
-      .click();
-    await expect(page).toHaveURL(/\/settings$/);
-    await expect(
-      page.getByRole("heading", { level: 1, name: settingsText("title") }),
-    ).toBeVisible();
+    // 設定の項目を押して、設定パネルが開き、ドロワーが閉じ、フォーカスが対話の中へ移ることを確かめる。
+    await openSettingsByItem(page);
     await expectPanelClosed(page);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.activeElement?.closest('[role="dialog"]') !== null,
+        ),
+      )
+      .toBe(true);
   });
 
   test("狭い画面で点数一覧の項目を押すと点数一覧へ移りドロワーが閉じる", async ({
@@ -444,27 +478,29 @@ test.describe("認証済み", () => {
     await expect(openMenuButton(page)).toHaveCount(0);
   });
 
-  test("ホームから設定へ移った後、ブラウザの戻るでホームへ、進むで設定へ移動する", async ({
+  test("縦向きで狭い画面で、設定パネルの項目の画面のヘッダーにメニューボタンは無く、背景のメニューボタンは操作できない", async ({
     page,
   }) => {
-    // ホームから設定の項目を押して、設定画面へ移る。
-    await openRounds(page);
-    await page
-      .getByRole("link", { name: navigationText("leftPanelSettings") })
-      .click();
-    await expect(page).toHaveURL(/\/settings$/);
-
-    // 戻るでホームへ移る。
-    await page.goBack();
-    await expect(page).toHaveURL(/\/rounds$/);
-    await expect(page.getByTestId("new-round-fab")).toBeVisible();
-
-    // 進むで設定へ移る。
-    await page.goForward();
-    await expect(page).toHaveURL(/\/settings$/);
+    // 縦向きで狭い画面で、パスワード変更の画面を直接開く。
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await page.goto(`/rounds/new${CHANGE_PASSWORD_HASH}`);
+    await expect(settingsPanel(page)).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: settingsText("title") }),
-    ).toBeVisible();
+      settingsPanel(page).getByRole("button", {
+        name: navigationText("leftPanelOpenMenu"),
+      }),
+    ).toHaveCount(0);
+
+    // 背景のメニューボタンの位置を押しても、ドロワーは展開されない。
+    const backgroundMenu = page
+      .getByRole("button", {
+        name: navigationText("leftPanelOpenMenu"),
+        includeHidden: true,
+      })
+      .first();
+    await pressAtCenter(page, backgroundMenu);
+    await expect(settingsPanel(page)).toBeVisible();
+    await expectPanelClosed(page);
   });
 
   test.describe("レフトパネルの開閉", () => {
@@ -503,6 +539,7 @@ test.describe("認証済み", () => {
       // TabとShift+Tabを繰り返し、フォーカスがドロワーの中だけを巡ることを確かめる。
       const focusedLabels: (string | null)[] = [];
       const inAside: boolean[] = [];
+      const focusedTexts: (string | null)[] = [];
       const pressAndRecord = async (key: string) => {
         await page.keyboard.press(key);
         const step = await page.evaluate(() => ({
@@ -511,9 +548,11 @@ test.describe("認証済み", () => {
             document.activeElement?.getAttribute("aria-label") ??
             document.activeElement?.getAttribute("href") ??
             null,
+          text: document.activeElement?.textContent?.trim() ?? null,
         }));
         inAside.push(step.inAside);
         focusedLabels.push(step.label);
+        focusedTexts.push(step.text);
       };
       for (let i = 0; i < 8; i++) await pressAndRecord("Tab");
       for (let i = 0; i < 3; i++) await pressAndRecord("Shift+Tab");
@@ -523,9 +562,9 @@ test.describe("認証済み", () => {
           navigationText("leftPanelCloseMenu"),
           ROUNDS_PATH,
           ROUNDS_HISTORY_PATH,
-          SETTINGS_PATH,
         ]),
       );
+      expect(focusedTexts).toContain(navigationText("leftPanelSettings"));
 
       // Escでドロワーを閉じ、フォーカスがメニューボタンへ戻り、本文のinertが外れることを確かめる。
       await page.keyboard.press("Escape");
@@ -692,18 +731,13 @@ test.describe("認証済み", () => {
       await expect(menuButton).toBeFocused();
     });
 
-    const Screens = [
-      ROUNDS_PATH,
-      ROUNDS_HISTORY_PATH,
-      NEW_ROUND_PATH,
-      SETTINGS_PATH,
-    ];
+    const Screens = [ROUNDS_PATH, ROUNDS_HISTORY_PATH, NEW_ROUND_PATH];
 
     for (const [name, viewport] of [
       ["縦向き", MOBILE_VIEWPORT],
       ["横向き", COMPACT_LANDSCAPE_VIEWPORT],
     ] as const) {
-      test(`${name}で狭い画面では、ホーム・履歴・作成・設定のどの画面にも「メニューを開く」が表示され、押すとレフトパネルが展開される`, async ({
+      test(`${name}で狭い画面では、ホーム・履歴・作成のどの画面にも「メニューを開く」が表示され、押すとレフトパネルが展開される`, async ({
         page,
       }) => {
         await page.setViewportSize(viewport);
@@ -713,7 +747,7 @@ test.describe("認証済み", () => {
             name: navigationText("leftPanelOpenMenu"),
           });
           await expect(menuButton).toBeVisible();
-          // 履歴・設定には水和の目印が無いため、押しても開かない間は押し直す。
+          // 履歴には水和の目印が無いため、押しても開かない間は押し直す。
           await expect(async () => {
             await menuButton.click();
             await expectPanelExpanded(page);
@@ -730,7 +764,7 @@ test.describe("認証済み", () => {
         await page.goto(path);
         await expect(closeMenuButton(page)).toBeVisible();
         await expect(openMenuButton(page)).toBeHidden();
-        // 履歴・設定には水和の目印が無いため、閉じない間は押し直す。
+        // 履歴には水和の目印が無いため、閉じない間は押し直す。
         await expect(async () => {
           await closeMenuButton(page).click({ timeout: 1_000 });
           await expect(openMenuButton(page)).toBeVisible({ timeout: 1_000 });
@@ -833,6 +867,38 @@ test.describe("セッション喪失", () => {
     await page.clock.fastForward(PAST_JWT_EXPIRY_MS);
 
     await expect(page).toHaveURL(/\/signin\?returnTo=%2Frounds%2Fnew$/);
+  });
+
+  test("設定パネルを開いた画面でセッションを失うと、ハッシュを含む遷移元を付けてサインイン画面へ移動し、サインインすると同じ表示のパネルが開く", async ({
+    page,
+  }) => {
+    // 設定パネルでパスワード変更を開いたまま、サーバー側でセッションを無効にし、期限を過ぎる。
+    const email = `nav-revoked-panel-${Date.now()}-${randomUUID().slice(0, 8)}@aims.test`;
+    await page.clock.install();
+    await signUpAndSignIn(page, { email, password: "password1" });
+    await page.goto(`/rounds/new${CHANGE_PASSWORD_HASH}`);
+    await expect(settingsPanel(page)).toBeVisible();
+    await revokeAllSessions({ email, password: "password1" });
+    await page.clock.fastForward(PAST_JWT_EXPIRY_MS);
+
+    // ハッシュを含む遷移元を付けて、サインイン画面へ移る。
+    await expect(page).toHaveURL(
+      /\/signin\?returnTo=%2Frounds%2Fnew%23settings%2Faccount%2Fpassword/,
+    );
+
+    // サインインすると、同じ表示のパネルが開く。
+    await page.clock.resume();
+    await waitForHydration(page);
+    await page.getByPlaceholder("you@example.com").fill(email);
+    await page
+      .getByPlaceholder(authText("passwordPlaceholder"))
+      .fill("password1");
+    await waitForTurnstileToken(page, 1);
+    await page.getByRole("button", { name: authText("signInSubmit") }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/rounds/new${CHANGE_PASSWORD_HASH}$`),
+    );
+    await expect(settingsPanel(page)).toBeVisible();
   });
 
   test("セッションの更新が通信の失敗で終わったときは、アクセストークンの期限を過ぎても、サインイン画面へ移動せず、ラウンド一覧に留まる", async ({

@@ -1,11 +1,18 @@
 import type { Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import {
+  CHANGE_PASSWORD_HASH,
+  ROUNDS_PATH,
+  SETTINGS_ACCOUNT_HASH,
+  SIGN_IN_PATH,
+} from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
   SHARED_AUTH_STATE_PATH,
   waitForHydration,
 } from "../helpers/auth";
+import { settingsPanel } from "../helpers/settings";
 import {
   expectTurnstileReset,
   turnstileTokenCount,
@@ -60,6 +67,51 @@ test("許可された遷移元からサインインすると、その画面へ�
   await expect(page).toHaveURL(/\/rounds\/new$/);
 });
 
+test("未認証で設定パネルの項目を開いたURLを開くと、サインインに移り、サインインすると、遷移元のハッシュを含めて同じ画面でパスワード変更の画面が開く", async ({
+  page,
+}) => {
+  // 設定パネルのパスワード変更を開いたURLを未認証で開き、ハッシュを含む遷移元を付けてサインインへ移る。
+  const { email, password } = await createUniqueUser("signin-panel-return");
+  await page.goto(`${ROUNDS_PATH}${CHANGE_PASSWORD_HASH}`);
+  await expect(page).toHaveURL(/\/signin\?returnTo=/);
+  await waitForHydration(page);
+  expect(
+    decodeURIComponent(new URL(page.url()).search) + new URL(page.url()).hash,
+  ).toContain("settings/account/password");
+
+  // サインインすると、同じ画面でパスワード変更の画面が開く。
+  await fillCredentials(page, email, password);
+  await waitForTurnstileToken(page, 1);
+  await page.getByRole("button", { name: authText("signInSubmit") }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`${ROUNDS_PATH}${CHANGE_PASSWORD_HASH}$`),
+  );
+  await expect(
+    settingsPanel(page).getByRole("heading", {
+      name: authText("changePasswordTitle"),
+    }),
+  ).toBeVisible();
+});
+
+test("未認証でハッシュ#settingsの設定パネルを開いたURLを開いてサインインすると、分類「アカウント」でパネルが開く", async ({
+  page,
+}) => {
+  // ハッシュ#settingsで開いて、サインインへ移る。
+  const { email, password } = await createUniqueUser("signin-panel-bare");
+  await page.goto(`${ROUNDS_PATH}#settings`);
+  await expect(page).toHaveURL(/\/signin\?returnTo=/);
+  await waitForHydration(page);
+
+  // サインインすると、分類「アカウント」のハッシュで開く。
+  await fillCredentials(page, email, password);
+  await waitForTurnstileToken(page, 1);
+  await page.getByRole("button", { name: authText("signInSubmit") }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`${ROUNDS_PATH}${SETTINGS_ACCOUNT_HASH}$`),
+  );
+  await expect(settingsPanel(page)).toBeVisible();
+});
+
 test("外部URLを遷移元に指定してサインインすると、外部へ移動せずラウンド一覧へ遷移する", async ({
   page,
 }) => {
@@ -110,6 +162,19 @@ test.describe("認証済み", () => {
     // 認証済みの状態は、storageStateで用意する。
     await page.goto("/signin");
     await expect(page).toHaveURL(/\/rounds/);
+  });
+
+  test("認証済みでハッシュ付きの遷移元のサインイン画面を開くと、ハッシュごと遷移元へリダイレクトされ、設定パネルが開く", async ({
+    page,
+  }) => {
+    await page.goto(
+      `${SIGN_IN_PATH}?returnTo=${encodeURIComponent(`${ROUNDS_PATH}${SETTINGS_ACCOUNT_HASH}`)}`,
+    );
+
+    await expect(page).toHaveURL(
+      new RegExp(`${ROUNDS_PATH}${SETTINGS_ACCOUNT_HASH}$`),
+    );
+    await expect(settingsPanel(page)).toBeVisible();
   });
 
   test("認証済みで遷移元付きのサインイン画面を開くと、遷移元へリダイレクトされる", async ({

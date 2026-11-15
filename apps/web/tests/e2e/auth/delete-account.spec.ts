@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { DELETE_ACCOUNT_HASH, ROUNDS_PATH } from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
@@ -17,6 +18,7 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
+import { settingsPanel, waitForPanelHydration } from "../helpers/settings";
 import { authMethodOf } from "../helpers/stored-session";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
@@ -44,20 +46,25 @@ function newEmail(prefix: string) {
 test("ラウンドを持つ利用者が、設定から現在のパスワードで削除すると、サインイン画面へ移り、削除したメールアドレスでは入れず、同じメールアドレスで新しく登録した利用者には旧ラウンドが表示されない", async ({
   page,
 }) => {
-  // ラウンドを持つ使い捨ての利用者でサインインし、設定からアカウント削除の画面へ進む。
+  // ラウンドを持つ使い捨ての利用者でサインインし、設定パネルからアカウント削除の画面へ進む。
   const credentials = await signInFreshUser(page, "e2e-delete-account");
   const roundName = `削除前のラウンド-${randomUUID().slice(0, 8)}`;
   await addRound(credentials, roundName, "2026-08-24", { completed: true });
   await page.goto("/rounds/history");
   await expect(page.getByText(roundName)).toBeVisible();
   await page
-    .getByRole("link", { name: navigationText("leftPanelSettings") })
+    .getByRole("link", {
+      name: navigationText("leftPanelSettings"),
+      exact: true,
+    })
     .click();
-  await page
+  await settingsPanel(page)
     .getByRole("link", { name: settingsText("deleteAccountItem") })
     .click();
   await expect(
-    page.getByRole("heading", { name: authText("deleteAccountTitle") }),
+    settingsPanel(page).getByRole("heading", {
+      name: authText("deleteAccountTitle"),
+    }),
   ).toBeVisible();
   await waitForHydration(page);
 
@@ -134,9 +141,9 @@ test("画面の枠を保存した後、オフラインでアカウント削除�
   page,
   context,
 }) => {
-  // 使い捨ての利用者でサインインし、アカウント削除の画面を開いて、Service Workerが枠を保存するのを待つ。
+  // 使い捨ての利用者でサインインし、ラウンド一覧を開いて、Service Workerが枠を保存するのを待つ。
   const credentials = await signInFreshUser(page, "e2e-delete-offline");
-  await page.goto("/settings/delete-account");
+  await page.goto(ROUNDS_PATH);
   await waitForHydration(page);
   await waitForServiceWorkerControl(page);
   await expect
@@ -149,23 +156,24 @@ test("画面の枠を保存した後、オフラインでアカウント削除�
             urls.push(request.url);
           }
         }
-        return urls.some((url) =>
-          url.includes("/__shell/settings/delete-account"),
-        );
+        return urls.some((url) => url.includes("/__shell/rounds?"));
       }),
     )
     .toBe(true);
 
   // オフラインにして削除の画面を開き、パスワードを入力して削除を実行すると、オフラインの文言が表示される。
+  // 同じ文書内の移動にならないよう、別の画面を開いてから、オフラインにする。
+  await page.goto("/rounds/new");
   await goOffline(context);
-  const response = await page.goto("/settings/delete-account");
+  const response = await page.goto(`${ROUNDS_PATH}${DELETE_ACCOUNT_HASH}`);
   expect(response?.fromServiceWorker()).toBe(true);
-  await waitForHydration(page);
+  await expect(settingsPanel(page)).toBeVisible();
+  await waitForPanelHydration(page);
   await passwordInput(page).fill(credentials.password);
   await waitForTurnstileToken(page, 1);
   await deleteButton(page).click();
   await expect(page.getByText(authText("failure.offline"))).toBeVisible();
-  await expect(page).toHaveURL(/\/settings\/delete-account$/);
+  await expect(page).toHaveURL(new RegExp(`${DELETE_ACCOUNT_HASH}$`));
 
   // 通信が戻ると、アカウントは残っていて、削除を再び押せる。
   await comeBackOnline(context, page);

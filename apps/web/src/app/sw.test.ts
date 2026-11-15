@@ -96,17 +96,6 @@ describe("sw", () => {
         ["/rounds/new", "/__shell/rounds/new"],
         ["/rounds/6f1c2f3e-0000-4000-8000-000000000000", "/__shell/rounds/_"],
         ["/rounds/abc", "/__shell/rounds/_"],
-        ["/settings", "/__shell/settings"],
-        ["/settings?tab=1#top", "/__shell/settings"],
-        ["/settings/email", "/__shell/settings/email"],
-        ["/settings/email?tab=1#top", "/__shell/settings/email"],
-        ["/settings/password", "/__shell/settings/password"],
-        ["/settings/password?tab=1#top", "/__shell/settings/password"],
-        ["/settings/delete-account", "/__shell/settings/delete-account"],
-        [
-          "/settings/delete-account?tab=1#top",
-          "/__shell/settings/delete-account",
-        ],
       ])("%sはプリキャッシュの%sを返す", async (url, frameUrl) => {
         // Given
         const frame = new Response("frame");
@@ -174,9 +163,13 @@ describe("sw", () => {
         "/rounds/",
         "/rounds/1/edit",
         "/roundsx",
+        "/settings",
         "/settings/x",
         "/settingsx",
         "/settings/",
+        "/settings/email",
+        "/settings/password",
+        "/settings/delete-account",
         "/settings/email/",
         "/settings/emailx",
       ])("枠のない%sのナビゲーションはネットワークへ通す", (url) => {
@@ -280,22 +273,17 @@ describe("sw", () => {
       },
     );
 
-    it.each([
-      "/__shell/rounds",
-      "/__shell/settings",
-      "/__shell/settings/email",
-      "/__shell/settings/password",
-      "/__shell/settings/delete-account",
-      "/_next/static/chunks/main.js",
-      "/offline",
-    ])("%sは保存する", async (url) => {
-      // Given
-      // When
-      const params = updated(url);
-      const result = await guard()(params);
+    it.each(["/__shell/rounds", "/_next/static/chunks/main.js", "/offline"])(
+      "%sは保存する",
+      async (url) => {
+        // Given
+        // When
+        const params = updated(url);
+        const result = await guard()(params);
 
-      // Then
-      expect(result).toBe(params.response);
-    });
+        // Then
+        expect(result).toBe(params.response);
+      },
+    );
   });
 });

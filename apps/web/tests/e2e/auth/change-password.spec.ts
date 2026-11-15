@@ -1,18 +1,25 @@
 import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { CHANGE_PASSWORD_HASH } from "@/routes";
 import { expect, test } from "../fixtures";
-import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
+import { signUpAndSignIn } from "../helpers/auth";
 import { signInError, updatePasswordDirect } from "../helpers/auth-api";
 import {
   expectSignedOutIn,
   expectStillSignedIn,
   signInOnOtherDevice,
 } from "../helpers/other-browser-device";
+import {
+  expectAccountCategory,
+  openSettingsAt,
+  panelBackLink,
+  settingsPanel,
+  waitForPanelHydration,
+} from "../helpers/settings";
 import { authMethodOf, readStoredTokens } from "../helpers/stored-session";
 
 const authText = translatorFor("auth");
-const settingsText = translatorFor("settings");
 
 const ORIGINAL_PASSWORD = "password-original1";
 const NEW_PASSWORD = "password-changed1";
@@ -43,8 +50,7 @@ function submitButton(page: Page) {
 }
 
 async function openChangePassword(page: Page) {
-  await page.goto("/settings/password");
-  await waitForHydration(page);
+  await openSettingsAt(page, CHANGE_PASSWORD_HASH);
 }
 
 async function change(page: Page, input: { current: string; next: string }) {
@@ -64,7 +70,7 @@ test("現在のパスワードと新しいパスワードを入力して変更�
   await expect(page.getByText(authText("changePasswordDone"))).toBeVisible();
   await expect(currentPasswordInput(page)).toHaveValue("");
   await expect(newPasswordInput(page)).toHaveValue("");
-  await expect(page).toHaveURL(/\/settings\/password$/);
+  await expect(page).toHaveURL(new RegExp(`${CHANGE_PASSWORD_HASH}$`));
 
   // 別のクライアントでは新しいパスワードだけが使え、この端末はサインインしたままホームを開ける。
   expect(await signInError(email, NEW_PASSWORD)).toBeNull();
@@ -75,22 +81,37 @@ test("現在のパスワードと新しいパスワードを入力して変更�
   await expect(page).toHaveURL(/\/rounds/);
 });
 
-test("ヘッダーの戻るのリンクを押すと、設定画面へ移動する", async ({ page }) => {
+test("ハッシュ付きのURLを直接開いても再読み込みしても、設定パネルにパスワード変更の画面が表示され、入力は空である", async ({
+  page,
+}) => {
+  // ハッシュ付きのURLを直接開き、パスワード変更の画面が表示される。
+  await signUpAndSignIn(page, {
+    email: newEmail(),
+    password: ORIGINAL_PASSWORD,
+  });
+  await openChangePassword(page);
+  await expect(currentPasswordInput(page)).toHaveValue("");
+
+  // 再読み込みして、同じ画面が表示される。
+  await page.reload();
+  await waitForPanelHydration(page);
+  await expect(settingsPanel(page)).toBeVisible();
+  await expect(currentPasswordInput(page)).toHaveValue("");
+  await expect(page).toHaveURL(new RegExp(`${CHANGE_PASSWORD_HASH}$`));
+});
+
+test("ヘッダーの戻るのリンクを押すと、分類「アカウント」へ移動する", async ({
+  page,
+}) => {
   await signUpAndSignIn(page, {
     email: newEmail(),
     password: ORIGINAL_PASSWORD,
   });
   await openChangePassword(page);
 
-  await page
-    .locator("header")
-    .getByRole("link", { name: authText("back") })
-    .click();
+  await panelBackLink(page).click();
 
-  await expect(page).toHaveURL(/\/settings$/);
-  await expect(
-    page.getByRole("heading", { name: settingsText("title") }),
-  ).toBeVisible();
+  await expectAccountCategory(page);
 });
 
 test("別の端末でサインインしているとき、この端末がパスワードを変更すると、この端末はサインインしたままで、別の端末は期限が切れた後にサインイン画面へ移動する", async ({

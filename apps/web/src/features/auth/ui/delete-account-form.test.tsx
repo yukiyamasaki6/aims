@@ -4,7 +4,6 @@ import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import { SETTINGS_PATH } from "@/routes";
 import type { AccountDeletionResult } from "../application/delete-account";
 import { createDeleteAccountHarness } from "../application/delete-account-test-helpers";
 import type { AuthFailureKind } from "../domain/auth-failure";
@@ -30,14 +29,18 @@ vi.mock("./turnstile", () => ({
 
 function setup({ offline = false }: { offline?: boolean } = {}) {
   const harness = createDeleteAccountHarness({ offline });
+  const onBack = vi.fn();
+  const onBusyChange = vi.fn();
   const rendered = render(
     <DeleteAccountForm
       deleteAccount={harness.deleteAccount}
       siteKey="site-key"
+      onBack={onBack}
+      onBusyChange={onBusyChange}
     />,
     { wrapper: IntlTestProvider },
   );
-  return { ...harness, ...rendered };
+  return { ...harness, onBack, onBusyChange, ...rendered };
 }
 
 function passwordInput() {
@@ -60,7 +63,7 @@ describe("アカウント削除画面の部品", () => {
     widget.onVerify = undefined;
   });
 
-  it("見出しと、削除が取り消せないこと・削除される内容の説明、現在のパスワードの欄、削除ボタン、設定へ戻るリンクを表示する", () => {
+  it("見出しと、削除が取り消せないこと・削除される内容の説明、現在のパスワードの欄、削除ボタンを表示する", () => {
     // Given
     // When
     setup();
@@ -81,7 +84,7 @@ describe("アカウント削除画面の部品", () => {
     expect(screen.getByTestId("turnstile-stub")).toBeInTheDocument();
   });
 
-  it("見出しはヘッダーにあり本文にレベル1の見出しは無く、戻るは設定画面へのリンクで、本文に設定へ戻るリンクは無い", () => {
+  it("見出しはヘッダーにあり本文にレベル1の見出しは無く、戻るはヘッダーのリンクで、本文に戻るリンクは無い", () => {
     // Given
     // When
     setup();
@@ -96,7 +99,19 @@ describe("アカウント削除画面の部品", () => {
     expect(screen.getAllByRole("link")).toHaveLength(1);
     expect(
       screen.getByRole("link", { name: authText("back") }),
-    ).toHaveAttribute("href", SETTINGS_PATH);
+    ).toBeInTheDocument();
+  });
+
+  it("ヘッダーの戻るを押すと、onBackを呼ぶ", async () => {
+    // Given
+    const { onBack } = setup();
+    const user = userEvent.setup();
+
+    // When
+    await user.click(screen.getByRole("link", { name: authText("back") }));
+
+    // Then
+    expect(onBack).toHaveBeenCalledOnce();
   });
 
   it("処理中は、ヘッダーの戻るがリンクでなく押せず、処理が終わるとリンクに戻る", async () => {
@@ -122,7 +137,30 @@ describe("アカウント削除画面の部品", () => {
     );
     expect(
       await screen.findByRole("link", { name: authText("back") }),
-    ).toHaveAttribute("href", SETTINGS_PATH);
+    ).toBeInTheDocument();
+  });
+
+  it("処理中はonBusyChange(true)で知らせ、失敗で処理が終わるとonBusyChange(false)で知らせる。処理中の戻るは、onBackを呼ばない", async () => {
+    // Given
+    const { account, onBack, onBusyChange } = setup();
+    const response = Promise.withResolvers<AccountDeletionResult>();
+    account.delete.mockReturnValue(response.promise);
+    const user = userEvent.setup();
+    await user.type(passwordInput(), "password-current1");
+    verify("captcha-token");
+
+    // When
+    await user.click(submitButton());
+    const during = onBusyChange.mock.calls.at(-1);
+    await user.click(screen.getByText(authText("back")));
+    await act(async () =>
+      response.resolve({ kind: "failed", failure: { kind: "other" } }),
+    );
+
+    // Then
+    expect(during).toEqual([true]);
+    expect(onBusyChange.mock.calls.at(-1)).toEqual([false]);
+    expect(onBack).not.toHaveBeenCalled();
   });
 
   it("パスワードの欄は、現在のパスワードのキャプションとcurrent-passwordのautocompleteを持ち、水和が済んだ目印をフォームに付ける", () => {

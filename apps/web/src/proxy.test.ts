@@ -34,9 +34,6 @@ describe("proxy", () => {
       "/rounds/1/edit",
       ROUNDS_PATH,
       `${ROUNDS_PATH}/1`,
-      "/settings",
-      "/settings/1",
-      "/settings/delete-account",
     ])("%sで実行する", (url) => {
       // Given
       // When
@@ -54,6 +51,9 @@ describe("proxy", () => {
       "/_next/static/chunks/main.js",
       "/signin/extra",
       "/roundsx",
+      "/settings",
+      "/settings/1",
+      "/settings/delete-account",
       "/settingsx",
       ...FRAME_PATHS.map(shellUrlOf),
     ])("%sでは実行しない", (url) => {
@@ -125,35 +125,20 @@ describe("proxy", () => {
       );
     });
 
-    it("未認証で設定の経路を開くと、その経路を遷移元に付けてサインインへリダイレクトする", async () => {
-      // Given
-      db.getClaims.mockResolvedValue({ data: null, error: null });
+    it.each(["/settings", "/settings/1", "/settings/delete-account"])(
+      "未認証で%sを開いても、保護の範囲の外のためリダイレクトしない",
+      async (path) => {
+        // Given
+        db.getClaims.mockResolvedValue({ data: null, error: null });
 
-      // When
-      const request = new NextRequest("https://app.example.com/settings");
-      const response = await proxy(request);
+        // When
+        const request = new NextRequest(`https://app.example.com${path}`);
+        const response = await proxy(request);
 
-      // Then
-      expect(response.headers.get("location")).toBe(
-        "https://app.example.com/signin?returnTo=%2Fsettings",
-      );
-    });
-
-    it("未認証でアカウント削除の経路を開くと、その経路を遷移元に付けてサインインへリダイレクトする", async () => {
-      // Given
-      db.getClaims.mockResolvedValue({ data: null, error: null });
-
-      // When
-      const request = new NextRequest(
-        "https://app.example.com/settings/delete-account",
-      );
-      const response = await proxy(request);
-
-      // Then
-      expect(response.headers.get("location")).toBe(
-        "https://app.example.com/signin?returnTo=%2Fsettings%2Fdelete-account",
-      );
-    });
+        // Then
+        expect(response.headers.get("location")).toBeNull();
+      },
+    );
 
     it("認証済みで遷移元付きのサインインを開くと、遷移元へリダイレクトする", async () => {
       // Given

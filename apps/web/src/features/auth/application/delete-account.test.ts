@@ -47,7 +47,7 @@ describe("アカウント削除の手続き", () => {
     it("再認証と削除が成功すると、その利用者のIDで端末の記録を消し、この端末のサインインを終えて、遷移元の無いサインインへ移る", async () => {
       // Given
       const { deleteAccount, eraser, authenticator, page, viewOf } = setup({
-        here: "/settings/delete-account",
+        here: "/rounds#settings/account/delete-account",
       });
 
       // When
@@ -221,7 +221,7 @@ describe("アカウント削除の手続き", () => {
       // Given
       const { deleteAccount, authenticator, account, state, page, viewOf } =
         setup({
-          here: "/settings/delete-account",
+          here: "/rounds#settings/account/delete-account",
         });
       authenticator.reauthenticate.mockImplementation(async () => {
         state.status = "unauthenticated";
@@ -238,7 +238,7 @@ describe("アカウント削除の手続き", () => {
       });
       expect(account.delete).not.toHaveBeenCalled();
       expect(page.replace).toHaveBeenCalledExactlyOnceWith(
-        "/signin?returnTo=%2Fsettings%2Fdelete-account",
+        "/signin?returnTo=%2Frounds%23settings%2Faccount%2Fdelete-account",
       );
       expect(view.observedState.error).toBe("unreachable");
     });

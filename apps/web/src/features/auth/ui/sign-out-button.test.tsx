@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { SignOutResult } from "../application/session";
@@ -161,5 +162,66 @@ describe("SignOutButton", () => {
     // Then
     expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
     expect(screen.queryByText(NETWORK_ERROR_MESSAGE)).not.toBeInTheDocument();
+  });
+
+  describe("他のダイアログの中に置いたとき", () => {
+    function renderInDialog() {
+      const parentOpenChange = vi.fn();
+      render(
+        <Dialog open onOpenChange={parentOpenChange}>
+          <DialogContent>
+            <SignOutButton signOut={vi.fn()} />
+          </DialogContent>
+        </Dialog>,
+        { wrapper: IntlTestProvider },
+      );
+      return parentOpenChange;
+    }
+
+    it("Escで、確認のダイアログだけを閉じ、親のダイアログは開いたままである", async () => {
+      // Given
+      const user = userEvent.setup();
+      const parentOpenChange = renderInDialog();
+      await user.click(
+        screen.getByRole("button", { name: authText("signOut") }),
+      );
+      await screen.findByText(authText("signOutConfirm"));
+
+      // When
+      await user.keyboard("{Escape}");
+
+      // Then
+      await waitFor(() =>
+        expect(
+          screen.queryByText(authText("signOutConfirm")),
+        ).not.toBeInTheDocument(),
+      );
+      expect(parentOpenChange).not.toHaveBeenCalled();
+      expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    });
+
+    it("確認のダイアログの外側の押下で、確認のダイアログだけを閉じ、親のダイアログは開いたままである", async () => {
+      // Given
+      const user = userEvent.setup();
+      const parentOpenChange = renderInDialog();
+      await user.click(
+        screen.getByRole("button", { name: authText("signOut") }),
+      );
+      await screen.findByText(authText("signOutConfirm"));
+      const backdrops = document.querySelectorAll(
+        '[role="presentation"][data-open]',
+      );
+
+      // When
+      await user.click(backdrops[backdrops.length - 1]);
+
+      // Then
+      await waitFor(() =>
+        expect(
+          screen.queryByText(authText("signOutConfirm")),
+        ).not.toBeInTheDocument(),
+      );
+      expect(parentOpenChange).not.toHaveBeenCalled();
+    });
   });
 });

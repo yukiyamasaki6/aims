@@ -502,4 +502,75 @@ describe("BlockingConfirmDialog", () => {
       expect(handleOpenChange).not.toHaveBeenCalled();
     });
   });
+
+  // 他のDialogの中から開かれた場合。設定パネルの中のサインアウトの確認がこの形である。
+  describe("ネストしたとき", () => {
+    function renderNested(
+      props: Partial<ComponentProps<typeof BlockingConfirmDialog>> = {},
+    ) {
+      const parentOpenChange = vi.fn();
+      const childOpenChange = vi.fn();
+      render(
+        <Dialog open onOpenChange={parentOpenChange}>
+          <DialogContent>
+            親
+            <BlockingConfirmDialog
+              open
+              onOpenChange={childOpenChange}
+              description="説明"
+              onConfirm={vi.fn()}
+              busy={false}
+              error={null}
+              nested
+              {...props}
+            />
+          </DialogContent>
+        </Dialog>,
+        { wrapper: IntlTestProvider },
+      );
+      return { parentOpenChange, childOpenChange };
+    }
+
+    it("外側の押下で、確認ダイアログだけを閉じ、親のダイアログの開閉は知らせない", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { parentOpenChange, childOpenChange } = renderNested();
+
+      // When
+      await user.click(backdrop());
+
+      // Then
+      expect(openStates(childOpenChange)).toEqual([false]);
+      expect(parentOpenChange).not.toHaveBeenCalled();
+    });
+
+    it("Escで、確認ダイアログだけを閉じ、親のダイアログの開閉は知らせない", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { parentOpenChange, childOpenChange } = renderNested();
+
+      // When
+      await user.keyboard("{Escape}");
+
+      // Then
+      expect(openStates(childOpenChange)).toEqual([false]);
+      expect(parentOpenChange).not.toHaveBeenCalled();
+    });
+
+    it("実行中は、外側の押下とEscのどちらでも閉じない", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { parentOpenChange, childOpenChange } = renderNested({
+        busy: true,
+      });
+
+      // When
+      await user.click(backdrop());
+      await user.keyboard("{Escape}");
+
+      // Then
+      expect(childOpenChange).not.toHaveBeenCalled();
+      expect(parentOpenChange).not.toHaveBeenCalled();
+    });
+  });
 });

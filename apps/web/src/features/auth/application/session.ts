@@ -183,8 +183,8 @@ export function createSession({
     go(signInHref(pageReplace.here()));
   }
 
-  // 記録の利用者と違う利用者のサインインは、今の場所を読み込み直す。
-  // 先に識別情報へ書いて読み戻し、一致しないとき(保存先が使えない環境)は、読み込み直しを繰り返さないために置き換えない。
+  // 記録の利用者と違う利用者のサインインは、今の文書を読み込み直す。
+  // 先に識別情報へ書いて読み戻し、一致しないとき(保存先が使えない環境)は、読み込み直しを繰り返さないために読み込み直さない。
   function reloadFor(userId: string) {
     const target = leave(
       flow,
@@ -194,7 +194,7 @@ export function createSession({
     if (target === null) return;
     identity.write(userId);
     if (identity.read() !== userId) return;
-    pageReplace.replace(target);
+    pageReplace.reload();
   }
 
   // 起動時に1回、サインインの状態を確かめる。保存先が空の起動ではサインアウトの通知が来ないため、これが要る。

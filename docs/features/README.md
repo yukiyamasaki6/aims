@@ -76,11 +76,13 @@
 | rounds | sync | 記録を失わず同期する | RDBMS・データ基盤 |
 | app | navigation | 迷わず移動する | 最小限の紹介画面、基本テーマ |
 | app | offline-pwa | アプリとして入れて、オフラインでも使う | PWA・オフライン点数記録 |
+| app | settings | 今の画面を離れずに、アカウント設定などを一か所で確認・変更する | ユーザー設定・ログ収集 |
 
 ## 画面遷移図
 
 実線：ユーザー操作による遷移
 破線：認証状態による自動リダイレクト（入口のガードと、表示中のセッション喪失の検知）
+設定パネルは、`(main)`の画面の上に重ねるパネルで、URLのハッシュ（`#settings/…`）で表す。閉じると、開く前の画面に戻る。
 
 ```mermaid
 flowchart TD
@@ -95,6 +97,7 @@ flowchart TD
 
     subgraph main ["(main)"]
         LeftPanel(("レフトパネル<br/>（全画面に常設）"))
+        Settings["#settings/…<br/>設定パネル<br/>（ホーム・履歴・作成・詳細の上に重ねる）"]
         subgraph rounds ["rounds"]
             Rounds["/rounds<br/>ホーム"]
             History["/rounds/history<br/>履歴"]
@@ -132,7 +135,9 @@ flowchart TD
     RoundDetail -->|ラウンド削除成功（履歴から開いたとき）| History
     LeftPanel -->|AIMSロゴ| Landing
     LeftPanel -->|「ホーム」項目| Rounds
-    LeftPanel -->|「履歴」項目| History
-    LeftPanel -->|サインアウト成功| SignIn
+    LeftPanel -->|「点数一覧」項目| History
+    LeftPanel -->|「設定」項目| Settings
+    Settings -->|サインアウト成功| SignIn
+    Settings -->|アカウント削除成功| SignIn
 ```
 

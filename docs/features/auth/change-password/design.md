@@ -2,7 +2,7 @@
 
 ## 概要
 
-`/settings/password`で、サインイン済みの利用者が現在のパスワードと新しいパスワードを入力して変更する。
+設定パネルの項目の画面(ハッシュ`#settings/account/password`。`app/settings`)で、サインイン済みの利用者が現在のパスワードと新しいパスワードを入力して変更する。
 現在のパスワードの確認は認証サービスが行う(`[auth.email] require_current_password = true`)。
 画面を使わない直接呼び出しも拒否する(本番で有効であることが前提)。
 更新は、この端末の接続の`updateUser({ password, current_password })`の1回で行う。
@@ -10,7 +10,7 @@
 他の端末の終了は認証サービスの挙動に依拠し、別のサインアウト処理を持たない(`docs/features/auth/design.md`)。
 認証コード由来のセッション(amr=otp)は、この検査を免除される。
 登録の完了時にパスワードで確かめたセッションへ置き換え(`docs/features/auth/signup/design.md`)、この画面はセッションの種類を判定しない。
-画面の枠(`/__shell/settings/password`)をオフライン用に保存し、送信は直前にオフラインを判定して拒否する。
+背景の画面がオフラインで開けるときは、この画面もオフラインで開け(`app/offline-pwa`)、送信は直前にオフラインを判定して拒否する。
 
 ## 画面と状態
 
@@ -18,7 +18,7 @@
 | --- | --- | --- |
 | 初期 | 現在のパスワード、新しいパスワード(どちらも表示切替つき)、変更 | 送信で処理中 |
 | 検証エラー | 未入力・規則違反を欄ごとに表示する | 再送信 |
-| 処理中 | 変更ボタンを`aria-disabled`にし、ヘッダーの戻る(設定へ)を押せなくする。以前のエラーと完了の表示は開始で消す | 成功で完了、失敗でエラー |
+| 処理中 | 変更ボタンを`aria-disabled`にし、ヘッダーの戻る(分類「アカウント」へ)を押せなくし、設定パネルの閉じる操作と分類の切り替えも受け付けない。以前のエラーと完了の表示は開始で消す | 成功で完了、失敗でエラー |
 | オフライン | 入力に不備が無いとき、オフラインの文言を全体のエラーに表示する。更新しない | 再送信 |
 | 失敗(通信の断を含む) | 理由を表示し、入力値を保つ | 再送信 |
 | 完了 | 完了の文言を表示する。入力値を消す。この端末はサインイン済みのまま、画面に留まる | 再送信 |
@@ -26,7 +26,7 @@
 - 現在のパスワードの誤り(`current_password_invalid`)は、「現在のパスワードが正しくありません。」で示す。
   サインインの`invalid_credentials`とは別の種類である。
   同じパスワードの拒否(`same_password`)も別の種類で示す。
-- 画面の名称(パスワード変更)と設定画面へ戻るリンク(`SettingsBackLink`。`auth/change-email`)は、共用のヘッダー(`ScreenFrame`。`app/navigation`)に置き、本文に見出しと戻るを置かない。戻るは`submitting`の間は押せない。
+- 画面の名称(パスワード変更)と分類「アカウント」へ戻るリンク(`SettingsBackLink`。`auth/change-email`)は、画面のヘッダー(`ScreenFrame`)に置き、本文に見出しと戻るを置かない。ヘッダー枠は設定パネルの中で描かれ、メニューボタンは出ない(`app/settings`)。戻るは`submitting`の間は押せない。
 - 本文の作りは、認証の画面と同じにする(中央寄せ、`max-w-sm`)。
   `main`は`mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8`で、画面の上下中央にそろえる。
   共用のヘッダー枠の本文領域(スクロールしない枠)の中に、画面が持つスクロールの入れ物(`h-full overflow-y-auto`)を置き、その中で`min-h-full`により入れ物の高さいっぱいに広げ、`justify-center`で上下中央にする。
@@ -54,10 +54,10 @@
 - `supabase/config.toml`: `[auth.email]`に`require_current_password = true`を足す。
   `secure_password_change`は足さない(無効のまま)。
   本番への反映は`supabase config push`による(`[remotes.*]`は上書きしない)。
-- `src/app/(main)/settings/password/page.tsx`: 入口。
-  認証の実装、`Connectivity`、手続きを生成して画面へ渡す。サイトキーは要らない。
+- `src/app/(main)/settings-panel-entry.tsx`: 入口。
+  設定パネルの表示が`#settings/account/password`のときに描く項目の画面として、認証の実装、`Connectivity`、手続きを生成して画面へ渡し、設定パネルから受けた戻る操作と処理中の知らせも渡す。サイトキーは要らない。
 - `src/features/auth/ui/change-password-form.tsx`: 画面。
-  共用のヘッダー枠に現在地と`SettingsBackLink`(`disabled`は`submitting`)を入れる。状態を`useScreenView`で持ち、完了で入力欄を作り直して消す。文言は`ui/auth-messages.ts`から得る。
+  ヘッダー枠に現在地と`SettingsBackLink`(`disabled`は`submitting`。押下は受け取った`onBack`)を入れ、`submitting`を処理中の知らせ(`onBusyChange`)で設定パネルへ知らせる。状態を`useScreenView`で持ち、完了で入力欄を作り直して消す。文言は`ui/auth-messages.ts`から得る。
 - `src/features/auth/application/change-password.ts`: 手続きと、約束(`ChangePasswordAuthenticator.updatePassword({ currentPassword, newPassword })`)。状態を持たない。
   `createChangePassword({ authenticator, connectivity })`が`ChangePassword`(`submit(input, view)`)を返す。
 - `src/features/auth/domain/change-password-flow.ts`: 集約。開始の命令(`beginChangePassword`)が、送信中、入力の判定、オフラインの判定の順を守る。
@@ -66,9 +66,8 @@
 - `src/features/auth/domain/password.ts`、`auth-failure.ts`、`flow.ts`: 失敗の種類に`current_password_invalid`と`same_password`、入力の誤りの欄に`currentPassword`(未入力のみ)と`newPassword`(未入力・規則違反)を足す。
 - `src/features/auth/infrastructure/supabase-auth.ts`: `updatePassword`を足し、応答のコードを専用の対応で写す(下表)。
   再設定とサインアップの`setPassword`の写しには、`same_password`だけを足す(`docs/features/auth/signup/design.md`)。
-- `src/features/settings/ui/settings-screen.tsx`、`src/routes.ts`、`src/app/sw.ts`: 「パスワード変更」項目のリンク、`CHANGE_PASSWORD_PATH`と`FRAME_PATHS`、枠の判定の1分岐。
-  保護と遷移元は`/settings`の配下で、`proxy.ts`と`auth-routes.ts`は変えない。
-  レフトパネルは経路の完全一致で`aria-current`を付けるため、`/settings/password`ではどの項目にも付かない(許容する)。
+- `src/features/settings/ui/settings-account.tsx`、`src/routes.ts`: 「パスワード変更」項目のリンクと、`CHANGE_PASSWORD_HASH`(`#settings/account/password`)。
+  保護と遷移元は背景の画面(`/rounds`の配下)のものが効き、遷移元はハッシュを含む(`auth/signin`)。
 
 流れは次のとおりである。
 

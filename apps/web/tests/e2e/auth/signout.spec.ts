@@ -1,8 +1,10 @@
 import type { Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { SETTINGS_ACCOUNT_HASH } from "@/routes";
 import { expect, test } from "../fixtures";
 import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
 import { waitForServiceWorkerControl } from "../helpers/service-worker";
+import { settingsPanel } from "../helpers/settings";
 
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
@@ -34,7 +36,7 @@ async function signInAndOpenDialog(
     password: "password1",
   });
   await waitForHydration(page);
-  // path は設定画面へ移る前の画面。左パネルの設定の項目で設定画面へ移る。
+  // path は設定パネルを開く前の画面。左パネルの設定の項目で設定パネルを開く。
   if (options.path) {
     await page.goto(options.path);
     await waitForHydration(page);
@@ -44,9 +46,13 @@ async function signInAndOpenDialog(
   if (options.controlledByServiceWorker)
     await waitForServiceWorkerControl(page);
   await page
-    .getByRole("link", { name: navigationText("leftPanelSettings") })
+    .getByRole("link", {
+      name: navigationText("leftPanelSettings"),
+      exact: true,
+    })
     .click();
-  await expect(page).toHaveURL(/\/settings$/);
+  await expect(settingsPanel(page)).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${SETTINGS_ACCOUNT_HASH}$`));
   await page.getByRole("button", { name: authText("signOut") }).click();
   const confirmButton = page.getByRole("button", {
     name: authText("signOutConfirmLabel"),
@@ -71,8 +77,8 @@ test("別の画面でサインアウトを確認すると、この端末のセ�
   ).toBeVisible();
   await expect(page).toHaveURL(/\/signin$/);
 
-  // 設定を開こうとしても、サインイン画面へ移る。戻る操作はbfcacheの復元に結果が左右されるため、直接の遷移で確かめる。
-  await page.goto("/settings");
+  // 設定パネルを開いたURLを開こうとしても、サインイン画面へ移る。戻る操作はbfcacheの復元に結果が左右されるため、直接の遷移で確かめる。
+  await page.goto(`/rounds${SETTINGS_ACCOUNT_HASH}`);
   await expect(page).toHaveURL(/\/signin/);
 
   // ラウンド一覧を開き直して、この端末のセッションが終了したことを確かめる。
@@ -149,5 +155,43 @@ test("トークンを更新できずサインアウトに失敗すると、エ�
     )
     .toBe(true);
   await expect(confirmButton).toHaveAttribute("aria-disabled", "false");
-  await expect(page).toHaveURL(/\/settings$/);
+  // 確認ダイアログが開いている間、背後のパネルは支援技術から隠れる。
+  await expect(
+    page.getByRole("dialog", {
+      name: translatorFor("settings")("title"),
+      includeHidden: true,
+    }),
+  ).toBeAttached();
+  await expect(page).toHaveURL(new RegExp(`${SETTINGS_ACCOUNT_HASH}$`));
+});
+
+test("サインアウトの確認ダイアログが開いている間、Escで確認ダイアログだけが閉じ、設定パネルは開いたままである", async ({
+  page,
+}) => {
+  // 設定パネルでサインアウトの確認を開く。
+  const { confirmButton } = await signInAndOpenDialog(page, "signout-esc", {
+    path: "/rounds/new",
+  });
+
+  // Escで、確認ダイアログだけが閉じる。
+  await page.keyboard.press("Escape");
+  await expect(confirmButton).toBeHidden();
+  await expect(settingsPanel(page)).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${SETTINGS_ACCOUNT_HASH}$`));
+});
+
+test("サインアウトの確認ダイアログの背景の押下で、確認ダイアログだけが閉じ、設定パネルは開いたままである", async ({
+  page,
+}) => {
+  // 設定パネルでサインアウトの確認を開く。
+  const { confirmButton } = await signInAndOpenDialog(page, "signout-outside", {
+    path: "/rounds/new",
+  });
+
+  // 確認ダイアログの背景(最前面の背景)を座標で押すと、確認ダイアログだけが閉じる。
+  // 中央には確認ダイアログ自身があるため、画面の左上の隅を押す。
+  await page.mouse.click(5, 5);
+  await expect(confirmButton).toBeHidden();
+  await expect(settingsPanel(page)).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${SETTINGS_ACCOUNT_HASH}$`));
 });

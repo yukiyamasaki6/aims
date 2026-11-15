@@ -196,6 +196,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
+  window.location.hash = "";
 });
 
 describe("useHistoryPages", () => {
@@ -1049,6 +1050,33 @@ describe("useHistoryPages", () => {
         RETURN_URL,
       );
     });
+
+    it.each([
+      [
+        "ハッシュがあれば、ハッシュを保って",
+        "#settings/account",
+        `${RETURN_URL}#settings/account`,
+      ],
+      ["ハッシュが無ければ、ハッシュを付けずに", "", RETURN_URL],
+    ])(
+      "印の無いURLで開くと、%s自分のURLに印を付ける",
+      async (_name, hash, expected) => {
+        // Given
+        window.location.hash = hash;
+
+        // When
+        const { result } = setup(undefined, { loads: [ok(page(["a"]))] });
+        await waitFor(() => expect(result.current.view.status).toBe("ok"));
+
+        // Then
+        // 現在のhistory.stateを渡すと、Next.jsは置き換えを取り込まない。
+        expect(window.history.replaceState).toHaveBeenCalledExactlyOnceWith(
+          null,
+          "",
+          expected,
+        );
+      },
+    );
 
     it("表示中に印の無い値へ替わると、表示済みを捨てて先頭から取得し直し、印を付け直す", async () => {
       // Given

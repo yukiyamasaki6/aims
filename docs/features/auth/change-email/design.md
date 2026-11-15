@@ -2,13 +2,13 @@
 
 ## 概要
 
-`/settings/email`で、サインイン済みの利用者が新しいメールアドレスを入力し、現在と新しいメールアドレスへ届く2つの認証コードを確認して変更する。
+設定パネルの項目の画面(ハッシュ`#settings/account/email`。`app/settings`)で、サインイン済みの利用者が新しいメールアドレスを入力し、現在と新しいメールアドレスへ届く2つの認証コードを確認して変更する。
 認証サービスの二重確認(`[auth.email] double_confirm_changes = true`)を明示して維持する。
 要求は`updateUser({ email })`、確認は`verifyOtp({ type: 'email_change' })`、再送は`resend({ type: 'email_change' })`で、どれもこの端末の接続で行う。
 Turnstileは再送だけに使う(要求と確認の呼び出しはチェックを検証しない)。
-段階は「新しいメールアドレスの入力」と「コードの確認」の2つで、コードの確認では、変更前と変更後の2つの入力欄と確認ボタン1つを出し、1回の操作で2つの欄をまとめて確認する。画面の名称(メールアドレス変更)と設定画面へ戻る操作は、共用のヘッダー(`app/navigation`)にあり、どの段階でも出る。完了では、本文に完了の文言だけを表示する。
+段階は「新しいメールアドレスの入力」と「コードの確認」の2つで、コードの確認では、変更前と変更後の2つの入力欄と確認ボタン1つを出し、1回の操作で2つの欄をまとめて確認する。画面の名称(メールアドレス変更)と分類「アカウント」へ戻る操作は、画面のヘッダー(`ScreenFrame`)にあり、どの段階でも出る。完了では、本文に完了の文言だけを表示する。
 完了時に認証サービスが返すセッション(amr=otp)はSDKが採用し、画面は置き換えもセッションの種類の判定もしない(`docs/security.md`の残余リスク(6))。
-画面の枠(`/__shell/settings/email`)をオフライン用に保存し、送信は直前にオフラインを判定して拒否する。
+背景の画面がオフラインで開けるときは、この画面もオフラインで開け(`app/offline-pwa`)、送信は直前にオフラインを判定して拒否する。
 
 ## 画面と状態
 
@@ -16,10 +16,11 @@ Turnstileは再送だけに使う(要求と確認の呼び出しはチェック�
 | --- | --- | --- |
 | 入力 | 現在のメールアドレス(読めたとき)、新しいメールアドレス、送信 | 受け付けでコード確認、失敗は理由を表示して留まる |
 | コード確認 | 「変更前(現在のアドレス)」と「変更後(新しいアドレス)」の2つのコード欄、確認ボタン1つ、再送(待機の残り秒数)、本文の戻る(入力へ)、迷惑メールの案内 | 両方の確認で完了、戻るで入力、再送でコード欄を空にして確認済みを消す |
-| 処理中 | 要求・確認・再送・本文の戻るは互いに排他で、実行中の間は他の操作を受け付けない。ヘッダーの戻る(設定へ)も押せない | 結果で解除 |
-| 完了 | 本文に完了の文言(`role="status"`)だけを表示する(ヘッダーの名称と戻るはほかの段階と同じ)。入力欄、コード欄、確認、再送、チェック、現在のメールアドレスは出さない | ヘッダーの戻るで設定画面へ。続けて変更するには開きなおす |
+| 処理中 | 要求・確認・再送・本文の戻るは互いに排他で、実行中の間は他の操作を受け付けない。ヘッダーの戻る(分類「アカウント」へ)も押せず、設定パネルの閉じる操作と分類の切り替えも受け付けない | 結果で解除 |
+| 完了 | 本文に完了の文言(`role="status"`)だけを表示する(ヘッダーの名称と戻るはほかの段階と同じ)。入力欄、コード欄、確認、再送、チェック、現在のメールアドレスは出さない | ヘッダーの戻るで分類「アカウント」へ。続けて変更するには開きなおす |
 
-- ヘッダーの戻る(設定へ)は、段階によらず同じ1つで、実行中の操作があるとき(`pending`が`null`でない)は押せない。本文には設定へ戻る操作を置かない。
+- ヘッダーの戻る(分類「アカウント」へ)は、段階によらず同じ1つで、実行中の操作があるとき(`pending`が`null`でない)は押せない。本文には分類「アカウント」へ戻る操作を置かない。
+- 実行中の操作があるかを、受け取った処理中の知らせ(`onBusyChange`)で設定パネルへ知らせる。設定パネルは、その間、閉じる操作と分類の切り替えを受け付けない(`app/settings`)。ブラウザの戻る・進むで画面が外れたときは、離脱の原則(`docs/features/auth/design.md`)に従う。
 
 - 現在のメールアドレスは、完了の間を除いて表示する。入力の段階では説明に、コード確認の段階では変更前の欄のラベルに出す。
 - 認証コードの欄は、それぞれ`autocomplete="one-time-code"`を持つ。値は制御せず、確認の送信時にDOMから読む。
@@ -40,7 +41,7 @@ Turnstileは再送だけに使う(要求と確認の呼び出しはチェック�
 - 要求と再送が受け付けられたら、コード欄を空にする(欄を作り直す。失敗のときは入力を保つ)。
 - 状態を示す領域(`role="status"`)は常に描画し、完了の文言だけを差し込む。完了の表示は、再読み込みや別の画面への移動の後は出ない。
 - 画面の作りはchange-passwordに揃える(`main`は`mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8`)。
-  `main`は、共用のヘッダー枠(`ScreenFrame`)の本文領域に画面が置くスクロールの入れ物(`h-full overflow-y-auto`)の中に置く(change-passwordと同じ)。ヘッダーには現在地(メールアドレス変更)と、`leading`に設定へ戻るリンク(`SettingsBackLink`)を入れる。`AuthHeader`は使わず、段階の説明(現在のメールアドレス、コード確認の案内)は本文の先頭の文、コード確認の段階の戻る(入力段階へ)は本文の先頭のボタンとして描く。2つのコード欄は、画面が1つのフォームとして`AuthField`と`Input`で描く。再送は`otp-code-step.tsx`の`ResendSection`(exportする)、チェックは`Turnstile`を使う。
+  `main`は、共用のヘッダー枠(`ScreenFrame`)の本文領域に画面が置くスクロールの入れ物(`h-full overflow-y-auto`)の中に置く(change-passwordと同じ)。ヘッダーには現在地(メールアドレス変更)と、`leading`に分類「アカウント」へ戻るリンク(`SettingsBackLink`)を入れる。ヘッダー枠は設定パネルの中で描かれ、メニューボタンは出ない(`app/settings`)。`AuthHeader`は使わず、段階の説明(現在のメールアドレス、コード確認の案内)は本文の先頭の文、コード確認の段階の戻る(入力段階へ)は本文の先頭のボタンとして描く。2つのコード欄は、画面が1つのフォームとして`AuthField`と`Input`で描く。再送は`otp-code-step.tsx`の`ResendSection`(exportする)、チェックは`Turnstile`を使う。
 
 ## 構成とデータの流れ
 
@@ -50,10 +51,10 @@ Turnstileは再送だけに使う(要求と確認の呼び出しはチェック�
   `otp_expiry = 900`は変更のコードにも効く。`[remotes.*]`は上書きしないため、`supabase config push`で本番とプレビューにも反映される。
 - `supabase/templates/change-email.html`: 変更前(`{{ .Email }}`)、変更後(`{{ .NewEmail }}`)、認証コード(`{{ .Token }}`)、有効期限15分、再要求で前のコードが無効になること、破棄してよいこと、両方のコードが要ることを示す。
   本文は2つの宛先で同じで、宛先で出し分ける変数は無い。
-- `src/app/(main)/settings/email/page.tsx`: 入口。認証の実装、`Connectivity`、`Clock`、手続き、サイトキーを生成して画面へ渡す。
-- `src/features/auth/ui/change-email-form.tsx`: 画面。状態を`useScreenView`で持ち、開いたときに現在のメールアドレスを読む。コード欄は要求と再送の受け付けごとに作り直し、完了では本文に完了の文言だけを描く。ヘッダーの戻るの押せなさは集約の`pending`から決める。
-- `src/features/auth/ui/settings-back-link.tsx`: 設定画面へ戻るリンク(`SETTINGS_PATH`。文言は「戻る」)。メールアドレス変更とパスワード変更のヘッダーが使う。押せないとき(`disabled`)は行き先(`href`)を持たない要素として描き、押下もフォーカスも受けず、見た目を薄くする(`opacity-50`)。
-- `src/features/auth/application/change-email.ts`: 手続き(`createChangeEmail({ authenticator, connectivity, clock })`)と約束(`ChangeEmailAuthenticator`)。操作は`load`、`request`、`confirm`、`resend`、`tickCooldown`である。設定画面へ戻るのは画面のリンクで、手続きは遷移を持たない。
+- `src/app/(main)/settings-panel-entry.tsx`: 入口。設定パネルの表示が`#settings/account/email`のときに描く項目の画面として、認証の実装、`Connectivity`、`Clock`、手続き、サイトキーを生成して画面へ渡し、設定パネルから受けた戻る操作と処理中の知らせも渡す。表示が変わると画面ごと外れ、次に開くと手続きも作り直す。
+- `src/features/auth/ui/change-email-form.tsx`: 画面。状態を`useScreenView`で持ち、開いたときに現在のメールアドレスを読む。コード欄は要求と再送の受け付けごとに作り直し、完了では本文に完了の文言だけを描く。ヘッダーの戻るの押せなさと、処理中の知らせ(`onBusyChange`)に渡す値は、集約の`pending`から決める。戻るの押下は受け取った`onBack`を呼ぶ。
+- `src/features/auth/ui/settings-back-link.tsx`: 設定パネルの分類「アカウント」へ戻るリンク(文言は「戻る」)。`href`は経路表の`SETTINGS_ACCOUNT_HASH`で、押下は既定の動作を止めて、受け取った`onBack`(設定パネルの移る操作。履歴を1つ積む)を呼ぶ。メールアドレス変更、パスワード変更、アカウント削除のヘッダーが使う。押せないとき(`disabled`)は行き先(`href`)を持たない要素として描き、押下もフォーカスも受けず、見た目を薄くする(`opacity-50`)。
+- `src/features/auth/application/change-email.ts`: 手続き(`createChangeEmail({ authenticator, connectivity, clock })`)と約束(`ChangeEmailAuthenticator`)。操作は`load`、`request`、`confirm`、`resend`、`tickCooldown`である。分類「アカウント」へ戻るのは画面のリンク(設定パネルの移る操作)で、手続きは遷移を持たない。
   約束の頼みごとは、現在のメールアドレスの読み取り、要求(結果は受け付けか失敗。受け付けのとき、応答の現在のメールアドレスを持つ)、確認(1つのコードにつき、結果は一方だけの確認か完了か失敗。手続きが欄の数だけ順に頼み、まとめる)、再送である。
 - `src/features/auth/domain/change-email-flow.ts`: 集約。段階、現在と新しいメールアドレス、欄ごとの確認できたコードの値、実行中の操作(`request`、`confirm`、`resend`)、再送の待ち、チェックのトークン、欄ごとのエラーと失敗、コード欄を作り直す世代(要求と再送の受け付けで進む)、完了(`completed`。終わりの状態)を持つ。
   開始の命令は`beginRequestEmailChange`、`beginConfirmEmailChange`、`beginResendEmailChangeCode`で、実行中 → 入力 → オフライン(再送は待機 → チェックを入力に含む)の順に判定する。
@@ -62,9 +63,8 @@ Turnstileは再送だけに使う(要求と確認の呼び出しはチェック�
 - `src/features/auth/infrastructure/supabase-auth.ts`: 約束の実装を足す。応答のコードは専用の対応(下表)で写す。
 - `src/features/auth/ui/auth-messages.ts`: 上の種類と画面の文言を足す。
 - `src/features/auth/ui/otp-code-step.tsx`: `ResendSection`だけをexportする(`OtpCodeStep`の振る舞いは変えない)。
-- `src/features/settings/ui/settings-screen.tsx`、`settings-messages.ts`、`src/routes.ts`、`src/app/sw.ts`: 「メールアドレス変更」項目(パスワード変更の上)、`CHANGE_EMAIL_PATH`(`${SETTINGS_PATH}/email`)と`FRAME_PATHS`、枠の判定。
-  `sw.ts`の枠の判定は、設定の画面を個別に比べず、`FRAME_PATHS`に含まれるかで導く。
-  保護と遷移元は`/settings`の配下で、`proxy.ts`と`auth-routes.ts`は変えない。
+- `src/features/settings/ui/settings-account.tsx`、`settings-messages.ts`、`src/routes.ts`: 「メールアドレス変更」項目(パスワード変更の上)と、`CHANGE_EMAIL_HASH`(`#settings/account/email`)。
+  保護と遷移元は背景の画面(`/rounds`の配下)のものが効き、遷移元はハッシュを含む(`auth/signin`)。
 
 流れは次のとおりである。
 

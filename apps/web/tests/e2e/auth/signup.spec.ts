@@ -14,11 +14,13 @@ import {
 } from "../helpers/auth-api";
 import { fastForwardResendCooldown } from "../helpers/clock";
 import { getEmailFromMailpit, getOtpCodeFromMailpit } from "../helpers/mailpit";
+import { waitForPanelHydration } from "../helpers/settings";
 import { authMethodOf, readStoredTokens } from "../helpers/stored-session";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
+const settingsText = translatorFor("settings");
 
 const EMAIL_PLACEHOLDER = "you@example.com";
 const CODE_PLACEHOLDER = "123456";
@@ -121,9 +123,18 @@ test("登録を完了した直後にパスワードを変更しようとする�
     .click();
   await expect(page).toHaveURL(/\/rounds/);
 
-  // パスワード変更の画面で、誤った現在のパスワードを送ると、誤りが表示される。
-  await page.goto("/settings/password");
+  // 設定パネルのパスワード変更の画面で、誤った現在のパスワードを送ると、誤りが表示される。
   await waitForHydration(page);
+  await page
+    .getByRole("link", {
+      name: navigationText("leftPanelSettings"),
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole("link", { name: settingsText("changePasswordItem") })
+    .click();
+  await waitForPanelHydration(page);
   await page
     .getByPlaceholder(authText("changePasswordCurrentPlaceholder"))
     .fill(WRONG_PASSWORD);

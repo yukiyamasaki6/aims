@@ -125,6 +125,7 @@ export function useHistoryPages(options: Options) {
 
   // 履歴の項目で開いたとき(戻りの印が無いとき)は、表示済みを捨てて先頭から取得し、自分のURLに印を付ける。
   // `null`を渡す: 現在の`window.history.state`を渡すと、Next.jsは内部の印を見て置き換えを取り込まない。
+  // 今のURLのハッシュ(設定パネルの表示)を保つ。落とすと、ハッシュ付きで開いた履歴で設定パネルが閉じる。
   useEffect(() => {
     if (marked) {
       opened.current = true;
@@ -133,7 +134,11 @@ export function useHistoryPages(options: Options) {
     restorable.current = false;
     if (opened.current) setRun((n) => n + 1);
     opened.current = true;
-    window.history.replaceState(null, "", ROUNDS_HISTORY_RETURN_PATH);
+    window.history.replaceState(
+      null,
+      "",
+      ROUNDS_HISTORY_RETURN_PATH + window.location.hash,
+    );
   }, [marked]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: 取得するのは取得の組が替わったときだけで、最新の値はrefから読む

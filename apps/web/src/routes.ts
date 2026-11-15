@@ -49,29 +49,25 @@ export function roundPath(roundId: string, from?: string): string {
 export const ROUND_FRAME_ID = "_";
 export const ROUND_FRAME_PATH = `${ROUNDS_PATH}/${ROUND_FRAME_ID}`;
 
-// 設定の画面の経路。分類ごとの経路は持たない。
-export const SETTINGS_PATH = "/settings";
-
-// メールアドレス変更の画面の経路。設定の項目ごとの画面は、設定の配下に置く。
-export const CHANGE_EMAIL_PATH = `${SETTINGS_PATH}/email`;
-
-// パスワード変更の画面の経路。
-export const CHANGE_PASSWORD_PATH = `${SETTINGS_PATH}/password`;
-
-// アカウント削除の画面の経路。
-export const DELETE_ACCOUNT_PATH = `${SETTINGS_PATH}/delete-account`;
-
-// 全ての画面の枠の経路。ラウンドのホーム、履歴、作成、詳細と、設定の4画面の8つ。
+// 全ての画面の枠の経路。ラウンドのホーム、履歴、作成、詳細の4つ。
 export const FRAME_PATHS: string[] = [
   ROUNDS_HOME_PATH,
   ROUNDS_HISTORY_PATH,
   NEW_ROUND_PATH,
   ROUND_FRAME_PATH,
-  SETTINGS_PATH,
-  CHANGE_EMAIL_PATH,
-  CHANGE_PASSWORD_PATH,
-  DELETE_ACCOUNT_PATH,
 ];
+
+// 設定パネルの表示を表すURLのハッシュ。設定はパスを持たず、ログイン後の画面の上に重ねる。
+// SETTINGS_HASHは設定全体の接頭で、それ自体は分類「アカウント」として開く。
+export const SETTINGS_HASH = "#settings";
+
+// 分類「アカウント」。
+export const SETTINGS_ACCOUNT_HASH = `${SETTINGS_HASH}/account`;
+
+// 分類「アカウント」の項目の画面。
+export const CHANGE_EMAIL_HASH = `${SETTINGS_ACCOUNT_HASH}/email`;
+export const CHANGE_PASSWORD_HASH = `${SETTINGS_ACCOUNT_HASH}/password`;
+export const DELETE_ACCOUNT_HASH = `${SETTINGS_ACCOUNT_HASH}/delete-account`;
 
 // 認証の画面の経路。
 export const SIGN_IN_PATH = "/signin";

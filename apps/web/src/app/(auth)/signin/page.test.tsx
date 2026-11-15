@@ -13,10 +13,11 @@ const authText = translatorFor("auth");
 // ページ全体の置き換え(window.location.replace)の境界。jsdomは文書の置き換えを実装していないため、場所ごと差し替える。
 const page = vi.hoisted(() => ({ replace: vi.fn() }));
 
-function setLocation(search = "") {
+function setLocation(search = "", hash = "") {
   vi.stubGlobal("location", {
     pathname: "/signin",
     search,
+    hash,
     replace: page.replace,
   });
 }
@@ -242,6 +243,58 @@ describe("サインイン画面の入口", () => {
 
     // Then
     expect(page.replace).toHaveBeenCalledExactlyOnceWith("/rounds/new");
+  });
+
+  it("遷移元がハッシュを持たず、今のURLにハッシュがあるときは、成功時にハッシュ付きの遷移元へ遷移する", async () => {
+    // Given
+    setLocation("?returnTo=%2Frounds%2Fhistory", "#settings/account/password");
+    auth.signInWithPassword.mockResolvedValue({ error: null });
+    const user = userEvent.setup();
+    render(<SignInPage />, { wrapper: IntlTestProvider });
+    await fillAndVerify(user);
+
+    // When
+    await user.click(submitButton());
+
+    // Then
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith(
+      "/rounds/history#settings/account/password",
+    );
+  });
+
+  it("遷移元が既にハッシュを持てば、今のハッシュを足さずにその遷移元へ遷移する", async () => {
+    // Given
+    setLocation(
+      `?returnTo=${encodeURIComponent("/rounds#settings/account")}`,
+      "#settings/account/email",
+    );
+    auth.signInWithPassword.mockResolvedValue({ error: null });
+    const user = userEvent.setup();
+    render(<SignInPage />, { wrapper: IntlTestProvider });
+    await fillAndVerify(user);
+
+    // When
+    await user.click(submitButton());
+
+    // Then
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith(
+      "/rounds#settings/account",
+    );
+  });
+
+  it("遷移元が無いときは、設定のハッシュがあっても足さず、既定の行き先へ遷移する", async () => {
+    // Given
+    setLocation("", "#settings/account");
+    auth.signInWithPassword.mockResolvedValue({ error: null });
+    const user = userEvent.setup();
+    render(<SignInPage />, { wrapper: IntlTestProvider });
+    await fillAndVerify(user);
+
+    // When
+    await user.click(submitButton());
+
+    // Then
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 
   it("認証サービスが未知のエラーを返したときは、固定の文言を示し、認証サービスの文言を出さない", async () => {
