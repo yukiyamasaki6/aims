@@ -145,6 +145,8 @@ max_frequency = "1s"
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 900
+# メールアドレスの変更で、現在と新しいメールアドレスの両方の認証コードを要する。無効にすると新しいアドレス宛ての1通で完了するため、明示して固定する。
+double_confirm_changes = true
 
 # Use a production-ready SMTP server
 # [auth.email.smtp]
@@ -177,6 +179,11 @@ content_path = "./supabase/templates/already-signup.html"
 [auth.email.template.recovery]
 subject = "【AIMS】パスワード再設定コード"
 content_path = "./supabase/templates/reset-password.html"
+
+# メールアドレスの変更の認証コード。現在と新しいメールアドレスの両方へ、同じ本文で届く。
+[auth.email.template.email_change]
+subject = "【AIMS】メールアドレス変更の認証コード"
+content_path = "./supabase/templates/change-email.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

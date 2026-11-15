@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHANGE_EMAIL_PATH,
   CHANGE_PASSWORD_PATH,
   FRAME_PATHS,
   frameHtmlOf,
@@ -17,6 +18,7 @@ describe("routes", () => {
         "/rounds/new",
         "/rounds/_",
         "/settings",
+        "/settings/email",
         "/settings/password",
       ];
 
@@ -32,6 +34,7 @@ describe("routes", () => {
         { url: "/__shell/rounds/new", html: "rounds/new.html" },
         { url: "/__shell/rounds/_", html: "rounds/_.html" },
         { url: "/__shell/settings", html: "settings.html" },
+        { url: "/__shell/settings/email", html: "settings/email.html" },
         {
           url: "/__shell/settings/password",
           html: "settings/password.html",
@@ -41,16 +44,17 @@ describe("routes", () => {
   });
 
   describe("FRAME_PATHS", () => {
-    it("ラウンドの4画面と設定の2画面を、重複なく含む", () => {
+    it("ラウンドの4画面と設定の3画面を、重複なく含む", () => {
       // Given
       // When
       const paths = FRAME_PATHS;
 
       // Then
       expect(SETTINGS_PATH).toBe("/settings");
+      expect(CHANGE_EMAIL_PATH).toBe("/settings/email");
       expect(CHANGE_PASSWORD_PATH).toBe("/settings/password");
-      expect(paths).toHaveLength(6);
-      expect(new Set(paths).size).toBe(6);
+      expect(paths).toHaveLength(7);
+      expect(new Set(paths).size).toBe(7);
       expect(paths).toEqual(
         expect.arrayContaining([
           "/rounds",
@@ -58,6 +62,7 @@ describe("routes", () => {
           "/rounds/new",
           "/rounds/_",
           "/settings",
+          "/settings/email",
           "/settings/password",
         ]),
       );

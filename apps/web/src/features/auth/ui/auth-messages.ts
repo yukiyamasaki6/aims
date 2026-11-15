@@ -23,6 +23,9 @@ export const authMessages = {
       current_password_invalid: "現在のパスワードが正しくありません。",
       same_password:
         "現在のパスワードと同じパスワードにはできません。別のパスワードを入力してください。",
+      email_exists:
+        "このメールアドレスは使えません。別のメールアドレスを入力してください。",
+      same_email: "現在と異なるメールアドレスを入力してください。",
       other: "エラーが発生しました。しばらくしてから再度お試しください。",
     } satisfies Record<AuthFailureKind, string>,
     // 入力の誤りの種類。欄ごとに持つ。
@@ -47,6 +50,14 @@ export const authMessages = {
       },
       code: {
         required: "認証コードを入力してください。",
+      },
+      currentCode: {
+        required: "変更前のメールアドレスの認証コードを入力してください。",
+        expiredOrInvalid: "認証コードが正しくないか、有効期限が切れています。",
+      },
+      newCode: {
+        required: "変更後のメールアドレスの認証コードを入力してください。",
+        expiredOrInvalid: "認証コードが正しくないか、有効期限が切れています。",
       },
       resend: {
         cooldown:
@@ -80,6 +91,15 @@ export const authMessages = {
     resetPasswordTitle: "新しいパスワードを設定",
     resetPasswordLabel: "新しいパスワード",
     resetPasswordSubmit: "パスワードを変更",
+    // メールアドレスの変更
+    changeEmailTitle: "メールアドレス変更",
+    changeEmailCurrent: "現在のメールアドレス: {email}",
+    changeEmailNewPlaceholder: "新しいメールアドレス",
+    changeEmailCodeDescription:
+      "それぞれのメールアドレスに送信されたコードを入力してください。",
+    changeEmailCurrentCodeLabel: "変更前（{email}）",
+    changeEmailNewCodeLabel: "変更後（{email}）",
+    changeEmailDone: "メールアドレスを変更しました",
     // パスワードの変更
     changePasswordTitle: "パスワード変更",
     changePasswordCurrentPlaceholder: "現在のパスワード",

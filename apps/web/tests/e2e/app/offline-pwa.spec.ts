@@ -351,7 +351,7 @@ test("未認証で紹介画面を開くと画面の枠が保存され、サイ�
     ).toBe(true);
   }
 
-  // 保存された枠の本文に、サインイン画面にだけある入力欄がないこと(/signinのHTMLが枠として保存されていないこと)。
+  // 保存された枠の本文に、サインイン画面にだけある見出しと入力欄がないこと(/signinのHTMLが枠として保存されていないこと)。
   const frameBodies = await page.evaluate(async (frames) => {
     const name = (await caches.keys()).find((n) =>
       n.startsWith("serwist-precache"),
@@ -370,8 +370,8 @@ test("未認証で紹介画面を開くと画面の枠が保存され、サイ�
   for (const frame of SHELL_URLS) {
     const body = frameBodies[frame];
     expect(body, `${frame}の本文`).toBeTruthy();
-    expect(body, `${frame}にメール入力欄がないこと`).not.toContain(
-      'placeholder="you@example.com"',
+    expect(body, `${frame}にサインインの見出しがないこと`).not.toContain(
+      `>${authText("signInTitle")}</h1>`,
     );
     expect(body, `${frame}にパスワード入力欄がないこと`).not.toContain(
       'placeholder="パスワード"',

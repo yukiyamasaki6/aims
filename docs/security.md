@@ -13,11 +13,11 @@
 | `rate_limit.token_verifications` | 同一IPからのOTP/マジックリンク検証 | 5分間 | 30回 |
 | `rate_limit.token_refresh` | 同一IPからのセッションリフレッシュ | 5分間 | 150回 |
 | `rate_limit.email_sent` | プロジェクト全体のメール送信数 | 1時間 | 100通 |
-| `captcha`（Cloudflare Turnstile） | `signInWithPassword`・`signInWithOtp`・`resetPasswordForEmail`の各リクエスト（`verifyOtp`によるコード確認自体は対象外） | リクエストごと | Turnstile検証必須 |
+| `captcha`（Cloudflare Turnstile） | `signInWithPassword`・`signInWithOtp`・`resetPasswordForEmail`・メール変更の認証コードの再送（`resend`）の各リクエスト（`verifyOtp`によるコード確認自体は対象外） | リクエストごと | Turnstile検証必須 |
 
 レート制限はいずれもIP単位のため、captchaでリクエストごとのコストを上げてブルートフォースを抑止する。
 
-パスワード変更(`updateUser`)は、認証サービスが現在のパスワードを検証する(`[auth.email] require_current_password = true`)。
+パスワード変更(`updateUser({ password })`)は、認証サービスが現在のパスワードを検証する(`[auth.email] require_current_password = true`)。
 画面を使わない直接呼び出しにも効く。
 この更新はcaptchaを経由しない。
 現在のパスワードの確認は、OWASP Authentication Cheat SheetとASVS 2.1.6(4.0.3相当)が、パスワード変更に求める。
@@ -35,6 +35,16 @@
 auth-js 2.112.3の`signOut`は、`scope: 'others'`で401・403・404を成功として返すため、戻り値の成功とサーバーでの終了が一致しない場合がある。
 (4)パスワード再設定で、確認の成功後に離脱するか`signOutHere`が失敗すると、認証コード由来のセッションが残る。
 (5)パスワードを変更した後も、他の端末は、アクセストークンの期限(最大約1時間)が切れるまで、データを読み書きできる。
+
+メールアドレスの変更(`updateUser({ email })`)は、認証サービスが現在のパスワードを要さない(誤った値を付けても通る)。
+`double_confirm_changes`(現在と新しいメールアドレスの認証コードの両方の確認)を有効のままにする。
+無効にすると、新しいメールアドレス宛ての1通だけで、現在のメールアドレスの確認なしに完了する。
+この更新はcaptchaを経由しない(認証コードの再送だけがcaptchaを要する)。
+1回の要求と1回の再送は、現在と新しいメールアドレスへ各1通、合わせて2通を、`rate_limit.email_sent`から消費する。
+画面で現在のパスワードを要求しても、直接呼び出しには効かないため、要求しない。
+残余リスク(受け入れる): (6)メールアドレスの変更の完了時に認証サービスが返すセッション(amr=otp)は、現在のパスワードの検査を免除され、現在のパスワードなしでパスワードを変更できる。置き換えはしない。既存の認証コード由来のセッションの免除と同種である。
+(7)サインイン済みの利用者は、直接呼び出しで、メールアドレスの登録の有無を調べられる(登録済みのメールアドレスは422 `email_exists`で拒否される)。認証サービスの仕様である。サインアップは登録の有無を秘匿する。
+(8)メールアドレスを変更しても、他の端末のサインインは終了しない。
 
 ## 認可マトリクス
 

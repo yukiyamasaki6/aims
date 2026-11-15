@@ -131,7 +131,7 @@ function CodeEntryForm({
   );
 }
 
-function ResendSection({
+export function ResendSection({
   pending,
   resendCooldown,
   resendError,

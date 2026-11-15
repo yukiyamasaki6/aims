@@ -8,6 +8,11 @@ import {
 } from "@supabase/supabase-js";
 import type { SignInChange, SignInChanges } from "../application/auth-changes";
 import type { CallResult } from "../application/call-result";
+import type {
+  ChangeEmailAuthenticator,
+  EmailChangeConfirmResult,
+  EmailChangeRequestResult,
+} from "../application/change-email";
 import type { ChangePasswordAuthenticator } from "../application/change-password";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import type {
@@ -26,6 +31,7 @@ import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 export type SupabaseAuth = SignInAuthenticator &
   PasswordSetupAuthenticator &
   ChangePasswordAuthenticator &
+  ChangeEmailAuthenticator &
   OtherSessionsSignOut &
   SessionAuthenticator &
   SignInChanges;
@@ -78,6 +84,7 @@ export function createSupabaseAuth(
           }),
         CHANGE_PASSWORD_REJECTION_KINDS,
       ),
+    ...createChangeEmailAuthenticator(auth),
     // この端末のサインインだけを終える。終えられたかは、呼び出し側が、この後のサインインの状態の読み取りで決める。
     signOutHere: () => toCallResult(() => signOut(auth(), "local")),
     // この端末以外の全てのサインインを終える。
@@ -177,6 +184,13 @@ const CHANGE_PASSWORD_REJECTION_KINDS = new Map<string, RejectionKind>([
   ["over_request_rate_limit", "rate_limited"],
 ]);
 
+// メールアドレスの変更だけが使う対応。他の操作の対応に、他の利用者と重複するメールアドレスの拒否を足す。
+// 確認の誤りも期限切れも、otp_expiredで返る。
+const CHANGE_EMAIL_REJECTION_KINDS = new Map<string, RejectionKind>([
+  ...REJECTION_KINDS,
+  ["email_exists", "email_exists"],
+]);
+
 type AuthServiceError = { name?: string; code?: string };
 
 // 認証サービスのエラー(通信の断を含む)を、失敗の種類に写す。
@@ -201,6 +215,88 @@ async function toCallResult(
     return error
       ? { kind: "failed", failure: toAuthFailure(error, kinds) }
       : { kind: "accepted" };
+  } catch {
+    return { kind: "failed", failure: UNREACHABLE };
+  }
+}
+
+function createChangeEmailAuthenticator(
+  auth: () => Auth,
+): ChangeEmailAuthenticator {
+  return {
+    // 現在のメールアドレスは表示だけに使う。読めない(トークンが切れて更新できないなど)ときはnull。
+    readCurrentEmail: async () => {
+      try {
+        const { data } = await auth().getSession();
+        return data.session?.user.email ?? null;
+      } catch {
+        return null;
+      }
+    },
+    requestEmailChange: ({ newEmail }) => requestEmailChange(auth, newEmail),
+    confirmEmailChange: ({ email, code }) =>
+      confirmEmailChange(auth, email, code),
+    // emailは現在のメールアドレスにする。新しいメールアドレスを渡すと、認証サービスは何も送らず成功を返す。
+    resendEmailChangeCode: ({ email, captchaToken }) =>
+      toCallResult(
+        () =>
+          auth().resend({
+            type: "email_change",
+            email,
+            options: { captchaToken },
+          }),
+        CHANGE_EMAIL_REJECTION_KINDS,
+      ),
+  };
+}
+
+// 変更の要求。接続の取得もtryの中で行い、得られないときは届かなかった失敗にする。応答の現在のメールアドレスが要求と同じなら(大文字小文字を無視)、同じメールアドレスの要求である。
+// 認証サービスは同じメールアドレスの要求に成功を返すが、メールを送らないため、受け付けとしない。
+async function requestEmailChange(
+  auth: () => Auth,
+  newEmail: string,
+): Promise<EmailChangeRequestResult> {
+  try {
+    const { data, error } = await auth().updateUser({ email: newEmail });
+    if (error) {
+      return {
+        kind: "failed",
+        failure: toAuthFailure(error, CHANGE_EMAIL_REJECTION_KINDS),
+      };
+    }
+    const currentEmail = data.user.email;
+    if (currentEmail === undefined) {
+      return { kind: "failed", failure: { kind: "other" } };
+    }
+    if (currentEmail.toLowerCase() === newEmail.toLowerCase()) {
+      return { kind: "failed", failure: { kind: "same_email" } };
+    }
+    return { kind: "accepted", currentEmail };
+  } catch {
+    return { kind: "failed", failure: UNREACHABLE };
+  }
+}
+
+// 変更のコードの確認。一方だけの確認は利用者もセッションも返さず、両方が済むとセッションを返す。
+// 応答のセッションはSDKが採用する。
+async function confirmEmailChange(
+  auth: () => Auth,
+  email: string,
+  code: string,
+): Promise<EmailChangeConfirmResult> {
+  try {
+    const { data, error } = await auth().verifyOtp({
+      email,
+      token: code,
+      type: "email_change",
+    });
+    if (error) {
+      return {
+        kind: "failed",
+        failure: toAuthFailure(error, CHANGE_EMAIL_REJECTION_KINDS),
+      };
+    }
+    return { kind: data.session === null ? "partial" : "completed" };
   } catch {
     return { kind: "failed", failure: UNREACHABLE };
   }
