@@ -3,14 +3,13 @@ import {
   hasAllTargetFaces,
   lookupTargetFace,
   orderTargetFaces,
-  type TargetFaceRecord,
+  type TargetFaceOption,
 } from "./target-face";
 
 function face(
   id: string,
-  ownerId: string | null,
-  overrides: Partial<TargetFaceRecord> = {},
-): TargetFaceRecord {
+  overrides: Partial<TargetFaceOption> = {},
+): TargetFaceOption {
   return {
     id,
     name: id,
@@ -18,22 +17,20 @@ function face(
     format: "outdoor",
     bow_type: ["recurve"],
     target_face_spots: [],
-    owner_id: ownerId,
     ...overrides,
   };
 }
 
 describe("orderTargetFaces", () => {
-  it("個人の的を先に、それぞれ種類(outdoor→indoor→field)・サイズ(大→小)・名前の順に並べる", () => {
+  it("種類(outdoor→indoor→field)・サイズ(大→小)・名前の順に並べる", () => {
     // Given
     const records = [
-      face("g-field", null, { format: "field" }),
-      face("p-small", "user-1", { size: 40 }),
-      face("g-indoor", null, { format: "indoor" }),
-      face("g-b", null),
-      face("g-a", null),
-      face("g-small", null, { size: 80 }),
-      face("p-big", "user-1"),
+      face("field", { format: "field" }),
+      face("outdoor-small", { size: 40 }),
+      face("indoor", { format: "indoor" }),
+      face("outdoor-b"),
+      face("outdoor-a"),
+      face("outdoor-mid", { size: 80 }),
     ];
 
     // When
@@ -41,19 +38,18 @@ describe("orderTargetFaces", () => {
 
     // Then
     expect(ordered.map((record) => record.id)).toEqual([
-      "p-big",
-      "p-small",
-      "g-a",
-      "g-b",
-      "g-small",
-      "g-indoor",
-      "g-field",
+      "outdoor-a",
+      "outdoor-b",
+      "outdoor-mid",
+      "outdoor-small",
+      "indoor",
+      "field",
     ]);
   });
 
   it("元の配列を並べ替えない", () => {
     // Given
-    const records = [face("b", null), face("a", null)];
+    const records = [face("b"), face("a")];
 
     // When
     orderTargetFaces(records);
@@ -65,9 +61,9 @@ describe("orderTargetFaces", () => {
   it("種類とサイズが同じなら名前の順に並べ、名前も同じなら元の順を保つ", () => {
     // Given
     const records = [
-      face("b-first", null, { name: "b" }),
-      face("a", null, { name: "a" }),
-      face("b-second", null, { name: "b" }),
+      face("b-first", { name: "b" }),
+      face("a", { name: "a" }),
+      face("b-second", { name: "b" }),
     ];
 
     // When
@@ -78,25 +74,6 @@ describe("orderTargetFaces", () => {
       "a",
       "b-first",
       "b-second",
-    ]);
-  });
-
-  it("個人の的どうしも、種類・サイズ・名前の順に並べる", () => {
-    // Given
-    const records = [
-      face("p-indoor", "user-1", { format: "indoor" }),
-      face("p-outdoor-small", "user-1", { size: 40 }),
-      face("p-outdoor-big", "user-1"),
-    ];
-
-    // When
-    const ordered = orderTargetFaces(records);
-
-    // Then
-    expect(ordered.map((record) => record.id)).toEqual([
-      "p-outdoor-big",
-      "p-outdoor-small",
-      "p-indoor",
     ]);
   });
 });

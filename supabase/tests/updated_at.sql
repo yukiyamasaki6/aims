@@ -10,8 +10,8 @@ values ('d0000000-0000-0000-0000-000000000002', 'updated_at round', current_date
 insert into public.round_users (id, round_id, user_id, role)
 values ('d0000000-0000-0000-0000-000000000003', 'd0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000001', 'editor');
 
-insert into public.target_faces (id, owner_id, name, size, format, bow_type)
-values ('d0000000-0000-0000-0000-000000000004', 'd0000000-0000-0000-0000-000000000001', 'updated_at target', 80, 'outdoor', array['recurve']);
+insert into public.target_faces (id, name, size, format, bow_type)
+values ('d0000000-0000-0000-0000-000000000004', 'updated_at target', 80, 'outdoor', array['recurve']);
 
 insert into public.target_face_spots (id, target_face_id, center_x, center_y)
 values ('d0000000-0000-0000-0000-000000000005', 'd0000000-0000-0000-0000-000000000004', 0, 0);

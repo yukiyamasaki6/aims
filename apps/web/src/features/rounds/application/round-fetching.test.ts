@@ -17,7 +17,7 @@ import type { PresetRecord, Presets } from "../domain/preset";
 import type { QueryFailure, QueryOutcome } from "../domain/query-outcome";
 import type { ServerRoundsPage } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
-import type { TargetFaceRecord } from "../domain/target-face";
+import type { TargetFaceOption } from "../domain/target-face";
 import { createRoundQueries } from "../infrastructure/round-queries";
 import type { RoundsDbSchema } from "../infrastructure/rounds-db-schema";
 import { createContentFetcher } from "./content-fetcher";
@@ -26,16 +26,14 @@ import { createRoundFetching, type RoundQueries } from "./round-fetching";
 
 function face(
   id: string,
-  ownerId: string | null,
-  overrides: Partial<TargetFaceRecord> = {},
-): TargetFaceRecord {
+  overrides: Partial<TargetFaceOption> = {},
+): TargetFaceOption {
   return {
     id,
     name: id,
     size: 122,
     format: "outdoor",
     bow_type: ["recurve"],
-    owner_id: ownerId,
     target_face_spots: [],
     ...overrides,
   };
@@ -87,7 +85,7 @@ const notFound: QueryFailure = { status: "not-found" };
 // savedは的の保存、savedPresetsはプリセットの保存(どちらも利用者のIDがキー)。
 function memorySnapshots(
   initial: {
-    targetFaces?: TargetFaceRecord[] | null;
+    targetFaces?: TargetFaceOption[] | null;
     presets?: Presets | null;
   } = {},
 ) {
@@ -134,7 +132,7 @@ type Readings = Awaited<ReturnType<SessionReader["readSession"]>>;
 function setup(
   options: {
     queries?: Partial<RoundQueries>;
-    saved?: TargetFaceRecord[] | null;
+    saved?: TargetFaceOption[] | null;
     presets?: Presets | null;
     offline?: boolean;
     signIn?: Readings;
@@ -155,7 +153,7 @@ function setup(
     roundDetails: vi.fn(async () =>
       okResponse({ rounds: [serverRound], targetFaces: [] }),
     ),
-    targetFaces: vi.fn(async () => okResponse<TargetFaceRecord[]>([])),
+    targetFaces: vi.fn(async () => okResponse<TargetFaceOption[]>([])),
     presets: vi.fn(async () => okResponse<PresetRecord[]>([])),
     roundsList: vi.fn(async () =>
       okResponse<ServerRoundsPage>({ rounds: [], hasMore: false }),
@@ -247,7 +245,7 @@ describe("fetchRoundDetail", () => {
   it("失敗のときは、保存済みがあっても代わりにせず、結果をそのまま返す", async () => {
     // Given
     const { fetching, queries } = setup({
-      saved: [face("saved", null)],
+      saved: [face("saved")],
       offline: true,
     });
 
@@ -584,10 +582,7 @@ describe("fetchTargetFaces", () => {
     const { fetching, queries, saved } = setup({
       queries: {
         targetFaces: vi.fn(async () =>
-          okResponse([
-            face("b", null, { size: 40 }),
-            face("a", null, { size: 122 }),
-          ]),
+          okResponse([face("b", { size: 40 }), face("a", { size: 122 })]),
         ),
       },
     });
@@ -596,7 +591,7 @@ describe("fetchTargetFaces", () => {
     const result = await fetching.fetchTargetFaces();
 
     // Then
-    expect(queries.targetFaces).toHaveBeenCalledExactlyOnceWith("user-1");
+    expect(queries.targetFaces).toHaveBeenCalledExactlyOnceWith();
     expect(queries.roundDetails).not.toHaveBeenCalled();
     if (result.status !== "ok") throw new Error("not ok");
     expect(result.data.map((item) => item.id)).toEqual(["a", "b"]);
@@ -655,7 +650,7 @@ describe("FETCH_TIMEOUT_MSでの打ち切り後に届いた結果", () => {
 
   it("的の取得は、遅れて届いた結果を端末へ保存しない", async () => {
     // Given
-    const late = Promise.withResolvers<QueryOutcome<TargetFaceRecord[]>>();
+    const late = Promise.withResolvers<QueryOutcome<TargetFaceOption[]>>();
     const { fetching, clock, save } = setup({
       queries: { targetFaces: vi.fn(() => late.promise) },
     });
@@ -664,7 +659,7 @@ describe("FETCH_TIMEOUT_MSでの打ち切り後に届いた結果", () => {
     await clock.advanceAsync(FETCH_TIMEOUT_MS);
 
     // When
-    late.resolve(okResponse([face("a", null)]));
+    late.resolve(okResponse([face("a")]));
     await clock.advanceAsync(5_000);
 
     // Then
@@ -686,7 +681,7 @@ describe("fetchRoundDetails", () => {
               { ...serverRound, id: uuid1, status: "in_progress" as const },
               serverRound,
             ],
-            targetFaces: [face("g", null)],
+            targetFaces: [face("g")],
           }),
         ),
       },
@@ -696,9 +691,7 @@ describe("fetchRoundDetails", () => {
     const result = await fetching.fetchRoundDetails([uuid1]);
 
     // Then
-    expect(queries.roundDetails).toHaveBeenCalledExactlyOnceWith("user-1", [
-      uuid1,
-    ]);
+    expect(queries.roundDetails).toHaveBeenCalledExactlyOnceWith([uuid1]);
     if (result.status !== "ok") throw new Error("not ok");
     expect([...result.data.rounds.keys()]).toEqual([uuid1, "round-1"]);
     expect(result.data.rounds.get(uuid1)).toMatchObject({
@@ -747,7 +740,7 @@ describe("fetchRoundDetails", () => {
 describe("savedTargetFaces", () => {
   it("端末に保存した的の一覧を返す。無ければnullを返す", () => {
     // Given
-    const withSaved = setup({ saved: [face("saved", null)] });
+    const withSaved = setup({ saved: [face("saved")] });
     const without = setup();
 
     // When
@@ -755,7 +748,7 @@ describe("savedTargetFaces", () => {
     const second = without.fetching.savedTargetFaces();
 
     // Then
-    expect(first).toEqual([face("saved", null)]);
+    expect(first).toEqual([face("saved")]);
     expect(second).toBeNull();
   });
 });

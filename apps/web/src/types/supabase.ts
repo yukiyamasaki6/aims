@@ -583,7 +583,6 @@ export type Database = {
           format: string;
           id: string;
           name: string;
-          owner_id: string | null;
           size: number;
           updated_at: string;
         };
@@ -594,7 +593,6 @@ export type Database = {
           format: string;
           id?: string;
           name: string;
-          owner_id?: string | null;
           size: number;
           updated_at?: string;
         };
@@ -604,19 +602,10 @@ export type Database = {
           format?: string;
           id?: string;
           name?: string;
-          owner_id?: string | null;
           size?: number;
           updated_at?: string;
         };
-        Relationships: [
-          {
-            foreignKeyName: "target_faces_owner_id_fkey";
-            columns: ["owner_id"];
-            isOneToOne: false;
-            referencedRelation: "users";
-            referencedColumns: ["id"];
-          },
-        ];
+        Relationships: [];
       };
       users: {
         Row: {
