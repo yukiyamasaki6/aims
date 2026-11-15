@@ -9,7 +9,5 @@ export const navigationMessages = {
     leftPanelSettings: "設定",
     leftPanelOpenMenu: "メニューを開く",
     leftPanelCloseMenu: "メニューを閉じる",
-    leftPanelCollapse: "パネルを格納する",
-    leftPanelExpand: "パネルを開く",
   },
 } as const;

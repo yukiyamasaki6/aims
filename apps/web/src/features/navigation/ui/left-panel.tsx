@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -11,6 +11,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { LogoImage } from "@/components/logo-image";
 import { ScreenMenuProvider } from "@/components/screen-frame";
@@ -93,35 +94,97 @@ function useDrawerSwipe(onClose: () => void) {
   };
 }
 
-// ドロワーを開いたらドロワーの中へフォーカスを移し、閉じたらメニューボタンへ戻す。
-// メニューボタンは本文側(DOMでドロワーより後)にあり、Tabだけではドロワーに入れないため。
-function useDrawerFocus(
+// パネル(ドロワーか縦の列)を開いたらパネルの中へフォーカスを移し、閉じたらメニューボタンへ戻す。初回は移さない。
+// メニューボタンは本文側(DOMでパネルより後)にあり、Tabだけではパネルに入れないため。
+function usePanelFocus(
   open: boolean,
-  drawerRef: RefObject<HTMLElement | null>,
+  panelRef: RefObject<HTMLElement | null>,
   menuRef: RefObject<HTMLButtonElement | null>,
 ) {
-  const wasOpen = useRef(false);
+  const wasOpen = useRef(open);
   useEffect(() => {
-    const drawer = drawerRef.current;
-    if (open) {
-      drawer?.querySelector<HTMLElement>("button")?.focus();
-    } else if (wasOpen.current) {
+    const panel = panelRef.current;
+    if (open && !wasOpen.current) {
+      // 幅の動き始めに焦点を当てると、overflow-hiddenの外枠が焦点の要素を見せようと内側へスクロールし、開く途中で中身がずれて動く。スクロールさせない。
+      panel
+        ?.querySelector<HTMLElement>("button")
+        ?.focus({ preventScroll: true });
+    } else if (!open && wasOpen.current) {
       const active = document.activeElement;
-      if (!active || active === document.body || drawer?.contains(active))
+      if (!active || active === document.body || panel?.contains(active))
         menuRef.current?.focus();
     }
     wasOpen.current = open;
-  }, [open, drawerRef, menuRef]);
+  }, [open, panelRef, menuRef]);
+}
+
+const WIDE_QUERY = "(min-width: 768px)";
+
+function subscribeWide(onChange: () => void) {
+  const query = window.matchMedia(WIDE_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+// 幅768px以上か。サーバーと水和時はfalse。ドロワーの閉じ込めの有効判定だけに使う。
+function useWide() {
+  return useSyncExternalStore(
+    subscribeWide,
+    () => window.matchMedia(WIDE_QUERY).matches,
+    () => false,
+  );
+}
+
+// ドロワーの中のフォーカス可能な要素(閉じるボタン、ロゴ、各項目)の内で、Tabを巡回させる。フォーカスが外にあればTabで先頭、Shift+Tabで末尾へ入れる。
+function trapTab(event: KeyboardEvent, drawer: HTMLElement) {
+  const items = [...drawer.querySelectorAll<HTMLElement>("button, a[href]")];
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (!first || !last) return;
+  const active = document.activeElement;
+  const inside = active instanceof Node && drawer.contains(active);
+  if (event.shiftKey && (!inside || active === first)) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (!inside || active === last)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+// ドロワーが開いていて幅768px未満の間だけ、Escで閉じ、Tabをドロワーの中に閉じ込める。
+function useDrawerTrap(
+  active: boolean,
+  drawerRef: RefObject<HTMLElement | null>,
+  onClose: () => void,
+) {
+  useEffect(() => {
+    if (!active) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const drawer = drawerRef.current;
+      if (event.key === "Escape") onClose();
+      else if (event.key === "Tab" && drawer) trapTab(event, drawer);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [active, drawerRef, onClose]);
 }
 
 export function LeftPanel({ children }: { children: ReactNode }) {
   const { drawerOpen, setDrawerOpen, railOpen, setRailOpen } = useOpenState();
   // ホーム・履歴の項目の押下は、ドロワーの値だけを閉にする。列の値は変えない。
   const closeDrawer = () => setDrawerOpen(false);
+  const closeRail = () => setRailOpen(false);
+  const wide = useWide();
+  const trapActive = drawerOpen && !wide;
   const swipe = useDrawerSwipe(closeDrawer);
   const drawerRef = useRef<HTMLElement>(null);
-  const menuRef = useRef<HTMLButtonElement>(null);
-  useDrawerFocus(drawerOpen, drawerRef, menuRef);
+  const railRef = useRef<HTMLElement>(null);
+  const drawerMenuRef = useRef<HTMLButtonElement>(null);
+  const railMenuRef = useRef<HTMLButtonElement>(null);
+  usePanelFocus(drawerOpen, drawerRef, drawerMenuRef);
+  usePanelFocus(railOpen, railRef, railMenuRef);
+  useDrawerTrap(trapActive, drawerRef, closeDrawer);
 
   return (
     <>
@@ -144,18 +207,29 @@ export function LeftPanel({ children }: { children: ReactNode }) {
       />
 
       <RailFrame
+        railRef={railRef}
         open={railOpen}
-        onToggle={() => setRailOpen(!railOpen)}
+        onClose={closeRail}
         onNavigate={closeDrawer}
       />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div inert={trapActive} className="flex min-h-0 min-w-0 flex-1 flex-col">
         <ScreenMenuProvider
           menu={
-            <MenuButton
-              buttonRef={menuRef}
-              onOpen={() => setDrawerOpen(true)}
-            />
+            <>
+              <MenuButton
+                buttonRef={drawerMenuRef}
+                onOpen={() => setDrawerOpen(true)}
+                className="md:hidden"
+              />
+              {!railOpen && (
+                <MenuButton
+                  buttonRef={railMenuRef}
+                  onOpen={() => setRailOpen(true)}
+                  className="max-md:hidden"
+                />
+              )}
+            </>
           }
         >
           {children}
@@ -182,7 +256,6 @@ function DrawerFrame({
   offset: number;
   dragging: boolean;
 }) {
-  const t = useTranslations("navigation");
   return (
     <aside
       ref={drawerRef}
@@ -202,50 +275,62 @@ function DrawerFrame({
         open ? "translate-x-0" : "invisible",
       )}
     >
-      <div className="flex items-center justify-between gap-2 p-4">
-        <LogoLink />
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t("leftPanelCloseMenu")}
-        >
-          <X className="size-5" />
-        </button>
-      </div>
+      <PanelTopRow onClose={onClose} />
 
-      <PanelBody collapsed={false} onNavigate={onNavigate} />
+      <PanelBody onNavigate={onNavigate} />
     </aside>
   );
 }
 
+// 幅は外枠が切り取り、内枠は固定幅にする。閉じる途中で中身が折り返さず、境界線も幅0で消える。
 function RailFrame({
+  railRef,
   open,
-  onToggle,
+  onClose,
   onNavigate,
 }: {
+  railRef: RefObject<HTMLElement | null>;
   open: boolean;
-  onToggle: () => void;
+  onClose: () => void;
   onNavigate: () => void;
 }) {
   return (
     <aside
+      ref={railRef}
       className={cn(
-        "flex shrink-0 flex-col overflow-y-auto border-r bg-card text-card-foreground transition-[width] duration-200 max-md:hidden",
-        open ? "w-56" : "w-14",
+        "shrink-0 overflow-hidden max-md:hidden",
+        // 開くときはvisibilityを即時に変える(開いた直後のfocus()が効くように)。閉じるときだけ、動きの終わりまで見せる。
+        open
+          ? "w-56 transition-[width] duration-200"
+          : "invisible w-0 transition-[width,visibility] duration-200",
       )}
     >
-      <div
-        className={cn(
-          "flex items-center justify-between gap-2 p-4",
-          !open && "justify-center",
-        )}
-      >
-        <LogoLink className={cn(!open && "hidden")} />
-        <ToggleButton open={open} onClick={onToggle} />
+      <div className="flex h-full w-56 flex-col overflow-y-auto border-r bg-card text-card-foreground">
+        <PanelTopRow onClose={onClose} />
+        <PanelBody onNavigate={onNavigate} />
       </div>
-
-      <PanelBody collapsed={!open} onNavigate={onNavigate} />
     </aside>
+  );
+}
+
+// ドロワーと縦の列に共通の最上段。画面のヘッダー行と同じ高さ45pxで、下線は引かない。
+// 中身はヘッダーの線を除いた行と同じ上端から44pxの範囲に置き、アイコンとロゴの位置をヘッダーと揃える。
+function PanelTopRow({ onClose }: { onClose: () => void }) {
+  const t = useTranslations("navigation");
+  return (
+    <div className="h-[45px] shrink-0">
+      <div className="flex h-11 items-center gap-2 px-1.5">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("leftPanelCloseMenu")}
+          className="flex shrink-0 items-center p-1.5"
+        >
+          <X className="size-5" />
+        </button>
+        <LogoLink />
+      </div>
+    </div>
   );
 }
 
@@ -283,20 +368,12 @@ function NavItem({
   );
 }
 
-// collapsed: 縦の列の格納時に、中身を隠す。onNavigate: ホーム・履歴の項目の押下で呼ぶ。
-function PanelBody({
-  collapsed,
-  onNavigate,
-}: {
-  collapsed: boolean;
-  onNavigate: () => void;
-}) {
+// onNavigate: ホーム・履歴の項目の押下で呼ぶ。
+function PanelBody({ onNavigate }: { onNavigate: () => void }) {
   const t = useTranslations("navigation");
   return (
     <>
-      <nav
-        className={cn("flex flex-1 flex-col gap-1 px-4", collapsed && "hidden")}
-      >
+      <nav className="flex flex-1 flex-col gap-1 px-4 pt-1">
         <NavItem href={ROUNDS_HOME_PATH} onNavigate={onNavigate}>
           {t("leftPanelHome")}
         </NavItem>
@@ -305,7 +382,7 @@ function PanelBody({
         </NavItem>
       </nav>
 
-      <div className={cn("flex flex-col border-t p-4", collapsed && "hidden")}>
+      <div className="flex flex-col border-t p-4">
         <NavItem href={SETTINGS_PATH} onNavigate={onNavigate}>
           {t("leftPanelSettings")}
         </NavItem>
@@ -314,13 +391,15 @@ function PanelBody({
   );
 }
 
-// ドロワーの開き口。画面のヘッダー行の先頭に、ScreenFrameが置く。
+// ドロワーと縦の列の開き口。画面のヘッダー行の先頭に、ScreenFrameが置く。className: 表示する幅の指定。
 function MenuButton({
   onOpen,
   buttonRef,
+  className,
 }: {
   onOpen: () => void;
   buttonRef: RefObject<HTMLButtonElement | null>;
+  className: string;
 }) {
   const t = useTranslations("navigation");
   return (
@@ -329,7 +408,7 @@ function MenuButton({
       type="button"
       onClick={onOpen}
       aria-label={t("leftPanelOpenMenu")}
-      className="flex shrink-0 items-center p-1.5 md:hidden"
+      className={cn("flex shrink-0 items-center p-1.5", className)}
     >
       <Menu className="size-5" />
     </button>
@@ -359,8 +438,8 @@ function Scrim({
       }}
       type="button"
       aria-label={t("leftPanelCloseMenu")}
-      aria-hidden={!open}
-      tabIndex={open ? 0 : -1}
+      aria-hidden
+      tabIndex={-1}
       onClick={onClose}
       className={cn(
         "fixed inset-0 z-40 bg-black/40 md:hidden",
@@ -370,29 +449,5 @@ function Scrim({
         open ? "visible" : "invisible pointer-events-none",
       )}
     />
-  );
-}
-
-function ToggleButton({
-  open,
-  onClick,
-}: {
-  open: boolean;
-  onClick: () => void;
-}) {
-  const t = useTranslations("navigation");
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={open ? t("leftPanelCollapse") : t("leftPanelExpand")}
-      className="shrink-0"
-    >
-      {open ? (
-        <ChevronLeft className="size-5" />
-      ) : (
-        <ChevronRight className="size-5" />
-      )}
-    </button>
   );
 }
