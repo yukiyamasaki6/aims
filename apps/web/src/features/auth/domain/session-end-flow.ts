@@ -9,6 +9,10 @@ import type { Start, Step } from "./flow";
 // 超えたら終えられなかった(通信エラー)として返し、再度確認できるようにする。
 export const SIGN_OUT_TIMEOUT_MS = 10_000;
 
+// アカウント削除が保持するセッションの終了の実行中の上限。再認証と削除の呼び出しの全体(削除の応答を受けた時点で解く)が対象で、削除の後のサインインの終了(SIGN_OUT_TIMEOUT_MS)は対象外。
+// 再認証と削除の呼び出しは、認証サービスとデータベースの通信が詰まると長く待つため。超えたら結果不明(通信エラー)として返す。
+export const HOLD_TIMEOUT_MS = 90_000;
+
 // running: サインアウトを実行中。実行中は、次のサインアウトを開始せず、喪失の遷移はサインアウトの判定に委ねる(遷移しない)。
 // generation: 開始のたびに、また打ち切りのたびに進める世代。打ち切られた実行の続きを見分ける(続きが自分の世代でなければ何もしない)。
 export type SessionEndFlow = {
@@ -26,7 +30,7 @@ export type SignOutVerdict =
   | { readonly kind: "completed" }
   | { readonly kind: "failed"; readonly failure: AuthFailure };
 
-// サインアウトを始める。実行中なら始めない。
+// サインアウトを始める。実行中なら始めない。アカウント削除の保持(holdEnd)も、同じ命令で実行中を取る。
 export function beginSignOut(
   flow: SessionEndFlow,
 ): Start<SessionEndFlow, true> {
@@ -75,6 +79,12 @@ export function expireSignOut(
     state: { running: false, generation: flow.generation + 1 },
     result: { kind: "failed", failure: UNREACHABLE },
   };
+}
+
+// 開始時の世代(mine)の保持を解く。実行中で世代が一致するときだけ実行中を解き、世代は進めない。一致しないとき(打ち切られた、または既に解けている)は状態を変えない。
+export function releaseEnd(flow: SessionEndFlow, mine: number): SessionEndFlow {
+  if (!flow.running || flow.generation !== mine) return flow;
+  return { ...flow, running: false };
 }
 
 // ページ全体を置き換える先を返す(置き換えないときはnull)。状態は変えない。

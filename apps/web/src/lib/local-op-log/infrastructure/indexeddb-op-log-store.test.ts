@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { openDB } from "idb";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   NewOpLogEntry,
   OpLogStore,
@@ -516,6 +516,88 @@ describe("op log store", () => {
       // Then
       expect([...all.keys()].sort()).toEqual(["round:a", "round:c"]);
       expect(all.get("round:a")?.base?.base).toEqual(base(1));
+    });
+  });
+
+  describe("erase", () => {
+    const base = (revision: number): Base => ({ revision, keep: true });
+
+    it("指定した利用者の操作とベースを全ての列から消し、他の利用者と利用者なしの行は残す", async () => {
+      // Given
+      const store = newStore();
+      await store.append(entry("mine-1"));
+      await store.append(entry("mine-2", { streamId: "round:r2" }));
+      await store.append(entry("other-user", { userId: "user-2" }));
+      await store.append(entry("signed-out", { userId: null }));
+      await store.commit("round:r3", "user-1", base(1), 10);
+      await store.commit("round:r3", "user-2", base(1), 10);
+
+      // When
+      await store.erase("user-1");
+
+      // Then
+      const mine = await store.loadAll("user-1");
+      const other = await store.loadAll("user-2");
+      const anonymous = await store.loadAll(null);
+      expect(mine.size).toBe(0);
+      expect(other.get(STREAM)?.entries.map((e) => e.operation.value)).toEqual([
+        "other-user",
+      ]);
+      expect(other.get("round:r3")?.base).toBeDefined();
+      expect(
+        anonymous.get(STREAM)?.entries.map((e) => e.operation.value),
+      ).toEqual(["signed-out"]);
+    });
+
+    it("消す行が無くても失敗しない", async () => {
+      // Given
+      const store = newStore();
+      await store.append(entry("other-user", { userId: "user-2" }));
+
+      // When
+      const erasing = store.erase("user-1");
+
+      // Then
+      await expect(erasing).resolves.toBeUndefined();
+      expect((await store.loadAll("user-2")).size).toBe(1);
+    });
+
+    it("消去の後に同じ利用者のIDで追記された行(別のタブの追記)は、別の利用者から読めない", async () => {
+      // Given
+      const store = newStore();
+      await store.append(entry("before"));
+      await store.erase("user-1");
+
+      // When
+      await store.append(entry("late-from-other-tab"));
+
+      // Then
+      expect((await store.loadAll("user-2")).size).toBe(0);
+      expect((await store.loadAll(null)).size).toBe(0);
+    });
+
+    it("ベースの消去が失敗したとき、トランザクションを取り消し、操作もベースも一部だけが消えた状態にならない", async () => {
+      // Given
+      const store = newStore();
+      await store.append(entry("mine"));
+      await store.commit("round:r3", "user-1", base(1), 10);
+      const before = await store.loadAll("user-1");
+      const remove = IDBObjectStore.prototype.delete;
+      vi.spyOn(IDBObjectStore.prototype, "delete").mockImplementation(function (
+        this: IDBObjectStore,
+        query,
+      ) {
+        if (this.name === "bases") throw new Error("bases");
+        return remove.call(this, query);
+      });
+
+      // When
+      const error = await store.erase("user-1").catch((e: unknown) => e);
+      vi.restoreAllMocks();
+
+      // Then
+      expect((error as Error).message).toBe("bases");
+      expect(await store.loadAll("user-1")).toEqual(before);
     });
   });
 

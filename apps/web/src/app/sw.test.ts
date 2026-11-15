@@ -102,6 +102,11 @@ describe("sw", () => {
         ["/settings/email?tab=1#top", "/__shell/settings/email"],
         ["/settings/password", "/__shell/settings/password"],
         ["/settings/password?tab=1#top", "/__shell/settings/password"],
+        ["/settings/delete-account", "/__shell/settings/delete-account"],
+        [
+          "/settings/delete-account?tab=1#top",
+          "/__shell/settings/delete-account",
+        ],
       ])("%sはプリキャッシュの%sを返す", async (url, frameUrl) => {
         // Given
         const frame = new Response("frame");
@@ -280,6 +285,7 @@ describe("sw", () => {
       "/__shell/settings",
       "/__shell/settings/email",
       "/__shell/settings/password",
+      "/__shell/settings/delete-account",
       "/_next/static/chunks/main.js",
       "/offline",
     ])("%sは保存する", async (url) => {

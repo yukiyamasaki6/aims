@@ -14,7 +14,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 | 画面・状態 | 内容 |
 | :--- | :--- |
 | `/` | 未認証・認証済みとも、アプリ名、説明文、開始ボタンを持つ紹介画面を表示する。開始ボタンは常に`/signup`へのリンクで、認証済みなら`/signup`の認証済みの転送で`/rounds`(ホーム)へ着く。 |
-| `/rounds` 配下・`/settings` 配下（`/settings/email`、`/settings/password`を含む。未認証） | 遷移元のパス付きで `/signin` へリダイレクトする。`/rounds/history`、`/rounds/new`、`/rounds/[id]` も対象である。 |
+| `/rounds` 配下・`/settings` 配下（`/settings/email`、`/settings/password`、`/settings/delete-account`を含む。未認証） | 遷移元のパス付きで `/signin` へリダイレクトする。`/rounds/history`、`/rounds/new`、`/rounds/[id]` も対象である。 |
 | ロゴ | レフトパネルのAIMSロゴと、認証画面・`/`・`/offline` の左上のロゴは `/` へ遷移する。 |
 | セッション喪失 | `SIGNED_OUT`（通知は発生元を区別せず届く）と、マウント時の `unauthenticated` で、遷移元のパス付きで `/signin` へ遷移する。明示のサインアウトの実行中の喪失は、サインアウトの判定に委ねる(終えられたら遷移元を付けずに移る。`auth/signout`)。`unknown` では留まる。保存先が空の未認証は、オフラインでもマウント時に `/signin` へ移り、`/offline` が出る。 |
 | レフトパネルのリンク | 「ホーム」項目は `/rounds` へ、「履歴」項目は `/rounds/history` へ、下端の「設定」項目は `/settings` へ遷移し、表示中のビューの項目に `aria-current="page"` が付く。 |
@@ -31,6 +31,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 | 設定(`/settings`) | なし | 設定 | なし |
 | メールアドレス変更(`/settings/email`) | 設定へ(処理中は押せない) | メールアドレス変更 | なし |
 | パスワード変更(`/settings/password`) | 設定へ(処理中は押せない) | パスワード変更 | なし |
+| アカウント削除(`/settings/delete-account`) | 設定へ(処理中は押せない) | アカウント削除 | なし |
 
 - 開閉状態は2つの真偽値をメモリ上(`useState`)だけで持つ。ドロワーは `drawerOpen`（始まりは閉）、列は `railOpen`（始まりは開）。向きは値・枠・開き口のどれにも使わない。幅をまたいで往復しても、それぞれの値が保たれる。再読み込みで初期値に戻る。
 - 開閉の幅と位置は、開閉の操作で200msのtransitionで動く。列は外枠の幅(224px↔0)だけを動かし、中身は224pxのまま外枠で切り取る(閉じる途中で中身が折り返さない)。幅768pxをまたぐ切り替え（回転、窓の変形）は、ドロワーと縦の列が別の枠で切り替わるので動かない。初回表示は最初から切り替え後の状態で表示する。
@@ -53,7 +54,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 - 遷移の約束(アプリ全体): ナビゲーションの機能は遷移の約束を持たない。開始の行き先は、経路表の `SIGN_UP_PATH` へ、`start-button.tsx` のリンクで遷移する。ルーターで進む遷移は共有の技術の `PageNavigation`(`src/lib/page-navigation/contract/page-navigation.ts`。認証のパスワード再設定とラウンドの開始、完了、削除して離れるが使う)、ページ全体の読み込みの遷移は認証の `PageReplace`(`src/features/auth/application/page-replace.ts`。実装は `infrastructure/browser-page-load.ts`。サインイン、サインアップの完了、サインアウト、セッションの喪失、利用者の不一致が使う)、遷移元の読み出しは入口の `readReturnTo` である。
 - `src/app/(main)/layout.tsx`(入口): 認証が要る画面の集合の枠。入口が渡すセッションの手続きを`useSession`で受け取って見張りを始める。根の枠(幅によらず横並び)の中に`LeftPanel`を描き、画面を`LeftPanel`の子(本文領域)として渡す。
 - `src/components/screen-frame.tsx`(共有の画面部品): ヘッダー枠。`ScreenFrame`は、ヘッダー(`<header>`。高さは下端の線を含めて45px(`h-[45px]`、`box-sizing: border-box`で線の1pxを含む)で、操作の置き場は44px。行は幅を制限せず本文領域の幅いっぱいである。ヘッダーは左右に6px(`px-1.5`)の余白を持ち、中身は高さ44px(45pxから下線1pxを除いた分)の行の上下中央に置く。アイコンの枠32pxでは、上下の余白も左右と同じ6px((44px−32px)/2)になる。アイコンのボタン(メニューボタン、履歴のフィルター、ラウンドのメニュー)は、押せる範囲の枠(32px四方。アイコン20pxと周囲6pxの内側の余白)も含めて1つのアイコンとする。文字の要素も周囲に6pxの余白を取る: 現在地は`p-1.5 text-base leading-5`(文字16px、行の高さ20pxで32px。上下6px)、戻るは`p-1.5`(20pxで32px)、プリセット保存は従来の28pxのボタン(`size="sm"`)の外に`m-1.5`(40px)。どれも44pxの内側に収まる。下端に区切りの線(`border-b`)を引く)と、その下の本文領域の枠(`min-h-0 flex-1 overflow-hidden`)を縦に並べ、`h-full`で親に従う。本文領域の枠は高さ(画面の高さからヘッダーを除いた分)を子に与えるだけで、スクロールしない。スクロールの有無と入れ物は各画面が決め、子は`h-full`で枠の高さを受ける。行には、文脈から受けたメニューの部品、`leading`(戻る)、`title`(現在地。`h1`。太字にしない)、右端(本文領域の右端)に`trailing`(画面固有の操作)を置く。ヘッダーのアイコンだけのボタン(メニューボタン、履歴のフィルター、詳細のラウンドのメニュー)は、大きさだけをそろえる(アイコン20pxを含む32px四方の枠)。色と見た目の種類は各ボタンの従来のままで、そろえない。部品は各機能が持ち、共通の部品にはしない。`ScreenMenuProvider`がメニューの部品(`ReactNode`)を文脈で渡し、文脈が無いとき(画面の単体のテスト)はメニューを出さない。業務の言葉を持たず、ドロワーを知らない。z-indexを持たない。
-- 各画面の部品(`rounds-home.tsx`、`rounds-history.tsx`、`round-preset-select.tsx`、`round-detail-frame.tsx`、`settings-screen.tsx`、`change-email-form.tsx`、`change-password-form.tsx`)が、自分の状態から中身を決めて`ScreenFrame`を描き、本文のスクロールの入れ物を自分で持つ(ホーム・履歴・設定・メール変更・パスワード変更は本文全体、作成は一覧だけ、詳細は`<main>`だけ)。`LeftPanel`の本文領域もスクロールしない。ヘッダーの下線と本文の間の余白も各画面の本文が持ち、ホーム・履歴・設定・詳細は32px(`p-8`・`py-8`)である。取得中の枠とSuspenseの代替表示も同じ枠を描き、ヘッダーを動かさない。現在地の名称の文言は各画面の機能の文言の一覧が持つ。
+- 各画面の部品(`rounds-home.tsx`、`rounds-history.tsx`、`round-preset-select.tsx`、`round-detail-frame.tsx`、`settings-screen.tsx`、`change-email-form.tsx`、`change-password-form.tsx`、`delete-account-form.tsx`)が、自分の状態から中身を決めて`ScreenFrame`を描き、本文のスクロールの入れ物を自分で持つ(ホーム・履歴・設定・メール変更・パスワード変更・アカウント削除は本文全体、作成は一覧だけ、詳細は`<main>`だけ)。`LeftPanel`の本文領域もスクロールしない。ヘッダーの下線と本文の間の余白も各画面の本文が持ち、ホーム・履歴・設定・詳細は32px(`p-8`・`py-8`)である。取得中の枠とSuspenseの代替表示も同じ枠を描き、ヘッダーを動かさない。現在地の名称の文言は各画面の機能の文言の一覧が持つ。
 - `src/components/app-logo.tsx`(共有の画面部品)が、認証画面・`/`・`/offline` の左上のロゴである。ロゴの行き先は、経路表(`src/routes.ts`)の `HOME_PATH`(`/`)で、`left-panel.tsx` のロゴも同じである。
 - `src/components/logo-image.tsx`(共有の画面部品)が、文字付きロゴの画像（`public/logo.svg`）を表示する。代替テキスト「AIMS」がロゴのリンクの名前になる。`app-logo.tsx` と `left-panel.tsx` が使う。
 - `public/logo.svg` は、`scripts/generate-icon.mjs` が、マークと同じ値と、`geist` のGeist SansのBoldの字形から生成する。文字は図形にし、フォントを参照しない。READMEの冒頭も同じファイルを表示する。

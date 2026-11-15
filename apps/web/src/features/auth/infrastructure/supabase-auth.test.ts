@@ -3,6 +3,7 @@ import {
   type AuthError,
   AuthRefreshDiscardedError,
   AuthRetryableFetchError,
+  AuthSessionMissingError,
   type Session,
   type SupabaseClient,
 } from "@supabase/supabase-js";
@@ -37,6 +38,7 @@ function setup() {
     updateUser: vi.fn(),
     signOut: vi.fn(),
     getSession: vi.fn(),
+    getUser: vi.fn(),
     onAuthStateChange: vi.fn((listener: Listener) => {
       listeners.push(listener);
       // 解除すると、実際にこのリスナーへ以降の出来事が届かなくなる。
@@ -1138,6 +1140,154 @@ describe("メールアドレスの変更(readCurrentEmail、requestEmailChange�
       for (const result of results) expect(result).toEqual(unreachable);
       expect(reading).toBeNull();
     });
+  });
+});
+
+describe("アカウント削除の再認証(reauthenticate)", () => {
+  const request = {
+    password: "password-current1",
+    captchaToken: "captcha-token",
+  };
+  const currentEmail = "current@example.com";
+
+  function withCurrentUser() {
+    const fixture = setup();
+    fixture.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-1", email: currentEmail } },
+      error: null,
+    });
+    return fixture;
+  }
+
+  it("現在のメールアドレスを読み、そのメールアドレスと入力されたパスワードとチェックのトークンで認証し、成功なら利用者のIDを返す", async () => {
+    // Given
+    const { service, auth } = withCurrentUser();
+    auth.signInWithPassword.mockResolvedValue({
+      data: { user: { id: "user-1" } },
+      error: null,
+    });
+
+    // When
+    const result = await service.reauthenticate(request);
+
+    // Then
+    expect(result).toEqual({ kind: "verified", userId: "user-1" });
+    expect(auth.signInWithPassword).toHaveBeenCalledExactlyOnceWith({
+      email: currentEmail,
+      password: request.password,
+      options: { captchaToken: request.captchaToken },
+    });
+  });
+
+  it.each([
+    [
+      "パスワードの誤り",
+      new AuthApiError("invalid", 400, "invalid_credentials"),
+      "current_password_invalid",
+    ],
+    [
+      "リクエストの制限",
+      new AuthApiError("limit", 429, "over_request_rate_limit"),
+      "rate_limited",
+    ],
+    [
+      "チェックの拒否",
+      new AuthApiError("captcha", 400, "captcha_failed"),
+      "captcha_failed",
+    ],
+    ["通信の断", connectionLost, "unreachable"],
+    ["未知のコード", new AuthApiError("x", 500, "unexpected_failure"), "other"],
+  ])(
+    "認証が%sで拒否されると、失敗の種類%sに写す",
+    async (_name, error, kind) => {
+      // Given
+      const { service, auth } = withCurrentUser();
+      auth.signInWithPassword.mockResolvedValue({
+        data: { user: null },
+        error,
+      });
+
+      // When
+      const result = await service.reauthenticate(request);
+
+      // Then
+      expect(result).toEqual({ kind: "failed", failure: { kind } });
+    },
+  );
+
+  it.each([
+    ["401", new AuthApiError("jwt", 401, "bad_jwt")],
+    ["403", new AuthApiError("gone", 403, "user_not_found")],
+  ])(
+    "現在の利用者の確認が%sで拒否されると、サインインの喪失として返し、認証は呼ばない",
+    async (_name, error) => {
+      // Given
+      const { service, auth } = setup();
+      auth.getUser.mockResolvedValue({ data: { user: null }, error });
+
+      // When
+      const result = await service.reauthenticate(request);
+
+      // Then
+      expect(result).toEqual({ kind: "lost" });
+      expect(auth.signInWithPassword).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["通信の断", connectionLost, "unreachable"],
+    ["セッションが無い", new AuthSessionMissingError(), "other"],
+  ])(
+    "現在の利用者の確認が%sで失敗しても、サインインの喪失にせず、失敗の種類%sにして、認証は呼ばない",
+    async (_name, error, kind) => {
+      // Given
+      const { service, auth } = setup();
+      auth.getUser.mockResolvedValue({ data: { user: null }, error });
+
+      // When
+      const result = await service.reauthenticate(request);
+
+      // Then
+      expect(result).toEqual({ kind: "failed", failure: { kind } });
+      expect(auth.signInWithPassword).not.toHaveBeenCalled();
+    },
+  );
+
+  it("現在の利用者がメールアドレスを持たなければ、その他の失敗にして、認証は呼ばない", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-1" } },
+      error: null,
+    });
+
+    // When
+    const result = await service.reauthenticate(request);
+
+    // Then
+    expect(result).toEqual({ kind: "failed", failure: { kind: "other" } });
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("呼び出しが投げたとき、接続を得られないときは、届かなかった失敗にする", async () => {
+    // Given
+    const thrown = withCurrentUser();
+    thrown.auth.signInWithPassword.mockRejectedValue(new Error("network down"));
+    const service = unavailableService();
+
+    // When
+    const results = [
+      await thrown.service.reauthenticate(request),
+      await service.reauthenticate(request),
+    ];
+
+    // Then
+    for (const result of results) {
+      expect(result).toEqual({
+        kind: "failed",
+        failure: { kind: "unreachable" },
+      });
+    }
   });
 });
 

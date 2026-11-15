@@ -106,6 +106,17 @@ export const authMessages = {
     changePasswordNewPlaceholder: "新しいパスワード",
     changePasswordSubmit: "パスワードを変更",
     changePasswordDone: "パスワードを変更しました。",
+    // アカウントの削除
+    deleteAccountTitle: "アカウント削除",
+    deleteAccountIrreversible: "アカウントを削除すると元に戻せません。",
+    deleteAccountItemRelated:
+      "アカウントに関連するラウンド・プリセットが削除されます",
+    deleteAccountItemOthersRemain:
+      "ラウンドに他の編集可能な利用者がいる場合は削除されません",
+    deleteAccountItemDuration: "削除には時間がかかる場合があります",
+    deleteAccountPrompt: "削除するにはパスワードを入力してください。",
+    deleteAccountPasswordPlaceholder: "現在のパスワード",
+    deleteAccountSubmit: "アカウントを削除",
     // パスワードの設定(サインアップと再設定で共通)
     passwordFieldPlaceholder: "{label}（{min}文字以上・英数字を含む）",
     // 認証コード

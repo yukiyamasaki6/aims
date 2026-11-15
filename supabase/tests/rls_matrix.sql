@@ -618,7 +618,7 @@ cross join (select role_name from rls_role where kind = 'target') as r
 where p.pronamespace = 'public'::regnamespace;
 
 -- 期待値の方針:
---   RPC、履歴の取得（rounds_list、distances_list）と、それが読むラウンドの条件の関数（history_rounds）、SELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
+--   RPC、アカウント削除（delete_account）、履歴の取得（rounds_list、distances_list）と、それが読むラウンドの条件の関数（history_rounds）、SELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
 --   distance_config_over_limit: SECURITY INVOKERのsave_round_as_presetが呼ぶ純関数のため、authenticatedだけtrue。anonはfalse。
 --   is_round_editor、shot_fits: RPC（SECURITY DEFINER）の内部だけが呼ぶため、どちらもfalse。
 --   トリガー関数（handle_new_user, set_updated_at）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
@@ -634,6 +634,8 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.create_distance(uuid,uuid,uuid,text,bigint,bigint,bigint,uuid,boolean)',   'authenticated', true),
   ('public.create_round(uuid,uuid,text,date,text,text,jsonb)',                        'anon',          false),
   ('public.create_round(uuid,uuid,text,date,text,text,jsonb)',                        'authenticated', true),
+  ('public.delete_account()',                                                        'anon',          false),
+  ('public.delete_account()',                                                        'authenticated', true),
   ('public.disable_distance(uuid,uuid)',                                              'anon',          false),
   ('public.disable_distance(uuid,uuid)',                                              'authenticated', true),
   ('public.disable_round(uuid,uuid)',                                                 'anon',          false),
