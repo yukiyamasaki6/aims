@@ -2103,7 +2103,7 @@ describe("RoundsHistory", () => {
     });
 
     describe("編集と削除", () => {
-      it("要約を押すと、その行の値が入ったダイアログが「保存」と「削除」で開き、保存すると、その位置の行だけが置き換わり、適用で取得し直す", async () => {
+      it("要約を押すと、その行の値が入ったダイアログが「確定」と「削除」で開き、確定すると、その位置の行だけが置き換わり、適用で取得し直す", async () => {
         // Given
         const user = await renderWithDistances([
           distanceRow(50, { arrowsPerEnd: 6 }),
@@ -2126,7 +2126,7 @@ describe("RoundsHistory", () => {
         // Then
         expect(opened.distance).toBe("50");
         expect(opened.arrowsPerEnd).toBe("6");
-        expect(opened.confirm).toBe(roundsText("save"));
+        expect(opened.confirm).toBe(roundsText("confirm"));
         expect(opened.hasDelete).not.toBeNull();
         expect(summaries()[0]).toHaveTextContent("70m");
         expect(summaries()[1]).toHaveTextContent("30m");

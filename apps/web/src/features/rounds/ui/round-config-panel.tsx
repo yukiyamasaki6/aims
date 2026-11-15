@@ -209,7 +209,7 @@ function RoundConfigFields({
         data-testid="round-config-save"
         onClick={onSave}
       >
-        {t("save")}
+        {t("confirm")}
       </Button>
     </div>
   );

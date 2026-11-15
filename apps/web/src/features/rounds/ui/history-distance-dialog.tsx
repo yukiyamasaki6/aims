@@ -90,7 +90,7 @@ function DistanceActions({
   const confirmLabel = {
     add: t("historyDistanceAdd"),
     select: t("historyDistanceDecide"),
-    edit: t("save"),
+    edit: t("confirm"),
   }[mode];
   return (
     <div className="flex gap-2">
