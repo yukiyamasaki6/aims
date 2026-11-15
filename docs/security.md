@@ -13,7 +13,7 @@
 | `rate_limit.token_verifications` | 同一IPからのOTP/マジックリンク検証 | 5分間 | 30回 |
 | `rate_limit.token_refresh` | 同一IPからのセッションリフレッシュ | 5分間 | 150回 |
 | `rate_limit.email_sent` | プロジェクト全体のメール送信数 | 1時間 | 100通 |
-| `captcha`（Cloudflare Turnstile） | `signInWithPassword`・`signInWithOtp`・`resetPasswordForEmail`・メール変更の認証コードの再送（`resend`）の各リクエスト（`verifyOtp`によるコード確認自体は対象外） | リクエストごと | Turnstile検証必須 |
+| `captcha`（Cloudflare Turnstile） | `signInWithPassword`・`signInWithOtp`・`resetPasswordForEmail`・メール変更の認証コードの再送（`resend`）、アカウント削除の再認証（`signInWithPassword`）の各リクエスト（`verifyOtp`によるコード確認自体は対象外） | リクエストごと | Turnstile検証必須 |
 
 レート制限はいずれもIP単位のため、captchaでリクエストごとのコストを上げてブルートフォースを抑止する。
 
@@ -46,6 +46,12 @@ auth-js 2.112.3の`signOut`は、`scope: 'others'`で401・403・404を成功と
 (7)サインイン済みの利用者は、直接呼び出しで、メールアドレスの登録の有無を調べられる(登録済みのメールアドレスは422 `email_exists`で拒否される)。認証サービスの仕様である。サインアップは登録の有無を秘匿する。
 (8)メールアドレスを変更しても、他の端末のサインインは終了しない。
 
+アカウント削除は、画面で現在のパスワードを`signInWithPassword`(captcha要)で再認証し、DB関数`delete_account()`が、JWTの`amr`に直近60秒の`method=password`があることを確かめてから実行する。
+関数はパスワードを受け取らず、検証と総当たりの制限は認証サービスに委ねる。`service_role`と管理APIは使わない。
+`amr`のtimestampはリフレッシュしても変わらないため、サインインを維持しているだけのトークン(認証コード由来を含む)では削除できない(実測)。
+残余リスク(受け入れる): (9)削除の後、他の端末の旧アクセストークンは、期限(最大約1時間)まで認証サービス以外へ届く。ラウンド・矢・履歴・自分のプロフィールの読み取りは空で、書き込みは参加の確認と外部キーで失敗する(実測)。的とプリセット(他の利用者の個人プリセットを含む)は、全ての認証済み利用者が読める共有データのため、読める。同じメールアドレスで再登録しても、旧トークンは新しいアカウントに結び付かない。
+(10)再認証の窓(60秒)の中に盗まれたトークンは、窓の間、削除を呼べる。現在のパスワードの総当たりは、サインインの総当たりと同じで、認証サービスの制限(IP単位。ホスト側のヘッダ設定が前提)とcaptchaに委ねる。
+
 ## 認可マトリクス
 
 | 対象テーブル   | SELECT                          | INSERT                        | UPDATE                        | DELETE                        |
@@ -70,6 +76,7 @@ auth-js 2.112.3の`signOut`は、`scope: 'others'`で401・403・404を成功と
 `round_users`はメンバー管理の書き込み経路がなく、チーム機能で必要になった時点で設計する。
 `target_faces`系はシードのみで、アプリから書き込まない。
 `users`の行は`handle_new_user`トリガーが作り、`auth.users`の削除の`CASCADE`で消える。
+`delete_account()`はSECURITY DEFINERで、EXECUTEは`authenticated`だけが持つ(`PUBLIC`・`anon`は持たない)。`users`の削除と、他の表の削除・匿名化は、この関数だけが行う。匿名化の置き先は「削除済みの利用者」(`00000000-0000-4000-8000-000000000001`)で、`auth.users`の行を持ち、サインインできない。
 
 ラウンド・距離・矢の変更は専用のイベントRPCだけを経由する。RPCはクライアントから受け取った識別子を権限判定の根拠としてそのまま信用せず、対象の親関係から実際のラウンドを特定し、`auth.uid()`がそのラウンドの`editor`であることを確認する。`author_id`もRPC内で`auth.uid()`から設定する。権限確認、イベント追記、`revision`採番、射影更新は同一トランザクションで行い、確定した`revision`を返す。
 

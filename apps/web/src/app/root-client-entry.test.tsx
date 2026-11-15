@@ -2,7 +2,14 @@ import { act, render, screen } from "@testing-library/react";
 import { useTranslations } from "next-intl";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { screenHarness } from "@/features/auth/application/screen-view-test-helpers";
+import {
+  type DeleteAccountEvent,
+  deleteAccountReducer,
+  initialDeleteAccountFlow,
+} from "@/features/auth/domain/delete-account-flow";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import { useDeleteAccount } from "@/features/auth/ui/delete-account-context";
 import {
   createUpdateActivation,
   type UpdateActivation,
@@ -10,8 +17,10 @@ import {
 import { createOpSender } from "@/features/rounds/application/op-sender";
 import { createRoundEditing } from "@/features/rounds/application/round-editing";
 import { SHORT_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
+import { DEFAULT_HISTORY_VIEW_STATE } from "@/features/rounds/domain/history-view-state";
 import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
 import { outboxOf } from "@/features/rounds/domain/round-record";
+import { createBrowserHistoryViewMemory } from "@/features/rounds/infrastructure/browser-history-view-memory";
 import { useRoundWindow } from "@/features/rounds/ui/rounds-context";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import {
@@ -26,26 +35,39 @@ const supabase = vi.hoisted(() => {
     (event: string, session: { user: { id: string } } | null) => void
   > = [];
   const unsubscribe = vi.fn();
+  // サインインの確認は、既定では通信できない状態(確かめられない)にする。
+  const offline = async (): Promise<never> => {
+    throw new Error("offline");
+  };
+  const auth = {
+    onAuthStateChange: (listener: (typeof listeners)[number]) => {
+      listeners.push(listener);
+      // 解除すると、実際にこのリスナーへ以降の出来事が届かなくなる。
+      const stop = () => {
+        unsubscribe();
+        listeners.splice(listeners.indexOf(listener), 1);
+      };
+      return { data: { subscription: { unsubscribe: stop } } };
+    },
+    getSession: vi.fn<() => Promise<unknown>>(offline),
+    getUser: vi.fn(async () => ({
+      data: { user: { id: "user-1", email: "user@example.com" } },
+      error: null,
+    })),
+    signInWithPassword: vi.fn(async () => ({
+      data: { user: { id: "user-1" } },
+      error: null,
+    })),
+    signOut: vi.fn(async () => ({ error: null })),
+  };
+  const rpc = vi.fn(async () => ({ data: null, error: null, status: 204 }));
   return {
     listeners,
     unsubscribe,
-    createBrowserClient: vi.fn(() => ({
-      auth: {
-        onAuthStateChange: (listener: (typeof listeners)[number]) => {
-          listeners.push(listener);
-          // 解除すると、実際にこのリスナーへ以降の出来事が届かなくなる。
-          const stop = () => {
-            unsubscribe();
-            listeners.splice(listeners.indexOf(listener), 1);
-          };
-          return { data: { subscription: { unsubscribe: stop } } };
-        },
-        // サインインの確認は、通信できない状態(確かめられない)にする。
-        getSession: async () => {
-          throw new Error("offline");
-        },
-      },
-    })),
+    offline,
+    auth,
+    rpc,
+    createBrowserClient: vi.fn(() => ({ auth, rpc })),
     emit(event: string, session: { user: { id: string } } | null) {
       for (const listener of [...listeners]) listener(event, session);
     },
@@ -59,6 +81,15 @@ vi.mock("@supabase/ssr", () => ({
 const storage = vi.hoisted(() => ({
   hold: false,
   release: null as null | (() => void),
+  stores: [] as Array<{
+    append: (entry: {
+      eventId: string;
+      streamId: string;
+      userId: string | null;
+      operation: { eventId: string };
+    }) => Promise<number>;
+    loadAll: (userId: string | null) => Promise<Map<string, unknown>>;
+  }>,
 }));
 vi.mock(
   "@/lib/local-op-log/infrastructure/indexeddb-op-log-store",
@@ -71,6 +102,9 @@ vi.mock(
         rules: Parameters<typeof createMemoryOpLogStore>[0],
       ) => {
         const store = createMemoryOpLogStore(rules);
+        storage.stores.push(
+          store as unknown as (typeof storage.stores)[number],
+        );
         const append = store.append.bind(store);
         store.append = async (...args) => {
           if (storage.hold) {
@@ -154,7 +188,10 @@ beforeEach(() => {
   activator.props.length = 0;
   storage.hold = false;
   storage.release = null;
+  storage.stores.length = 0;
+  supabase.auth.getSession.mockImplementation(supabase.offline);
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -169,6 +206,16 @@ function Appender({
   onWindow: (roundWindow: ReturnType<typeof useRoundWindow>) => void;
 }) {
   onWindow(useRoundWindow());
+  return <p>子要素</p>;
+}
+
+// 子の画面が、アカウント削除の手続きを受け取る。
+function DeleteAccountProbe({
+  onProcedure,
+}: {
+  onProcedure: (procedure: ReturnType<typeof useDeleteAccount>) => void;
+}) {
+  onProcedure(useDeleteAccount());
   return <p>子要素</p>;
 }
 
@@ -363,6 +410,64 @@ describe("RootClientEntry", () => {
       ]);
       expect(persistedBeforeRelease).toBe(false);
       expect(persisted).toBe(true);
+    });
+
+    it("アカウント削除の手続きは、成功すると、操作の列・参照データ・履歴の表示条件のその利用者の分を消し、他の利用者の分は残して、この端末のサインインを終える", async () => {
+      // Given
+      let deleteAccount: ReturnType<typeof useDeleteAccount> | undefined;
+      render(
+        <RootClientEntry>
+          <DeleteAccountProbe
+            onProcedure={(value) => (deleteAccount = value)}
+          />
+        </RootClientEntry>,
+      );
+      const [store] = storage.stores;
+      for (const userId of ["user-1", "user-2"]) {
+        await store.append({
+          eventId: `event-${userId}`,
+          streamId: "round:r1",
+          userId,
+          operation: { eventId: `event-${userId}` },
+        });
+        localStorage.setItem(`aims:reference:presets:${userId}`, "{}");
+        localStorage.setItem(`aims:reference:target-faces:${userId}`, "{}");
+      }
+      createBrowserHistoryViewMemory({ read: () => "user-1" }).write(
+        DEFAULT_HISTORY_VIEW_STATE,
+      );
+      supabase.auth.getSession.mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+      const harness = screenHarness<
+        ReturnType<typeof deleteAccountReducer>,
+        DeleteAccountEvent
+      >(deleteAccountReducer);
+      const view = harness.viewOf({
+        ...initialDeleteAccountFlow,
+        captchaToken: "token-1",
+      });
+
+      // When
+      await deleteAccount?.submit({ password: "password-current1" }, view);
+
+      // Then
+      expect(supabase.rpc).toHaveBeenCalledExactlyOnceWith(
+        "delete_account",
+        {},
+      );
+      expect((await store.loadAll("user-1")).size).toBe(0);
+      expect((await store.loadAll("user-2")).size).toBe(1);
+      expect(localStorage.getItem("aims:reference:presets:user-1")).toBeNull();
+      expect(
+        localStorage.getItem("aims:reference:target-faces:user-1"),
+      ).toBeNull();
+      expect(localStorage.getItem("aims:reference:presets:user-2")).toBe("{}");
+      expect(sessionStorage.getItem("aims:history-view")).toBeNull();
+      expect(supabase.auth.signOut).toHaveBeenCalledExactlyOnceWith({
+        scope: "local",
+      });
     });
 
     it("事前描画(サーバー側の描画)で生成しても、ブラウザの購読や大域の名前に触れず、投げない", () => {

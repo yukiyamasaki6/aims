@@ -81,5 +81,13 @@ export function createMemoryOpLogStore<Op extends OpBase, Base>(
         if (index >= 0) rows.splice(index, 1);
       }
     },
+    async erase(userId) {
+      for (let index = rows.length - 1; index >= 0; index -= 1) {
+        if (rows[index].userId === userId) rows.splice(index, 1);
+      }
+      for (const key of [...bases.keys()]) {
+        if (key.startsWith(`${userId}/`)) bases.delete(key);
+      }
+    },
   };
 }

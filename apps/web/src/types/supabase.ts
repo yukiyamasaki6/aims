@@ -661,6 +661,7 @@ export type Database = {
         };
         Returns: Json;
       };
+      delete_account: { Args: Record<PropertyKey, never>; Returns: undefined };
       disable_distance: {
         Args: { p_distance_event_id: string; p_distance_id: string };
         Returns: Json;

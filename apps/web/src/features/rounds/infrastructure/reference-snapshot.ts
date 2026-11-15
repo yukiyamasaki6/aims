@@ -97,3 +97,10 @@ export function createReferenceSnapshots(
       updateReferenceSnapshot(identityReader, kind, update),
   };
 }
+
+// 指定した利用者の参照データを、全ての種類で消す。アカウント削除で、端末の記録を消すために使う。他の利用者のキーは消さない。
+export function eraseReferenceSnapshots(userId: string): void {
+  for (const kind of Object.keys(SHAPES) as ReferenceKind[]) {
+    window.localStorage.removeItem(keyOf(kind, userId));
+  }
+}

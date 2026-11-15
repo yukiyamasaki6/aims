@@ -58,6 +58,19 @@ test.describe("認証済み", () => {
       page.getByRole("heading", { name: authText("changePasswordTitle") }),
     ).toBeVisible();
   });
+
+  test("設定画面で分類「アカウント」の「アカウント削除」を押すと、アカウント削除の画面へ移動する", async ({
+    page,
+  }) => {
+    await page.goto("/settings");
+    await page
+      .getByRole("link", { name: settingsText("deleteAccountItem") })
+      .click();
+    await expect(page).toHaveURL(/\/settings\/delete-account$/);
+    await expect(
+      page.getByRole("heading", { name: authText("deleteAccountTitle") }),
+    ).toBeVisible();
+  });
 });
 
 test.describe("未認証", () => {

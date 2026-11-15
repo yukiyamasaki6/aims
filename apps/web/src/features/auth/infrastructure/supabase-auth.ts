@@ -14,6 +14,10 @@ import type {
   EmailChangeRequestResult,
 } from "../application/change-email";
 import type { ChangePasswordAuthenticator } from "../application/change-password";
+import type {
+  DeleteAccountAuthenticator,
+  ReauthenticationResult,
+} from "../application/delete-account";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import type {
   SessionAuthenticator,
@@ -32,6 +36,7 @@ export type SupabaseAuth = SignInAuthenticator &
   PasswordSetupAuthenticator &
   ChangePasswordAuthenticator &
   ChangeEmailAuthenticator &
+  DeleteAccountAuthenticator &
   OtherSessionsSignOut &
   SessionAuthenticator &
   SignInChanges;
@@ -85,6 +90,7 @@ export function createSupabaseAuth(
         CHANGE_PASSWORD_REJECTION_KINDS,
       ),
     ...createChangeEmailAuthenticator(auth),
+    reauthenticate: (request) => reauthenticate(auth, request),
     // この端末のサインインだけを終える。終えられたかは、呼び出し側が、この後のサインインの状態の読み取りで決める。
     signOutHere: () => toCallResult(() => signOut(auth(), "local")),
     // この端末以外の全てのサインインを終える。
@@ -191,6 +197,13 @@ const CHANGE_EMAIL_REJECTION_KINDS = new Map<string, RejectionKind>([
   ["email_exists", "email_exists"],
 ]);
 
+// アカウント削除の再認証だけが使う対応。サインインの照合と同じ操作だが、パスワードの誤りは現在のパスワードの誤りとして示す。
+const REAUTHENTICATION_REJECTION_KINDS = new Map<string, RejectionKind>([
+  ["invalid_credentials", "current_password_invalid"],
+  ["over_request_rate_limit", "rate_limited"],
+  ["captcha_failed", "captcha_failed"],
+]);
+
 type AuthServiceError = { name?: string; code?: string };
 
 // 認証サービスのエラー(通信の断を含む)を、失敗の種類に写す。
@@ -215,6 +228,42 @@ async function toCallResult(
     return error
       ? { kind: "failed", failure: toAuthFailure(error, kinds) }
       : { kind: "accepted" };
+  } catch {
+    return { kind: "failed", failure: UNREACHABLE };
+  }
+}
+
+// 現在の利用者のメールアドレスを認証サービスで確かめ(401・403の拒否はサインインの喪失)、そのメールアドレスと現在のパスワードで再認証する。
+// 新しいセッション(JWTのamrにpasswordの認証が付く)はSDKが採用する。接続の取得もtryの中で行い、得られないときは届かなかった失敗にする。
+async function reauthenticate(
+  auth: () => Auth,
+  { password, captchaToken }: { password: string; captchaToken: string },
+): Promise<ReauthenticationResult> {
+  try {
+    const { data: current, error: userError } = await auth().getUser();
+    if (userError) {
+      return userError.status === 401 || userError.status === 403
+        ? { kind: "lost" }
+        : {
+            kind: "failed",
+            failure: toAuthFailure(userError, REAUTHENTICATION_REJECTION_KINDS),
+          };
+    }
+    const { email } = current.user;
+    if (email === undefined) {
+      return { kind: "failed", failure: { kind: "other" } };
+    }
+    const { data, error } = await auth().signInWithPassword({
+      email,
+      password,
+      options: { captchaToken },
+    });
+    return error
+      ? {
+          kind: "failed",
+          failure: toAuthFailure(error, REAUTHENTICATION_REJECTION_KINDS),
+        }
+      : { kind: "verified", userId: data.user.id };
   } catch {
     return { kind: "failed", failure: UNREACHABLE };
   }

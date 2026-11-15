@@ -79,4 +79,6 @@ export type OpLogStore<Op extends OpBase, Base> = {
   ) => Promise<void>;
   // 列から外す。
   retire: (eventIds: string[]) => Promise<void>;
+  // 指定した利用者の操作とベースを、1つのトランザクションで全て消す。他の利用者と、利用者なし(null)の行は消さない。アカウント削除で、端末の記録を消すために使う。
+  erase: (userId: string) => Promise<void>;
 };

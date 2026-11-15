@@ -58,7 +58,10 @@ export const CHANGE_EMAIL_PATH = `${SETTINGS_PATH}/email`;
 // パスワード変更の画面の経路。
 export const CHANGE_PASSWORD_PATH = `${SETTINGS_PATH}/password`;
 
-// 全ての画面の枠の経路。ラウンドのホーム、履歴、作成、詳細と、設定の3画面の7つ。
+// アカウント削除の画面の経路。
+export const DELETE_ACCOUNT_PATH = `${SETTINGS_PATH}/delete-account`;
+
+// 全ての画面の枠の経路。ラウンドのホーム、履歴、作成、詳細と、設定の4画面の8つ。
 export const FRAME_PATHS: string[] = [
   ROUNDS_HOME_PATH,
   ROUNDS_HISTORY_PATH,
@@ -67,6 +70,7 @@ export const FRAME_PATHS: string[] = [
   SETTINGS_PATH,
   CHANGE_EMAIL_PATH,
   CHANGE_PASSWORD_PATH,
+  DELETE_ACCOUNT_PATH,
 ];
 
 // 認証の画面の経路。

@@ -3,11 +3,20 @@
 import { useRouter } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { type ReactNode, useEffect, useState } from "react";
+import {
+  createDeleteAccount,
+  type LocalRecordsEraser,
+} from "@/features/auth/application/delete-account";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
 import { createSession } from "@/features/auth/application/session";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
+import {
+  type AccountDeletionDbSchema,
+  createSupabaseAccountDeletion,
+} from "@/features/auth/infrastructure/supabase-account-deletion";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { DeleteAccountProvider } from "@/features/auth/ui/delete-account-context";
 import { SessionProvider } from "@/features/auth/ui/session-context";
 import { createUpdateActivation } from "@/features/offline-pwa/application/update-activation";
 import { createBrowserLinkClicks } from "@/features/offline-pwa/infrastructure/browser-link-clicks";
@@ -39,10 +48,16 @@ import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
 import { shotIdAfter } from "@/features/rounds/domain/shot-id";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
-import { createBrowserHistoryViewMemory } from "@/features/rounds/infrastructure/browser-history-view-memory";
+import {
+  createBrowserHistoryViewMemory,
+  eraseHistoryViewMemory,
+} from "@/features/rounds/infrastructure/browser-history-view-memory";
 import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser-unique-ids";
 import { createPresetCommands } from "@/features/rounds/infrastructure/preset-commands";
-import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
+import {
+  createReferenceSnapshots,
+  eraseReferenceSnapshots,
+} from "@/features/rounds/infrastructure/reference-snapshot";
 import { createRoundOpTransport } from "@/features/rounds/infrastructure/round-op-transport";
 import { createRoundQueries } from "@/features/rounds/infrastructure/round-queries";
 import type { RoundsDbSchema } from "@/features/rounds/infrastructure/rounds-db-schema";
@@ -55,6 +70,7 @@ import { useAppHeight } from "@/hooks/use-app-height";
 import { intlConfig } from "@/i18n/messages";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
+import type { OpLogStore } from "@/lib/local-op-log/contract/op-log-store";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import {
   createRouterPageNavigation,
@@ -89,11 +105,10 @@ type Inputs = ReturnType<typeof composeInputs>;
 function composeRecords(inputs: Inputs) {
   const { identityStore, sessionReader, connectivity, clock, database } =
     inputs;
-  const hub = createRoundRecordHub({
-    store: createIndexedDbOpLogStore<SyncOperation, RoundBaseRecord>(
-      roundStreamRules,
-    ),
-  });
+  const store = createIndexedDbOpLogStore<SyncOperation, RoundBaseRecord>(
+    roundStreamRules,
+  );
+  const hub = createRoundRecordHub({ store });
   const ids = createBrowserUniqueIds();
   const editing = createRoundEditing({ hub, ids });
   const snapshots = createReferenceSnapshots(identityStore);
@@ -129,6 +144,7 @@ function composeRecords(inputs: Inputs) {
     refresh: refreshing,
   });
   return {
+    store,
     hub,
     ids,
     roundWindow,
@@ -240,13 +256,47 @@ function composeSession(inputs: Inputs, records: Records) {
   });
 }
 
+// この端末にある、指定した利用者の記録の消去。操作の列、参照データ、このタブの履歴の表示条件を、それぞれ独立に消す(1つの失敗が他を止めない)。
+function composeEraser(
+  store: OpLogStore<SyncOperation, RoundBaseRecord>,
+): LocalRecordsEraser {
+  return {
+    async erase(userId) {
+      await Promise.allSettled([
+        store.erase(userId),
+        Promise.resolve().then(() => eraseReferenceSnapshots(userId)),
+        Promise.resolve().then(() => eraseHistoryViewMemory(userId)),
+      ]);
+    },
+  };
+}
+
+// アカウント削除(再認証、削除、端末の記録の消去、セッションの終了)。
+function composeAccount(
+  inputs: Inputs,
+  records: Records,
+  session: ReturnType<typeof createSession>,
+) {
+  return createDeleteAccount({
+    authenticator: inputs.authenticator,
+    account: createSupabaseAccountDeletion(
+      createSupabaseDatabase<AccountDeletionDbSchema>(createClient),
+    ),
+    eraser: composeEraser(records.store),
+    session,
+    connectivity: inputs.connectivity,
+  });
+}
+
 // アプリで1つの部品を、1度だけ生成して結ぶ。
 function composeApp(router: PageRouter) {
   const inputs = composeInputs(router);
   const records = composeRecords(inputs);
+  const session = composeSession(inputs, records);
   return {
     localIdentity: inputs.localIdentity,
-    session: composeSession(inputs, records),
+    session,
+    deleteAccount: composeAccount(inputs, records, session),
     roundWindow: records.roundWindow,
     ...composeStores(inputs, records),
     ...composeSync(inputs, records),
@@ -274,8 +324,10 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
         <RoundsListStoreProvider store={app.listStore}>
           <RoundProceduresProvider procedures={app.procedures}>
             <SessionProvider session={app.session}>
-              <SwUpdateActivator activation={app.swUpdate} />
-              {children}
+              <DeleteAccountProvider deleteAccount={app.deleteAccount}>
+                <SwUpdateActivator activation={app.swUpdate} />
+                {children}
+              </DeleteAccountProvider>
             </SessionProvider>
           </RoundProceduresProvider>
         </RoundsListStoreProvider>

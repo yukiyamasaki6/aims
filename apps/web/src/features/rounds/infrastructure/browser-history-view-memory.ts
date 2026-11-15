@@ -49,3 +49,9 @@ export function createBrowserHistoryViewMemory(
     },
   };
 }
+
+// このタブの記憶が指定した利用者のものなら消す。アカウント削除で、端末の記録を消すために使う。別の利用者のものと、記憶が無いときは何もしない。
+export function eraseHistoryViewMemory(userId: string): void {
+  const stored = parseStored(window.sessionStorage.getItem(STORAGE_KEY));
+  if (stored?.userId === userId) window.sessionStorage.removeItem(STORAGE_KEY);
+}

@@ -6,6 +6,7 @@ import {
   expireSignOut,
   initialSessionEndFlow,
   leave,
+  releaseEnd,
 } from "./session-end-flow";
 
 describe("beginSignOut", () => {
@@ -207,5 +208,42 @@ describe("expireSignOut", () => {
     // Then
     expect(otherGeneration).toBeNull();
     expect(notRunning).toBeNull();
+  });
+});
+
+describe("releaseEnd", () => {
+  it("保持した世代なら、実行中を解き、世代は進めない", () => {
+    // Given
+    const held = beginSignOut(initialSessionEndFlow).state;
+
+    // When
+    const result = releaseEnd(held, held.generation);
+
+    // Then
+    expect(result).toEqual({ running: false, generation: held.generation });
+  });
+
+  it("実行中でないときは、状態を変えない", () => {
+    // Given
+    const idle = initialSessionEndFlow;
+
+    // When
+    const result = releaseEnd(idle, 0);
+
+    // Then
+    expect(result).toBe(idle);
+  });
+
+  it("打ち切りで世代が進んだ後の古い世代は、新しい実行中を解かない", () => {
+    // Given
+    const stale = beginSignOut(initialSessionEndFlow).state;
+    const expired = expireSignOut(stale, stale.generation);
+    const current = beginSignOut(expired?.state ?? stale).state;
+
+    // When
+    const result = releaseEnd(current, stale.generation);
+
+    // Then
+    expect(result).toBe(current);
   });
 });

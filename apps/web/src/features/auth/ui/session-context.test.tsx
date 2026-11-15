@@ -7,7 +7,11 @@ import { SessionProvider, useSession } from "./session-context";
 describe("SessionProvider", () => {
   it("提供したセッションの手続きを、子孫のuseSessionが返す", () => {
     // Given
-    const session: Session = { signOut: vi.fn(), watch: vi.fn() };
+    const session: Session = {
+      signOut: vi.fn(),
+      holdEnd: vi.fn(),
+      watch: vi.fn(),
+    };
     const wrapper = ({ children }: { children: ReactNode }) => (
       <SessionProvider session={session}>{children}</SessionProvider>
     );
@@ -21,7 +25,11 @@ describe("SessionProvider", () => {
 
   it("子要素を描画する", () => {
     // Given
-    const session: Session = { signOut: vi.fn(), watch: vi.fn() };
+    const session: Session = {
+      signOut: vi.fn(),
+      holdEnd: vi.fn(),
+      watch: vi.fn(),
+    };
 
     // When
     const { getByText } = render(

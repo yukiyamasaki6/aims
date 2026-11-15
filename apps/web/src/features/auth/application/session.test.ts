@@ -3,7 +3,10 @@ import type { Clock } from "@/lib/clock/contract/clock";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import type { SessionStatus } from "../domain/auth-change";
 import type { AuthFailure } from "../domain/auth-failure";
-import { SIGN_OUT_TIMEOUT_MS } from "../domain/session-end-flow";
+import {
+  HOLD_TIMEOUT_MS,
+  SIGN_OUT_TIMEOUT_MS,
+} from "../domain/session-end-flow";
 import type { SignInChange } from "./auth-changes";
 import type { CallResult } from "./call-result";
 import { createSession, type SessionReading } from "./session";
@@ -535,6 +538,231 @@ describe("サインアウト", () => {
       expect(page.replace).toHaveBeenCalledExactlyOnceWith(
         "/signin?returnTo=%2Frounds%2Fnew",
       );
+    });
+  });
+});
+
+describe("セッションの終了の保持(アカウント削除用)", () => {
+  const unreachable = { kind: "failed", failure: { kind: "unreachable" } };
+
+  describe("取得", () => {
+    it("実行中でなければ保持を取れ、保持の間は、別の保持もサインアウトも始められない", async () => {
+      // Given
+      const { session, authority } = setup();
+      const hold = session.holdEnd();
+
+      // When
+      const second = session.holdEnd();
+      const signOut = await session.signOut();
+
+      // Then
+      expect(hold).not.toBeNull();
+      expect(second).toBeNull();
+      expect(signOut).toEqual({ kind: "ignored" });
+      expect(authority.signOutHere).not.toHaveBeenCalled();
+    });
+
+    it("サインアウトの実行中は、保持を取れない", () => {
+      // Given
+      const { session } = setup({
+        signOutHere: () => new Promise<AuthFailure | null>(() => {}),
+      });
+      void session.signOut();
+
+      // When
+      const hold = session.holdEnd();
+
+      // Then
+      expect(hold).toBeNull();
+    });
+
+    it("保持を解くと、サインアウトを始められる", async () => {
+      // Given
+      const { session, authority } = setup();
+      const hold = session.holdEnd();
+      await hold?.release();
+
+      // When
+      await session.signOut();
+
+      // Then
+      expect(authority.signOutHere).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("保持中の喪失", () => {
+    it("保持の間は喪失の出来事が来ても遷移せず、解いた時点で未認証なら、遷移元つきのサインインへ移る", async () => {
+      // Given
+      const { session, page, state, emit } = setup({
+        here: "/settings/delete-account",
+      });
+      session.watch();
+      const hold = session.holdEnd();
+      state.status = "unauthenticated";
+
+      // When
+      emit(signedOut);
+      const duringHold = page.replace.mock.calls.length;
+      await hold?.release();
+
+      // Then
+      expect(duringHold).toBe(0);
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith(
+        "/signin?returnTo=%2Fsettings%2Fdelete-account",
+      );
+    });
+
+    it("解いた時点でサインインが維持されていれば、何も移らない", async () => {
+      // Given
+      const { session, page, emit } = setup();
+      session.watch();
+      const hold = session.holdEnd();
+      emit(signedOut);
+
+      // When
+      await hold?.release();
+
+      // Then
+      expect(page.replace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("complete", () => {
+    it("この端末のサインインを終え、終えられたら、遷移元の無いサインインへ移る", async () => {
+      // Given
+      const { session, authority, page, state } = setup({
+        here: "/settings/delete-account",
+      });
+      authority.signOutHere.mockImplementation(async () => {
+        state.status = "unauthenticated";
+        return accepted;
+      });
+      const hold = session.holdEnd();
+
+      // When
+      const result = await hold?.complete();
+
+      // Then
+      expect(result).toEqual({ kind: "ignored" });
+      expect(authority.signOutHere).toHaveBeenCalledOnce();
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+
+    it("未認証を確かめられなければ、通信エラーの失敗を返し、遷移しない", async () => {
+      // Given
+      const { session, page } = setup();
+      const hold = session.holdEnd();
+
+      // When
+      const result = await hold?.complete();
+
+      // Then
+      expect(result).toEqual(unreachable);
+      expect(page.replace).not.toHaveBeenCalled();
+    });
+
+    it("保持の上限(90秒)の計時を止め、サインアウトと同じ10秒で打ち切る", async () => {
+      // Given
+      const { session, clock, page } = setup({
+        signOutHere: () => new Promise<AuthFailure | null>(() => {}),
+      });
+      const hold = session.holdEnd();
+      const result = hold?.complete();
+
+      // When
+      await clock.advanceAsync(SIGN_OUT_TIMEOUT_MS);
+
+      // Then
+      expect(await result).toEqual(unreachable);
+      expect(page.replace).not.toHaveBeenCalled();
+    });
+
+    it("終えた応答が10秒以上かかっても、保持の上限では打ち切られず、完了する", async () => {
+      // Given
+      const release = Promise.withResolvers<AuthFailure | null>();
+      const { session, clock, state, page } = setup({
+        signOutHere: () => release.promise,
+      });
+      state.status = "unauthenticated";
+      const hold = session.holdEnd();
+      hold?.disarm();
+      const result = hold?.complete();
+
+      // When
+      await clock.advanceAsync(SIGN_OUT_TIMEOUT_MS - 1);
+      release.resolve(null);
+
+      // Then
+      expect(await result).toEqual({ kind: "ignored" });
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+  });
+
+  describe("保持の上限(HOLD_TIMEOUT_MS)", () => {
+    it("上限の直前は有効のままで、上限で打ち切られ、expiredが解決して、実行中が解ける", async () => {
+      // Given
+      const { session, clock } = setup();
+      const hold = session.holdEnd();
+      let expired = false;
+      void hold?.expired.then(() => {
+        expired = true;
+      });
+
+      // When
+      await clock.advanceAsync(HOLD_TIMEOUT_MS - 1);
+      const before = { expired, active: hold?.isActive() };
+      await clock.advanceAsync(1);
+
+      // Then
+      expect(before).toEqual({ expired: false, active: true });
+      expect(expired).toBe(true);
+      expect(hold?.isActive()).toBe(false);
+      expect(session.holdEnd()).not.toBeNull();
+    });
+
+    it("打ち切りの後に遅れて届いたcompleteとreleaseは、遷移せず、実行中の状態も変えない", async () => {
+      // Given
+      const { session, clock, page, state } = setup();
+      const hold = session.holdEnd();
+      await clock.advanceAsync(HOLD_TIMEOUT_MS);
+      state.status = "unauthenticated";
+      const next = session.holdEnd();
+
+      // When
+      await hold?.complete();
+      await hold?.release();
+
+      // Then
+      expect(page.replace).not.toHaveBeenCalled();
+      expect(next?.isActive()).toBe(true);
+    });
+
+    it("打ち切りの後に始めた保持は、古い保持のreleaseに解かれない", async () => {
+      // Given
+      const { session, clock } = setup();
+      const stale = session.holdEnd();
+      await clock.advanceAsync(HOLD_TIMEOUT_MS);
+      const current = session.holdEnd();
+
+      // When
+      await stale?.release();
+
+      // Then
+      expect(current?.isActive()).toBe(true);
+      expect(session.holdEnd()).toBeNull();
+    });
+
+    it("disarmで計時を止めると、上限を過ぎても打ち切られない", async () => {
+      // Given
+      const { session, clock } = setup();
+      const hold = session.holdEnd();
+      hold?.disarm();
+
+      // When
+      await clock.advanceAsync(HOLD_TIMEOUT_MS);
+
+      // Then
+      expect(hold?.isActive()).toBe(true);
     });
   });
 });
