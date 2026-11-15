@@ -233,7 +233,10 @@ test.describe("認証済み", () => {
       .click();
 
     await expect(page).toHaveURL(/\/rounds$/);
-    await expect(page.getByTestId("new-round-fab")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: roundsText("homeTitle") }),
+    ).toBeVisible();
+    await expectPanelExpanded(page);
   });
 
   test("縦向きで狭い画面でドロワーを展開してホームの項目を押すと、ホームへ移動し、ドロワーが閉じる", async ({
@@ -253,6 +256,9 @@ test.describe("認証済み", () => {
       .getByRole("link", { name: navigationText("leftPanelHome") })
       .click();
     await expect(page).toHaveURL(/\/rounds$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: roundsText("homeTitle") }),
+    ).toBeVisible();
     await expectPanelClosed(page);
   });
 
@@ -266,6 +272,7 @@ test.describe("認証済み", () => {
       .click();
 
     await expect(page).toHaveURL(/\/settings$/);
+    await expectPanelExpanded(page);
     await expect(
       page.getByRole("heading", { name: settingsText("title") }),
     ).toBeVisible();
@@ -293,7 +300,7 @@ test.describe("認証済み", () => {
     await expect(page.getByTestId("new-round-fab")).toBeVisible();
   });
 
-  test("設定画面でレフトパネルの履歴の項目を押すと、履歴へ移動する", async ({
+  test("設定画面でレフトパネルの点数一覧の項目を押すと、点数一覧へ移動してパネルを保つ", async ({
     page,
   }) => {
     await page.goto("/settings");
@@ -303,6 +310,10 @@ test.describe("認証済み", () => {
       .click();
 
     await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: roundsText("historyTitle") }),
+    ).toBeVisible();
+    await expectPanelExpanded(page);
   });
 
   test("縦向きで狭い画面でドロワーを展開して設定の項目を押すと、設定画面へ移動し、ドロワーが閉じる", async ({
@@ -322,7 +333,115 @@ test.describe("認証済み", () => {
       .getByRole("link", { name: navigationText("leftPanelSettings") })
       .click();
     await expect(page).toHaveURL(/\/settings$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: settingsText("title") }),
+    ).toBeVisible();
     await expectPanelClosed(page);
+  });
+
+  test("狭い画面で点数一覧の項目を押すと点数一覧へ移りドロワーが閉じる", async ({
+    page,
+  }) => {
+    // ホームのドロワーを開く。
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await openRounds(page);
+    await openMenuButton(page).click();
+    await expectPanelExpanded(page);
+
+    // 点数一覧を選び、見出しのある画面へ移る。
+    await page
+      .getByRole("link", { name: navigationText("leftPanelHistory") })
+      .click();
+    await expect(page).toHaveURL(/\/rounds\/history(?:\?|$)/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: roundsText("historyTitle") }),
+    ).toBeVisible();
+    await expectPanelClosed(page);
+  });
+
+  test("狭い画面でTabは装飾アイコンに止まらずEnterで点数一覧へ移れる", async ({
+    page,
+  }) => {
+    // ホームのドロワーを開き、閉じるボタンへ進む。
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await openRounds(page);
+    await openMenuButton(page).click();
+    await expect(closeMenuButton(page)).toBeFocused();
+
+    // ロゴ、ホーム、点数一覧の順に移り、Enterで点数一覧を開く。
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("link", { name: "AIMS", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("link", { name: navigationText("leftPanelHome") }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("link", { name: navigationText("leftPanelHistory") }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/rounds\/history(?:\?|$)/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: roundsText("historyTitle") }),
+    ).toBeVisible();
+    await expectPanelClosed(page);
+  });
+
+  test("幅767・768・769pxでは768pxを境に初期の開閉が切り替わる", async ({
+    page,
+  }) => {
+    for (const width of [767, 768, 769]) {
+      await page.setViewportSize({ width, height: 800 });
+      await openRounds(page);
+      if (width === 767) {
+        await expectPanelClosed(page);
+        await expect(openMenuButton(page)).toBeVisible();
+      } else {
+        await expectPanelExpanded(page);
+        await expect(openMenuButton(page)).toHaveCount(0);
+      }
+    }
+  });
+
+  test("狭い画面で背景を押すとドロワーが閉じ本文を操作できる", async ({
+    page,
+  }) => {
+    // ホームのドロワーを開く。
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await openRounds(page);
+    await openMenuButton(page).click();
+    await expectPanelExpanded(page);
+
+    // パネル外の背景を押して閉じ、本文の作成ボタンから次の画面へ進む。
+    await page
+      .locator('button[aria-hidden="true"]')
+      .click({ position: { x: 350, y: 200 } });
+    await expectPanelClosed(page);
+    await page.getByTestId("new-round-fab").click();
+    await expect(page).toHaveURL(/\/rounds\/new$/);
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: roundsText("newRoundTitle"),
+      }),
+    ).toBeVisible();
+  });
+
+  test("広い画面でパネルを閉じても再読み込みで開いた初期状態へ戻る", async ({
+    page,
+  }) => {
+    // ホームのパネルを閉じる。
+    await openRounds(page);
+    await closeMenuButton(page).click();
+    await expectPanelClosed(page);
+
+    // 再読み込みして、開いた初期状態へ戻る。
+    await page.reload();
+    await waitForHydration(page);
+    await expectPanelExpanded(page);
+    await expect(openMenuButton(page)).toHaveCount(0);
   });
 
   test("ホームから設定へ移った後、ブラウザの戻るでホームへ、進むで設定へ移動する", async ({

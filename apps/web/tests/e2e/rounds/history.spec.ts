@@ -184,38 +184,50 @@ async function isOnTop(card: Locator) {
 test.describe("履歴", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("履歴を開くと、完了したラウンドが名前・実施日・合計点で表示され、入力中のラウンドは表示されない", async ({
+  test("ホームの入力中ラウンドを確認して点数一覧を開くと完了ラウンドだけが表示されカードから詳細を開ける", async ({
     page,
   }) => {
     const credentials = await signInFreshUser(page, "e2e-history");
     await addRound(credentials, "入力中の古い", "2026-01-10", {
       shots: [{ scoreStr: "7", scoreInt: 7 }],
     });
-    await addRound(credentials, "完了の新しい", "2026-05-01", {
-      completed: true,
-    });
+    const completedId = await addRound(
+      credentials,
+      "完了の新しい",
+      "2026-05-01",
+      {
+        completed: true,
+        shots: [{ scoreStr: "10", scoreInt: 10 }],
+      },
+    );
+
+    // ホームで端末の入力中ラウンドを確認する。
     await page.goto("/rounds");
     await waitForHydration(page);
+    await expect(page.getByText("入力中の古い")).toBeVisible();
 
+    // 点数一覧へ進み、完了ラウンドの名前、実施日、合計点を確認する。
     await page
       .getByRole("link", { name: navigationText("leftPanelHistory") })
       .click();
-
     await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: roundsText("historyTitle") }),
+    ).toBeVisible();
     const card = page.getByRole("link", { name: /完了の新しい/ });
     await expect(card).toContainText("2026-05-01");
     await expect(card).toContainText(
-      roundsText("roundTotalPoints", { total: "0" }),
+      roundsText("roundTotalPoints", { total: "10" }),
     );
     await expect(page.getByText("入力中の古い")).toHaveCount(0);
     await expect(page.getByTestId("new-round-fab")).toHaveCount(0);
 
-    // ホームの項目を押すと、ホームへ戻る。
-    await page
-      .getByRole("link", { name: navigationText("leftPanelHome") })
-      .click();
-    await expect(page).toHaveURL(/\/rounds$/);
-    await expect(page.getByText("入力中の古い")).toBeVisible();
+    // 完了ラウンドのカードを押して、そのラウンドの詳細へ進む。
+    await card.click();
+    await expect(page).toHaveURL(new RegExp(`/rounds/${completedId}(?:\\?|$)`));
+    await expect(page.getByTestId("round-config-summary")).toContainText(
+      "完了の新しい",
+    );
   });
 
   test("履歴のURLを直接開いても、履歴が表示される", async ({ page }) => {

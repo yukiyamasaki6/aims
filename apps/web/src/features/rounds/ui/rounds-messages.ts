@@ -35,7 +35,7 @@ export const roundsMessages = {
     } satisfies Record<FetchFailure, string>,
     // ホームと履歴
     homeTitle: "ホーム",
-    historyTitle: "履歴",
+    historyTitle: "点数一覧",
     newRoundTitle: "作成",
     homeEmpty: "入力中のラウンドはありません",
     historyEmpty: "該当するラウンドがありません",
