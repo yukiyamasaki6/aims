@@ -43,7 +43,7 @@
 - `features/rounds/ui/distance-edit-fields.tsx`(ダイアログと操作)、`distance-fields.tsx`(欄の描画)、`use-distance-draft.ts`(下書き、検証、保存、削除): 距離編集と削除確認。`features/rounds/domain/distance-config.ts`の`validateDistanceDraft`で検証し、操作は`distance-operations.ts`で組み立て、イベントIDは手続きの入れ物の`ids.next`から受ける。
 - `features/rounds/domain/round-constants.ts`: 距離(m)・総エンド数・矢数の上限(`DISTANCE_LIMITS`: 100・60・12)。検証(`distance-config.ts`)と文言(`distance-fields.tsx`)が項目別に参照する。数値の入力欄はこの編集だけで、ラウンド作成(プリセットの選択)とプリセット保存(表示中の構成の送信)は入力欄を持たず、検証済みまたはDBの制約を通った値だけを送る。
 - DBの上限: `distances`・`preset_distances`の3列にCHECK制約(`*_distance_max`・`*_total_ends_max`・`*_arrows_per_end_max`)を持つ。`create_round`・`create_distance`・`update_distance`・`save_round_as_preset`は、書く前に`distance_config_over_limit`で上限を判定し、超過をPT422で拒否する(何も保存しない)。PT422は送信側が再試行せず破棄する(`rounds/sync`)ため、同期は詰まらない。CHECK制約はRPCを通らない書き込みと判定漏れの最後の砦で、RPCより先には効かない。
-- `features/rounds/ui/target-face-picker.tsx`: 的選択。`features/rounds/domain/target-face-filter.ts`の`filterTargetFaces`で絞り込む。種別と弓種の絞り込み欄(`TargetFaceFilters`)は、共通の`components/ui/select.tsx`(`Select`)を使い、履歴の距離行(`rounds/history`)の的の選択も同じ欄を使う。
+- `features/rounds/ui/target-face-picker.tsx`: 的選択。`features/rounds/domain/target-face-filter.ts`の`filterTargetFaces`で絞り込む。種別と弓種の絞り込み欄(`TargetFaceFilters`)は、共通の`components/ui/select.tsx`(`Select`)を使い、点数一覧の距離行(`rounds/history`)の的の選択も同じ欄を使う。
 - `features/rounds/domain/distance-operations.ts`: 追加する距離の算出と、構成が変わるかの判定、距離の更新と無効化の操作。
 
 保存の流れ: 検証、操作の列へ追記する(追記の直後に画面の状態が変わる)、ダイアログを閉じる、の順である。設定・距離の保存の反映は、保存の完了を待たない。
