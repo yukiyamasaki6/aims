@@ -37,6 +37,7 @@ export const roundsMessages = {
     homeTitle: "ホーム",
     historyTitle: "点数一覧",
     newRoundTitle: "ラウンドを開始",
+    homeInProgressHeading: "入力中のラウンド",
     homeEmpty: "入力中のラウンドはありません",
     historyEmpty: "該当するラウンドがありません",
     historyEnd: "該当するラウンドは以上です",

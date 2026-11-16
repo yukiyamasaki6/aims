@@ -28,23 +28,15 @@ import { HistoryFilterForm } from "./history-filter-form";
 import { HistoryFilterPanel } from "./history-filter-panel";
 import {
   DistanceCards,
-  HistoryNotice,
   RoundCards,
   RoundCardsSkeleton,
+  RowNotice,
 } from "./round-cards";
 import { RoundDeleteDialog, useRoundDelete } from "./round-delete";
 import { useRoundProcedures } from "./rounds-context";
 import { type MoreStatus, useHistoryPages } from "./use-history-pages";
 import { useHistoryView } from "./use-history-view";
 import { useLocalRoundsList } from "./use-local-rounds-list";
-
-// 取得中のスケルトンの1件の高さと列の間隔の和。スケルトンが描かれていない、または寸法が測れないときは0。
-function measureSkeletonPitch(root: HTMLElement | null): number {
-  const item = root?.querySelector<HTMLElement>("[data-round-skeleton]");
-  if (!item?.parentElement) return 0;
-  const gap = Number.parseFloat(getComputedStyle(item.parentElement).rowGap);
-  return item.getBoundingClientRect().height + (Number.isNaN(gap) ? 0 : gap);
-}
 
 // 履歴。サーバーで完了と記録されたラウンドを、ページごとに取得して表示する。取得の成功時だけラウンドを出す。
 export function RoundsHistory() {
@@ -172,9 +164,9 @@ function HistoryTail({
   if (!hasMore) {
     return (
       <div className="mt-3">
-        <HistoryNotice>
+        <RowNotice bordered>
           {t(unit === "distance" ? "historyEndDistance" : "historyEnd")}
-        </HistoryNotice>
+        </RowNotice>
       </div>
     );
   }
@@ -248,7 +240,7 @@ function HistoryBody({
     );
   }
   if (rounds.length === 0 && !hasMore) {
-    return <HistoryNotice>{t("historyEmpty")}</HistoryNotice>;
+    return <RowNotice bordered>{t("historyEmpty")}</RowNotice>;
   }
   return (
     <>
@@ -275,7 +267,6 @@ function RoundsHistoryScreen() {
     useHistoryPages({
       condition,
       removed,
-      measureItemHeight: () => measureSkeletonPitch(anchorRef.current),
       anchorRef,
     });
   const content = historyView(view, local, removed, condition);

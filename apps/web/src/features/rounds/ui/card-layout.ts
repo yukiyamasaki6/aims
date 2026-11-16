@@ -1,9 +1,12 @@
-// 点数カード(行)の寸法。幅の数値は`widthPx`の1か所に持ち、CSSの幅・間隔と、列の出し分けの計算(card-columns.ts)の両方が使う。
+const ROW_HEIGHT_PX = 60;
+const ROW_BORDER_PX = 1;
+
+// 点数カード(行)の寸法。数値は1か所に持ち、行・スケルトン・末尾と0件の領域の高さ(style)、幅と列の出し分けの計算(card-columns.ts)、1ページの件数の計算(use-history-pages.ts)が同じ値を使う。
 export const cardLayout = {
   // 行の高さ(上下の余白6px×2+内側48px)。内側は3段: 距離一覧は Marked/Unmarked 12px+距離20px+小計16px、左の塊は 上に日付・ラウンド名20px と 下にタグ16px。
-  height: "h-[60px]",
-  // 行の下の境界線(1px)を含む高さ。スケルトンと末尾・0件の領域の高さをそろえる。
-  heightWithLine: "h-[61px]",
+  heightPx: ROW_HEIGHT_PX,
+  // 境界線を含む1件分の高さ。行の間隔は0。
+  pitchPx: ROW_HEIGHT_PX + ROW_BORDER_PX,
   // 左右の12pxは、押せる行のhoverの背景を内容の外へ広げる(リストを-mx-3で広げ、内容は本文の端にそろう)。
   padding: "px-3 py-1.5",
   widthPx: {
