@@ -92,7 +92,11 @@ function railPanel() {
 }
 
 function drawerLink(
-  name: "leftPanelHome" | "leftPanelHistory" | "leftPanelSettings",
+  name:
+    | "leftPanelStartRound"
+    | "leftPanelHome"
+    | "leftPanelHistory"
+    | "leftPanelSettings",
 ) {
   return within(drawerPanel()).getByRole("link", {
     name: navigationText(name),
@@ -421,7 +425,7 @@ describe("LeftPanel", () => {
       expect(drawerLink("leftPanelSettings")).toHaveFocus();
     });
 
-    it("Tabを繰り返すと、閉じる・ロゴ・ホーム・点数一覧・設定の順に一巡する", async () => {
+    it("Tabを繰り返すと、閉じる・ロゴ・ラウンドを開始・ホーム・点数一覧・設定の順に一巡する", async () => {
       // Given
       const user = userEvent.setup();
       render(<PanelWithFrame />, { wrapper: IntlTestProvider });
@@ -430,7 +434,7 @@ describe("LeftPanel", () => {
       const visited: (Element | null)[] = [document.activeElement];
 
       // When
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 6; i++) {
         await user.tab();
         visited.push(document.activeElement);
       }
@@ -439,6 +443,7 @@ describe("LeftPanel", () => {
       expect(visited).toEqual([
         drawerCloseButton(),
         logo,
+        drawerLink("leftPanelStartRound"),
         drawerLink("leftPanelHome"),
         drawerLink("leftPanelHistory"),
         drawerLink("leftPanelSettings"),
@@ -739,38 +744,30 @@ describe("LeftPanel", () => {
   });
 
   describe("移動項目の名前と装飾", () => {
-    it.each([
-      "/rounds",
-      "/rounds/history",
-      "/rounds/new",
-      "/rounds/123e4567-e89b-12d3-a456-426614174000",
-    ])(
-      "%sで開いたメニューは3つの移動項目を文字で識別できる",
-      async (pathname) => {
-        // Given
-        nav.pathname = pathname;
-        const user = userEvent.setup();
-        render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+    it("開いたメニューは3つの移動項目とラウンドの開始ボタンを文字で識別できる", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
 
-        // When
-        await openDrawer(user);
+      // When
+      await openDrawer(user);
 
-        // Then
-        const panel = within(drawerPanel());
-        for (const key of [
-          "leftPanelHome",
-          "leftPanelHistory",
-          "leftPanelSettings",
-        ] as const) {
-          expect(
-            panel.getByRole("link", { name: navigationText(key) }),
-          ).toHaveTextContent(navigationText(key));
-        }
+      // Then
+      const panel = within(drawerPanel());
+      for (const key of [
+        "leftPanelStartRound",
+        "leftPanelHome",
+        "leftPanelHistory",
+        "leftPanelSettings",
+      ] as const) {
         expect(
-          panel.queryByRole("button", { name: authText("signOut") }),
-        ).toBeNull();
-      },
-    );
+          panel.getByRole("link", { name: navigationText(key) }),
+        ).toHaveTextContent(navigationText(key));
+      }
+      expect(
+        panel.queryByRole("button", { name: authText("signOut") }),
+      ).toBeNull();
+    });
 
     it("点数一覧の項目名とリンク名は指定された日本語「点数一覧」である", () => {
       // Given
@@ -813,6 +810,117 @@ describe("LeftPanel", () => {
           ).toHaveLength(0);
         }
       }
+    });
+  });
+
+  describe("ラウンドの開始ボタン", () => {
+    it("名前は指定された日本語「ラウンドを開始」で、各枠に1つある", () => {
+      // Given
+      // When
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+
+      // Then
+      for (const panel of [drawerPanel(), railPanel()]) {
+        const links = within(panel).getAllByRole("link", {
+          name: "ラウンドを開始",
+        });
+        expect(links).toHaveLength(1);
+        expect(links[0]).toHaveTextContent(/^ラウンドを開始$/);
+      }
+    });
+
+    it("各枠で、ホーム・点数一覧・設定の項目より文書の順で前にある", () => {
+      // Given
+      // When
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+
+      // Then
+      for (const panel of [drawerPanel(), railPanel()]) {
+        const start = within(panel).getByRole("link", {
+          name: navigationText("leftPanelStartRound"),
+        });
+        for (const key of [
+          "leftPanelHome",
+          "leftPanelHistory",
+          "leftPanelSettings",
+        ] as const) {
+          const item = within(panel).getByRole("link", {
+            name: navigationText(key),
+          });
+          expect(
+            start.compareDocumentPosition(item) &
+              Node.DOCUMENT_POSITION_FOLLOWING,
+          ).toBeTruthy();
+        }
+      }
+    });
+
+    it("アイコンは装飾であり名前と独立した操作対象を増やさない", () => {
+      // Given
+      // When
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+
+      // Then
+      for (const panel of [drawerPanel(), railPanel()]) {
+        const link = within(panel).getByRole("link", {
+          name: navigationText("leftPanelStartRound"),
+        });
+        const icon = link.querySelector("svg");
+        expect(icon).toHaveAttribute("aria-hidden", "true");
+        expect(icon).not.toHaveAttribute("tabindex", "0");
+        expect(link).toHaveAccessibleName(
+          navigationText("leftPanelStartRound"),
+        );
+        expect(
+          link.querySelectorAll(
+            "button, a, [tabindex], [role='button'], [role='link']",
+          ),
+        ).toHaveLength(0);
+      }
+    });
+
+    it("行き先と同じパスの開始画面でも、現在のページにならない", () => {
+      // Given
+      nav.pathname = "/rounds/new";
+
+      // When
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+
+      // Then
+      for (const link of screen.getAllByRole("link", {
+        name: navigationText("leftPanelStartRound"),
+      }))
+        expect(link).not.toHaveAttribute("aria-current");
+    });
+
+    it("開始画面で押すと、遷移を起こさずドロワーを閉じる", async () => {
+      // Given
+      nav.pathname = "/rounds/new";
+      const user = userEvent.setup();
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+      await openDrawer(user);
+
+      // When
+      const notPrevented = fireEvent.click(drawerLink("leftPanelStartRound"));
+
+      // Then
+      expect(notPrevented).toBe(false);
+      expect(drawerBackdrop()).toHaveStyle({ opacity: "0" });
+    });
+
+    it("開始画面以外で押すと、既定の動作を止めずドロワーを閉じる", async () => {
+      // Given
+      nav.pathname = "/rounds";
+      const user = userEvent.setup();
+      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
+      await openDrawer(user);
+
+      // When
+      const notPrevented = fireEvent.click(drawerLink("leftPanelStartRound"));
+
+      // Then
+      expect(notPrevented).toBe(true);
+      expect(drawerBackdrop()).toHaveStyle({ opacity: "0" });
     });
   });
 
@@ -903,7 +1011,7 @@ describe("LeftPanel", () => {
     );
 
     it.each(["/rounds/new", "/rounds/123e4567-e89b-12d3-a456-426614174000"])(
-      "パスが%s(詳細・作成)のとき、どの項目も現在のページにならない",
+      "パスが%s(詳細・ラウンドの開始画面)のとき、どの項目も現在のページにならない",
       (pathname) => {
         // Given
         nav.pathname = pathname;
@@ -1023,9 +1131,12 @@ describe("LeftPanel", () => {
   });
 
   describe("設定パネルが開いている間の現在のビュー", () => {
-    it.each(["/rounds", "/rounds/history"])(
-      "パスが%sでも、「設定」項目だけがaria-current=pageで、ホーム・履歴は付かない",
-      (pathname) => {
+    it.each([
+      ["/rounds", "leftPanelHome"],
+      ["/rounds/history", "leftPanelHistory"],
+    ] as const)(
+      "パスが%sのとき、表示中の画面の項目が現在のビューのままで、設定の項目はaria-currentを持たない",
+      (pathname, current) => {
         // Given
         nav.pathname = pathname;
 
@@ -1037,30 +1148,38 @@ describe("LeftPanel", () => {
         // Then
         const currentLinks = screen.getAllByRole("link", { current: "page" });
         expect(currentLinks.map((link) => link.textContent)).toEqual([
-          navigationText("leftPanelSettings"),
-          navigationText("leftPanelSettings"),
+          navigationText(current),
+          navigationText(current),
         ]);
+        for (const link of screen.getAllByRole("link", {
+          name: navigationText("leftPanelSettings"),
+        }))
+          expect(link).not.toHaveAttribute("aria-current");
       },
     );
 
-    it("閉じると、従来の表示中のビューの規則へ戻る", () => {
-      // Given
-      nav.pathname = "/rounds/history";
-      const { rerender } = render(
-        <PanelWithFrame settings={{ open: true }} />,
-        { wrapper: IntlTestProvider },
-      );
+    it.each(["/rounds", "/rounds/history"])(
+      "パスが%sのとき、パネルを開閉しても現在のビューの項目が変わらない",
+      (pathname) => {
+        // Given
+        nav.pathname = pathname;
+        const currentTexts = () =>
+          screen
+            .getAllByRole("link", { current: "page" })
+            .map((link) => link.textContent);
+        const { rerender } = render(
+          <PanelWithFrame settings={{ open: true }} />,
+          { wrapper: IntlTestProvider },
+        );
+        const whileOpen = currentTexts();
 
-      // When
-      rerender(<PanelWithFrame settings={{ open: false }} />);
+        // When
+        rerender(<PanelWithFrame settings={{ open: false }} />);
 
-      // Then
-      const currentLinks = screen.getAllByRole("link", { current: "page" });
-      expect(currentLinks.map((link) => link.textContent)).toEqual([
-        navigationText("leftPanelHistory"),
-        navigationText("leftPanelHistory"),
-      ]);
-    });
+        // Then
+        expect(currentTexts()).toEqual(whileOpen);
+      },
+    );
   });
 
   describe("設定パネルが閉じたときのフォーカス", () => {

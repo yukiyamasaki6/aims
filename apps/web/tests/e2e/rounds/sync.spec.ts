@@ -164,7 +164,7 @@ async function signOutOnPage(page: Page) {
   await waitForHydration(page);
 }
 
-// ラウンド作成画面で開始し、作成した詳細画面のラウンドIDを返す。
+// ラウンドの開始画面で開始し、作成した詳細画面のラウンドIDを返す。
 async function startRoundFromUi(page: Page, presetName?: string) {
   await page.goto("/rounds/new");
   await waitForHydration(page);

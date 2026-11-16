@@ -176,7 +176,7 @@ beforeEach(() => {
 
 describe("RoundPresetSelect", () => {
   describe("ヘッダー", () => {
-    it("見出し「作成」と、ホームへの戻るのリンク1つがヘッダーにあり、本文には戻るも見出しも無い", () => {
+    it("現在地の見出しと、ホームへの戻るのリンク1つがヘッダーにあり、本文には戻るも見出しも無い", () => {
       // Given
       loadPresets.mockReturnValue(new Promise(() => {}));
 
@@ -194,6 +194,24 @@ describe("RoundPresetSelect", () => {
       expect(backs[0].closest("header")).not.toBeNull();
       expect(backs[0]).toHaveAttribute("href", ROUNDS_HOME_PATH);
       expect(within(screen.getByRole("main")).queryByRole("link")).toBeNull();
+    });
+  });
+
+  describe("開始画面の現在地", () => {
+    it("見出しは指定された日本語「ラウンドを開始」で、「作成」の見出しはない", () => {
+      // Given
+      loadPresets.mockReturnValue(new Promise(() => {}));
+
+      // When
+      render(<RoundPresetSelect />);
+
+      // Then
+      expect(
+        screen.getByRole("heading", { level: 1, name: "ラウンドを開始" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: /^(ラウンドを)?作成$/ }),
+      ).toBeNull();
     });
   });
 

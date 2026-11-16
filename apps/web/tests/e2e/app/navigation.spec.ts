@@ -21,6 +21,8 @@ import { comeBackOnline, goOffline } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
 import { revokeAllSessions } from "../helpers/session-revoke";
 import {
+  closeButton,
+  homeHeading,
   openSettingsByItem,
   pressAtCenter,
   railItem,
@@ -57,9 +59,22 @@ async function openRounds(page: Page) {
   await waitForHydration(page);
 }
 
+// レフトパネルのラウンドの開始ボタン。ホームの右下にも同名のリンクがあるため、レフトパネルの中に絞る。
+function startRoundLink(page: Page) {
+  return page
+    .locator("aside")
+    .getByRole("link", { name: navigationText("leftPanelStartRound") });
+}
+
+// ラウンドの開始画面で選ぶプリセットのボタン。
+function presetButton(page: Page, name: string) {
+  return page.getByTestId("round-preset-button").filter({ hasText: name });
+}
+
 function panelContents(page: Page) {
   return [
     page.getByRole("link", { name: "AIMS" }),
+    startRoundLink(page),
     page.getByRole("link", { name: navigationText("leftPanelHome") }),
     page.getByRole("link", { name: navigationText("leftPanelHistory") }),
     page.getByRole("link", {
@@ -216,10 +231,10 @@ test.describe("認証済み", () => {
       .getByRole("link", { name: navigationText("startButton") })
       .click();
     await expect(page).toHaveURL(/\/rounds$/);
-    await expect(page.getByTestId("new-round-fab")).toBeVisible();
+    await expect(homeHeading(page)).toBeVisible();
   });
 
-  test("ラウンド作成画面でレフトパネルのAIMSロゴを押すと、紹介画面へ移動する", async ({
+  test("ラウンドの開始画面でレフトパネルのAIMSロゴを押すと、紹介画面へ移動する", async ({
     page,
   }) => {
     await page.goto("/rounds/new");
@@ -231,7 +246,7 @@ test.describe("認証済み", () => {
     await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
   });
 
-  test("ラウンド作成画面でレフトパネルのホームの項目を押すと、ホームへ移動する", async ({
+  test("ラウンドの開始画面でレフトパネルのホームの項目を押すと、ホームへ移動する", async ({
     page,
   }) => {
     await page.goto("/rounds/new");
@@ -251,7 +266,7 @@ test.describe("認証済み", () => {
   test("縦向きで狭い画面でドロワーを展開してホームの項目を押すと、ホームへ移動し、ドロワーが閉じる", async ({
     page,
   }) => {
-    // 縦向きで狭い画面でラウンド作成画面を開き、ヘッダーのメニューボタンでドロワーを展開する。
+    // 縦向きで狭い画面でラウンドの開始画面を開き、ヘッダーのメニューボタンでドロワーを展開する。
     await page.setViewportSize(MOBILE_VIEWPORT);
     await page.goto("/rounds/new");
     await waitForHydration(page);
@@ -271,7 +286,82 @@ test.describe("認証済み", () => {
     await expectPanelClosed(page);
   });
 
-  test("ホームでレフトパネルの設定の項目を押すと、設定パネルが開き、設定の項目だけが現在のビューになる", async ({
+  test("幅768px以上のホームでレフトパネルのラウンドの開始ボタンを押すと、ラウンドの開始画面へ移動し、パネルは開いたままである", async ({
+    page,
+  }) => {
+    await openRounds(page);
+
+    await startRoundLink(page).click();
+
+    await expect(page).toHaveURL(/\/rounds\/new$/);
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: roundsText("newRoundTitle"),
+      }),
+    ).toBeVisible();
+    await expectPanelExpanded(page);
+  });
+
+  test("狭い画面でドロワーを展開してラウンドの開始ボタンを押すと、ラウンドの開始画面へ移動し、ドロワーが閉じる", async ({
+    page,
+  }) => {
+    // 縦向きで狭い画面でホームを開き、ドロワーを展開する。
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await openRounds(page);
+    await openMenuButton(page).click();
+    await expectPanelExpanded(page);
+
+    // ラウンドの開始ボタンを押して、開始画面へ移り、ドロワーが閉じていることを確かめる。
+    await startRoundLink(page).click();
+    await expect(page).toHaveURL(/\/rounds\/new$/);
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: roundsText("newRoundTitle"),
+      }),
+    ).toBeVisible();
+    await expectPanelClosed(page);
+  });
+
+  test("狭い画面でTabはラウンドの開始ボタンに届き、Enterでラウンドの開始画面へ移れる", async ({
+    page,
+  }) => {
+    // ホームのドロワーを開き、ロゴを経てラウンドの開始ボタンへ進む。
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await openRounds(page);
+    await openMenuButton(page).click();
+    await expect(closeMenuButton(page)).toBeFocused();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(startRoundLink(page)).toBeFocused();
+
+    // Enterで開始画面へ移る。
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/rounds\/new$/);
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: roundsText("newRoundTitle"),
+      }),
+    ).toBeVisible();
+  });
+
+  test("幅768px以上のホームには、名前「ラウンドを開始」のリンクがレフトパネルの中とホームの右下に同時にある", async ({
+    page,
+  }) => {
+    await openRounds(page);
+
+    const name = navigationText("leftPanelStartRound");
+    await expect(
+      page.locator("aside:visible").getByRole("link", { name }),
+    ).toHaveCount(1);
+    await expect(
+      page.getByRole("link", { name }).and(page.locator(":not(aside *)")),
+    ).toHaveCount(1);
+  });
+
+  test("ホームでレフトパネルの設定の項目を押すと、設定パネルが開き、ホームの項目が現在のビューのままで、設定の項目はaria-currentを持たない", async ({
     page,
   }) => {
     await openRounds(page);
@@ -279,19 +369,20 @@ test.describe("認証済み", () => {
     await openSettingsByItem(page);
 
     await expect(
-      railItem(page, navigationText("leftPanelSettings")),
+      railItem(page, navigationText("leftPanelHome")),
     ).toHaveAttribute("aria-current", "page");
     await expect(
-      railItem(page, navigationText("leftPanelHome")),
-    ).not.toHaveAttribute("aria-current", "page");
+      railItem(page, navigationText("leftPanelSettings")),
+    ).not.toHaveAttribute("aria-current");
     await expect(
       railItem(page, navigationText("leftPanelHistory")),
-    ).not.toHaveAttribute("aria-current", "page");
+    ).not.toHaveAttribute("aria-current");
   });
 
-  test("履歴で設定パネルを開くと、設定の項目だけが現在のビューになり、履歴の項目には付かない", async ({
+  test("履歴で設定パネルを開いて閉じても、履歴の項目が現在のビューのままである", async ({
     page,
   }) => {
+    // 履歴を開く。
     await openRounds(page);
     await page
       .getByRole("link", { name: navigationText("leftPanelHistory") })
@@ -300,59 +391,27 @@ test.describe("認証済み", () => {
       page.getByRole("link", { name: navigationText("leftPanelHistory") }),
     ).toHaveAttribute("aria-current", "page");
 
+    // 設定パネルを開いても、履歴の項目が現在のビューのままで、設定の項目はaria-currentを持たない。
     await openSettingsByItem(page);
-
     await expect(
-      railItem(page, navigationText("leftPanelSettings")),
+      railItem(page, navigationText("leftPanelHistory")),
     ).toHaveAttribute("aria-current", "page");
     await expect(
-      railItem(page, navigationText("leftPanelHistory")),
-    ).not.toHaveAttribute("aria-current", "page");
-  });
+      railItem(page, navigationText("leftPanelSettings")),
+    ).not.toHaveAttribute("aria-current");
 
-  test("幅768px以上で設定パネルが開いているとき、背景のレフトパネルのホームの項目を押すと、パネルが閉じるだけで、ホームへは移らない", async ({
-    page,
-  }) => {
-    // 履歴を開き、設定パネルを開く。
-    await openRounds(page);
-    await page
-      .getByRole("link", { name: navigationText("leftPanelHistory") })
-      .click();
-    await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
-    await openSettingsByItem(page);
-
-    // 背景のホームの項目を座標で押すと、パネルが閉じ、履歴に留まる。
-    await pressAtCenter(page, railItem(page, navigationText("leftPanelHome")));
-
+    // パネルを閉じても、履歴の項目が現在のビューのままである。
+    await closeButton(page).click();
     await expect(settingsPanel(page)).toBeHidden();
-    await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
     await expect(
-      page.getByRole("heading", { level: 1, name: roundsText("historyTitle") }),
-    ).toBeVisible();
-    await expectPanelExpanded(page);
-  });
-
-  test("幅768px以上で設定パネルが開いているとき、背景のレフトパネルの履歴の項目を押すと、パネルが閉じるだけで、履歴へは移らない", async ({
-    page,
-  }) => {
-    // ホームで設定パネルを開く。
-    await openRounds(page);
-    await openSettingsByItem(page);
-
-    // 背景の履歴の項目を座標で押すと、パネルが閉じ、ホームに留まる。
-    await pressAtCenter(
-      page,
       railItem(page, navigationText("leftPanelHistory")),
-    );
-
-    await expect(settingsPanel(page)).toBeHidden();
-    await expect(page).toHaveURL(/\/rounds$/);
+    ).toHaveAttribute("aria-current", "page");
   });
 
   test("縦向きで狭い画面でドロワーを展開して設定の項目を押すと、ドロワーが閉じ、設定パネルが開き、フォーカスが対話の中へ移る", async ({
     page,
   }) => {
-    // 縦向きで狭い画面でラウンド作成画面を開き、ヘッダーのメニューボタンでドロワーを展開する。
+    // 縦向きで狭い画面でラウンドの開始画面を開き、ヘッダーのメニューボタンでドロワーを展開する。
     await page.setViewportSize(MOBILE_VIEWPORT);
     await page.goto("/rounds/new");
     await waitForHydration(page);
@@ -402,11 +461,13 @@ test.describe("認証済み", () => {
     await openMenuButton(page).click();
     await expect(closeMenuButton(page)).toBeFocused();
 
-    // ロゴ、ホーム、点数一覧の順に移り、Enterで点数一覧を開く。
+    // ロゴ、ラウンドを開始、ホーム、点数一覧の順に移り、Enterで点数一覧を開く。
     await page.keyboard.press("Tab");
     await expect(
       page.getByRole("link", { name: "AIMS", exact: true }),
     ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(startRoundLink(page)).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(
       page.getByRole("link", { name: navigationText("leftPanelHome") }),
@@ -448,19 +509,13 @@ test.describe("認証済み", () => {
     await openMenuButton(page).click();
     await expectPanelExpanded(page);
 
-    // パネル外の背景を押して閉じ、本文の作成ボタンから次の画面へ進む。
+    // パネル外の背景を押して閉じ、ヘッダーのメニューボタンで再び開く。
     await page
       .locator('button[aria-hidden="true"]')
       .click({ position: { x: 350, y: 200 } });
     await expectPanelClosed(page);
-    await page.getByTestId("new-round-fab").click();
-    await expect(page).toHaveURL(/\/rounds\/new$/);
-    await expect(
-      page.getByRole("heading", {
-        level: 1,
-        name: roundsText("newRoundTitle"),
-      }),
-    ).toBeVisible();
+    await openMenuButton(page).click();
+    await expectPanelExpanded(page);
   });
 
   test("広い画面でパネルを閉じても再読み込みで開いた初期状態へ戻る", async ({
@@ -560,6 +615,7 @@ test.describe("認証済み", () => {
       expect(focusedLabels).toEqual(
         expect.arrayContaining([
           navigationText("leftPanelCloseMenu"),
+          NEW_ROUND_PATH,
           ROUNDS_PATH,
           ROUNDS_HISTORY_PATH,
         ]),
@@ -819,10 +875,72 @@ test.describe("認証済み", () => {
   });
 });
 
+test.describe("開始画面でのラウンドの開始ボタン", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  // 開始画面でプリセットを選んでおき、レフトパネルのラウンドの開始ボタンを押した後の状態を確かめる。
+  async function expectKeptAfterPressingStart(page: Page) {
+    await expect(page).toHaveURL(/\/rounds\/new$/);
+    await expect(presetButton(page, "WA 1440")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.getByTestId("round-start-button")).toHaveText(
+      roundsText("startWithPreset", { name: "WA 1440" }),
+    );
+  }
+
+  // 戻ってホームへ移り、入力中のラウンドが作られていないことを確かめる。
+  async function expectNoRoundCreated(page: Page) {
+    await page.getByRole("link", { name: roundsText("back") }).click();
+    await expect(page).toHaveURL(/\/rounds$/);
+    await expect(page.getByText(roundsText("homeEmpty"))).toBeVisible();
+  }
+
+  test("狭い画面でラウンドの開始画面のままドロワーのラウンドの開始ボタンを押すと、遷移せずにドロワーが閉じ、選んだプリセットが保たれ、ラウンドは作られない", async ({
+    page,
+  }) => {
+    // 開始画面でプリセットを選び、ドロワーを展開する。
+    await signInAsDisposableUser(page, "nav-start-narrow");
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await page.goto(NEW_ROUND_PATH);
+    await waitForHydration(page);
+    await presetButton(page, "WA 1440").click();
+    await openMenuButton(page).click();
+    await expectPanelExpanded(page);
+
+    // ラウンドの開始ボタンを押して、ドロワーだけが閉じ、選択が保たれる。
+    await startRoundLink(page).click();
+    await expectPanelClosed(page);
+    await expectKeptAfterPressingStart(page);
+
+    // 戻ってホームへ移り、ラウンドが作られていない。
+    await expectNoRoundCreated(page);
+  });
+
+  test("幅768px以上でラウンドの開始画面のままレフトパネルのラウンドの開始ボタンを押すと、遷移せずにパネルが開いたままで、選んだプリセットが保たれ、ラウンドは作られない", async ({
+    page,
+  }) => {
+    // 開始画面でプリセットを選ぶ。
+    await signInAsDisposableUser(page, "nav-start-wide");
+    await page.goto(NEW_ROUND_PATH);
+    await waitForHydration(page);
+    await presetButton(page, "WA 1440").click();
+
+    // ラウンドの開始ボタンを押して、パネルが開いたままで、選択が保たれる。
+    await startRoundLink(page).click();
+    await expectPanelExpanded(page);
+    await expectKeptAfterPressingStart(page);
+
+    // 戻ってホームへ移り、ラウンドが作られていない。
+    await expectNoRoundCreated(page);
+  });
+});
+
 test.describe("未認証のガード", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("未認証でラウンド作成画面を開くと、開いた画面を遷移元に付けてサインイン画面へ移動する", async ({
+  test("未認証でラウンドの開始画面を開くと、開いた画面を遷移元に付けてサインイン画面へ移動する", async ({
     page,
   }) => {
     // 代表として/rounds/newを開く。/rounds・/rounds/[id]・クエリ付きは単体テスト（session.test.ts）で検証する。
@@ -918,7 +1036,7 @@ test.describe("セッション喪失", () => {
     await expect.poll(() => refreshAttempts).toBeGreaterThan(0);
     await page.waitForTimeout(1_000);
     await expect(page).toHaveURL(/\/rounds$/);
-    await expect(page.getByTestId("new-round-fab")).toBeVisible();
+    await expect(homeHeading(page)).toBeVisible();
   });
 
   test("オフラインの間にセッションの期限が来て、オンラインに戻ったときの更新が別の書き手の更新と重なっても、サインイン画面へ移動せず、ラウンド一覧に留まる", async ({
@@ -944,6 +1062,6 @@ test.describe("セッション喪失", () => {
         () => (window as unknown as { e2eStayed?: boolean }).e2eStayed,
       ),
     ).toBe(true);
-    await expect(page.getByTestId("new-round-fab")).toBeVisible();
+    await expect(homeHeading(page)).toBeVisible();
   });
 });

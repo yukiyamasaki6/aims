@@ -97,11 +97,11 @@ flowchart TD
 
     subgraph main ["(main)"]
         LeftPanel(("レフトパネル<br/>（全画面に常設）"))
-        Settings["#settings/…<br/>設定パネル<br/>（ホーム・点数一覧・作成・詳細の上に重ねる）"]
+        Settings["#settings/…<br/>設定パネル<br/>（ホーム・点数一覧・ラウンドの開始画面・詳細の上に重ねる）"]
         subgraph rounds ["rounds"]
             Rounds["/rounds<br/>ホーム"]
             History["/rounds/history<br/>点数一覧"]
-            RoundsNew["/rounds/new<br/>ラウンド新規作成"]
+            RoundsNew["/rounds/new<br/>ラウンドの開始画面"]
             RoundDetail["/rounds/[id]<br/>ラウンド入力・閲覧"]
         end
     end
@@ -114,8 +114,8 @@ flowchart TD
 
     %% ユーザー操作による遷移
     Logo -->|クリック| Landing
-    Landing -->|開始ボタン（未認証）| SignUp
-    Landing -->|開始ボタン（認証済み）| Rounds
+    Landing -->|紹介画面の開始ボタン（未認証）| SignUp
+    Landing -->|紹介画面の開始ボタン（認証済み）| Rounds
     SignIn -->|「パスワードをお忘れですか」| ResetPass
     SignIn -->|「サインアップ」リンク| SignUp
     SignIn -->|サインイン成功| Rounds
@@ -123,17 +123,18 @@ flowchart TD
     SignUp -->|登録成功| Rounds
     ResetPass -->|サインインに戻るリンク| SignIn
     ResetPass -->|パスワード変更成功（サインアウト）| SignIn
-    Rounds -->|新規作成ボタン| RoundsNew
+    Rounds -->|ラウンドの開始ボタン（右下）| RoundsNew
     Rounds -->|入力中のカードクリック| RoundDetail
     History -->|ラウンドカードクリック（from=history）| RoundDetail
     RoundsNew -->|「戻る」リンク| Rounds
-    RoundsNew -->|開始| RoundDetail
+    RoundsNew -->|開始の実行ボタン| RoundDetail
     RoundDetail -->|入力を完了する| Rounds
     RoundDetail -->|「戻る」リンク（遷移元によりホームまたは点数一覧）| Rounds
     RoundDetail -->|「戻る」リンク（点数一覧から開いたとき）| History
     RoundDetail -->|ラウンド削除成功（遷移元）| Rounds
     RoundDetail -->|ラウンド削除成功（点数一覧から開いたとき）| History
     LeftPanel -->|AIMSロゴ| Landing
+    LeftPanel -->|ラウンドの開始ボタン| RoundsNew
     LeftPanel -->|「ホーム」項目| Rounds
     LeftPanel -->|「点数一覧」項目| History
     LeftPanel -->|「設定」項目| Settings

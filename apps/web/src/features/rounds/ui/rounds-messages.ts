@@ -36,7 +36,7 @@ export const roundsMessages = {
     // ホームと履歴
     homeTitle: "ホーム",
     historyTitle: "点数一覧",
-    newRoundTitle: "作成",
+    newRoundTitle: "ラウンドを開始",
     homeEmpty: "入力中のラウンドはありません",
     historyEmpty: "該当するラウンドがありません",
     historyEnd: "該当するラウンドは以上です",
@@ -83,7 +83,7 @@ export const roundsMessages = {
     historyDistanceLine: "{date} / 距離{number} {distance}",
     historyDistanceMarked: "{distance}m",
     historyDistanceUnmarkedLength: "Unmarked {distance}m",
-    newRoundLabel: "ラウンドを新規作成",
+    newRoundLabel: "ラウンドを開始",
     roundTotalPoints: "{total}点",
     roundMenuLabel: "ラウンドのメニュー",
     roundMenuLabelNamed: "「{name}」のメニュー",

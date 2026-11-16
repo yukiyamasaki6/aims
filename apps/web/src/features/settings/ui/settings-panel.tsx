@@ -145,8 +145,10 @@ function CategoryLink({
       }}
       className={cn(
         // 各タブは分類の名称と内側の余白の幅で、伸ばさない(分類が1つでも横いっぱいに広がらない)。
-        "shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm",
-        current && "bg-muted font-medium",
+        "shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors",
+        current
+          ? "bg-foreground/10 font-medium"
+          : !disabled && "hover:bg-foreground/5",
         disabled && "opacity-50",
       )}
     >

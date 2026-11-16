@@ -83,7 +83,7 @@ function createGate() {
   return { promise, release };
 }
 
-test("表示中の構成を名前を付けて保存すると、ダイアログが閉じ、ラウンド作成画面の個人プリセットに同じ構成で表示される", async ({
+test("表示中の構成を名前を付けて保存すると、ダイアログが閉じ、ラウンドの開始画面の個人プリセットに同じ構成で表示される", async ({
   page,
 }) => {
   // 保存ダイアログを開き、名前を付けて保存する。
@@ -95,7 +95,7 @@ test("表示中の構成を名前を付けて保存すると、ダイアログ�
   await page.getByTestId("save-as-preset-confirm").click();
   await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
 
-  // ラウンド作成画面で保存したプリセットを選び、同じ構成を確かめる。
+  // ラウンドの開始画面で保存したプリセットを選び、同じ構成を確かめる。
   await openNewRound(page);
   await presetButton(page, name).click();
   // 名前ボタンとメニューの行だけを囲むラッパーが親のため、選択時に展開される
@@ -136,7 +136,7 @@ test("距離を編集した直後に保存すると、サーバーへの反映�
   await page.getByTestId("save-as-preset-confirm").click();
   await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
 
-  // 反映を再開し、ラウンド作成画面で編集後の構成を確かめる。
+  // 反映を再開し、ラウンドの開始画面で編集後の構成を確かめる。
   distanceUpdate.release();
   await openNewRound(page);
   await presetButton(page, name).click();
@@ -169,7 +169,7 @@ test("距離が1つもないラウンドでは、保存ダイアログを開く�
   expect(saveRequests).toBe(0);
 });
 
-test("保存したプリセットは、その後オフラインで開いたラウンド作成画面の個人プリセットに表示される", async ({
+test("保存したプリセットは、その後オフラインで開いたラウンドの開始画面の個人プリセットに表示される", async ({
   page,
 }) => {
   // 保存ダイアログで名前を付けて保存し、端末に保存されるのを待つ。
@@ -193,7 +193,7 @@ test("保存したプリセットは、その後オフラインで開いたラ�
     return false;
   }, name);
 
-  // オフラインでラウンド作成画面を開き、保存したプリセットを確かめる。
+  // オフラインでラウンドの開始画面を開き、保存したプリセットを確かめる。
   await waitForServiceWorkerControl(page);
   await goOffline(page.context());
   await page.goto("/rounds/new");

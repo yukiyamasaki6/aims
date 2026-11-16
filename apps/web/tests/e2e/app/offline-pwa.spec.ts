@@ -26,9 +26,10 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
-import { settingsPanel } from "../helpers/settings";
+import { homeHeading, railItem, settingsPanel } from "../helpers/settings";
 
 const authText = translatorFor("auth");
+const navigationText = translatorFor("navigation");
 const offlinePwaText = translatorFor("offlinePwa");
 const roundsText = translatorFor("rounds");
 const settingsText = translatorFor("settings");
@@ -212,9 +213,9 @@ async function openRounds(page: Page) {
   await waitForHydration(page);
 }
 
-// クライアント側の遷移(リンク)で/rounds/newへ移る。
+// クライアント側の遷移(リンク)で/rounds/newへ移る。全画面に共通のレフトパネル(縦の列)の開始ボタンを押す。
 async function transitionByLink(page: Page) {
-  await page.getByTestId("new-round-fab").click();
+  await railItem(page, navigationText("leftPanelStartRound")).click();
 }
 
 // 遷移で切り替えを試み、新しいService Workerが有効になるまで待つ。
@@ -401,7 +402,7 @@ test("未認証で紹介画面を開くと画面の枠が保存され、サイ�
   const response = await page.goto("/rounds");
   expect(response?.fromServiceWorker()).toBe(true);
   await expect(page).toHaveURL(/\/rounds$/);
-  await expect(page.getByTestId("new-round-fab")).toBeVisible();
+  await expect(homeHeading(page)).toBeVisible();
   await expect(page.getByText(roundsText("homeEmpty"))).toBeVisible();
   await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
   await expect(page.getByPlaceholder("you@example.com")).toHaveCount(0);
@@ -678,9 +679,9 @@ test.describe("新しいビルドへの更新", () => {
     await page.waitForTimeout(2_000);
     expect((await workerState(page)).activeNew).toBe(false);
     expect(await isSameDocument(page)).toBe(true);
-    await expect(page.getByTestId("new-round-fab")).toBeVisible();
+    await expect(homeHeading(page)).toBeVisible();
 
-    // リンクを押してラウンド作成画面へ移り、旧ビルドの枠を挟まずに新しいビルドの枠で表示されることを確かめる。
+    // リンクを押してラウンドの開始画面へ移り、旧ビルドの枠を挟まずに新しいビルドの枠で表示されることを確かめる。
     await startWatchingOldFrame(page);
     await transitionByLink(page);
     await expect.poll(shownNewBuild, { timeout: 15_000 }).toBe(true);
@@ -736,7 +737,7 @@ test.describe("新しいビルドへの更新", () => {
     await routeNewBuild(page, context);
     await publishNewBuild(page);
 
-    // リンクを押してラウンド作成画面へ移り、旧ビルドの枠で表示されて操作でき、切り替えの合図が1回だけ送られたことを確かめる。
+    // リンクを押してラウンドの開始画面へ移り、旧ビルドの枠で表示されて操作でき、切り替えの合図が1回だけ送られたことを確かめる。
     await transitionByLink(page);
     await expect(page).toHaveURL(/\/rounds\/new$/, { timeout: 10_000 });
     await expect(page.getByTestId("round-start-button")).toBeVisible();
@@ -748,7 +749,7 @@ test.describe("新しいビルドへの更新", () => {
     await page.goBack();
     await expect(page).toHaveURL(/\/rounds$/);
 
-    // もう一度リンクを押してラウンド作成画面へ移り、その移動で再び切り替えの合図が送られることを確かめる。
+    // もう一度リンクを押してラウンドの開始画面へ移り、その移動で再び切り替えの合図が送られることを確かめる。
     await transitionByLink(page);
     await expect(page).toHaveURL(/\/rounds\/new$/, { timeout: 10_000 });
     expect(await skipWaitingCount(page)).toBe(2);
