@@ -12,7 +12,8 @@
     "lint:text": "node scripts/check-hardcoded-text.mjs",
     "lint:messages": "node scripts/check-unused-message-keys.mjs",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:browser:history-panel": "playwright test -c playwright.history-panel.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

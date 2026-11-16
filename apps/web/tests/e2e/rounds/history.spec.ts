@@ -40,16 +40,24 @@ async function chooseOption(page: Page, testId: string, optionName: string) {
   await page.getByRole("option", { name: optionName, exact: true }).click();
 }
 
-// 右上のフィルターのアイコンを押して、ポップアップを開く。
+// 右上のフィルターのアイコンを押して、パネルを開く。
 async function openFilter(page: Page) {
   await page.getByTestId("history-controls-toggle").click();
   await expect(page.getByTestId("history-controls")).toBeVisible();
 }
 
-// 適用を押して、ポップアップが閉じるまで待つ。
+// 検索を押す。縦長では検索で閉じ、横長では開いたままのため、ヘッダーのフィルターで閉じて、パネルが閉じるまで待つ。
 async function applyFilter(page: Page) {
-  await page.getByTestId("history-controls-apply").click();
-  await expect(page.getByTestId("history-controls")).toHaveCount(0);
+  const size = page.viewportSize();
+  const landscape = size !== null && size.width > size.height;
+  await page
+    .getByTestId("history-controls-apply")
+    .filter({ visible: true })
+    .click();
+  if (landscape) await page.getByTestId("history-controls-toggle").click();
+  await expect(
+    page.getByRole("region", { name: roundsText("historyFilterTitle") }),
+  ).toBeHidden();
 }
 
 const SCORE_DESC = roundsText("historyScoreDirection.desc");
@@ -122,6 +130,21 @@ function outdoorDistances(...distances: number[]) {
     distance,
     totalEnds: 6,
     arrowsPerEnd: 6,
+  }));
+}
+
+// 残りはMで埋め、指定した小計を保ったまま全エンドを完射したデータにする。
+function completedShots(
+  scores: number[],
+  arrowsPerEnd = 3,
+  totalEnds = 12,
+  distanceIndex = 0,
+) {
+  return Array.from({ length: arrowsPerEnd * totalEnds }, (_, index) => ({
+    scoreStr: scores[index] ? String(scores[index]) : "M",
+    scoreInt: scores[index] ?? 0,
+    distanceIndex,
+    endNumber: Math.floor(index / arrowsPerEnd) + 1,
   }));
 }
 
@@ -302,10 +325,7 @@ test.describe("履歴", () => {
     const credentials = await signInFreshUser(page, "e2e-history");
     await addRound(credentials, "屋外リカーブ", "2026-05-01", {
       completed: true,
-      shots: [
-        { scoreStr: "10", scoreInt: 10 },
-        { scoreStr: "9", scoreInt: 9 },
-      ],
+      shots: completedShots([10, 9]),
     });
     const indoorCompoundId = await addRound(
       credentials,
@@ -315,17 +335,16 @@ test.describe("履歴", () => {
         completed: true,
         format: "indoor",
         bowType: "compound",
-        shots: [
-          { scoreStr: "10", scoreInt: 10 },
-          { scoreStr: "10", scoreInt: 10 },
-          { scoreStr: "10", scoreInt: 10 },
-        ],
+        shots: completedShots([10, 10, 10], 3, 10),
       },
     );
     await addRound(credentials, "屋内リカーブ", "2026-05-03", {
       completed: true,
       format: "indoor",
-      shots: [{ scoreStr: "8", scoreInt: 8 }],
+      shots: completedShots([8], 3, 10),
+    });
+    await addRound(credentials, "検索に混ざらない入力中", "2026-05-02", {
+      format: "indoor",
     });
     const cards = page.getByRole("listitem");
 
@@ -354,13 +373,17 @@ test.describe("履歴", () => {
       "history-filter-format",
       roundsText("formatOption.indoor"),
     );
+    await page.getByTestId("history-filter-dateFrom").fill("2026-05-02");
+    await page.getByTestId("history-filter-dateTo").fill("2026-05-03");
     await applyFilter(page);
     await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
 
-    // 再読み込みしても、入力値が保たれ、アイコンに印が出て、ポップアップは閉じている。
+    // 再読み込みしても、入力値が保たれ、アイコンに印が出て、パネルは閉じている。
     await page.reload();
     await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
-    await expect(page.getByTestId("history-controls")).toHaveCount(0);
+    await expect(
+      page.getByRole("region", { name: roundsText("historyFilterTitle") }),
+    ).toBeHidden();
     await expect(page.getByTestId("history-controls-active")).toHaveCount(1);
     await openFilter(page);
     await expect(page.getByTestId("history-sort-score-direction")).toHaveText(
@@ -375,14 +398,22 @@ test.describe("履歴", () => {
     await page.getByRole("link", { name: /屋内コンパウンド/ }).click();
     await expect(page).toHaveURL(new RegExp(`/rounds/${indoorCompoundId}`));
     await waitForHydration(page);
+    await expect(
+      page.getByRole("main").getByRole("button", { name: /^屋内コンパウンド/ }),
+    ).toBeVisible();
     await page.getByRole("link", { name: roundsText("back") }).click();
     await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
     await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
-    await expect(page.getByTestId("history-controls")).toHaveCount(0);
+    await expect(
+      page.getByRole("region", { name: roundsText("historyFilterTitle") }),
+    ).toBeHidden();
 
     // フィルターを開いてリセットし、適用すると、3件が実施日の新しい順に戻り、印が消える。
     await openFilter(page);
-    await page.getByTestId("history-controls-reset").click();
+    await page
+      .getByTestId("history-controls-reset")
+      .filter({ visible: true })
+      .click();
     await applyFilter(page);
     await expect(cards).toHaveText([
       /屋内リカーブ/,
@@ -429,10 +460,13 @@ test.describe("履歴", () => {
     await applyFilter(page);
     await expect(cards).toHaveText([/五月中/, /五月初め/]);
 
-    // 開始日を終了日より後にして適用するとエラーが出てポップアップは開いたままである。直して適用すると、エラーが消えて絞り込みが更新される。
+    // 開始日を終了日より後にして適用するとエラーが出てパネルは開いたままである。直して適用すると、エラーが消えて絞り込みが更新される。
     await openFilter(page);
     await fillRange("dateFrom", "2026-06-01");
-    await page.getByTestId("history-controls-apply").click();
+    await page
+      .getByTestId("history-controls-apply")
+      .filter({ visible: true })
+      .click();
     await expect(page.getByTestId("history-filter-error-dateOrder")).toHaveText(
       roundsText("historyRangeError.dateOrder"),
     );
@@ -533,7 +567,7 @@ test.describe("履歴", () => {
     await applyFilter(page);
     await expect(cards).toHaveText([/的違いの五十/, /五十だけ/]);
 
-    // 的を選んで適用すると、その的のラウンドだけに絞られる。的の一覧は端末に保存済みであることを待ち、ポップアップを開き直して読み込む。
+    // 的を選んで適用すると、その的のラウンドだけに絞られる。的の一覧は端末に保存済みであることを待ち、パネルを開き直して読み込む。
     await expect
       .poll(() =>
         page.evaluate(() =>
@@ -576,7 +610,10 @@ test.describe("履歴", () => {
     );
 
     // リセットして適用すると、要約が消えて「距離を追加」だけになり、5件が実施日の新しい順に戻る。
-    await page.getByTestId("history-controls-reset").click();
+    await page
+      .getByTestId("history-controls-reset")
+      .filter({ visible: true })
+      .click();
     await expect(summaries).toHaveCount(0);
     await expect(page.getByTestId("history-filter-distance-add")).toBeVisible();
     await applyFilter(page);
@@ -593,27 +630,29 @@ test.describe("履歴", () => {
     page,
   }) => {
     const credentials = await signInFreshUser(page, "e2e-history");
-    // 距離ごとの小計は、距離に置いた1本の矢の点である。ラウンドの合計点(13、14、2)とは違う値にする。
-    await addRound(credentials, "五十から三十", "2026-05-01", {
-      completed: true,
-      distances: outdoorDistances(50, 30),
-      shots: [
-        { scoreStr: "9", scoreInt: 9, distanceIndex: 0 },
-        { scoreStr: "4", scoreInt: 4, distanceIndex: 1 },
-      ],
-    });
+    // 全距離を完射し、小計は最初の1本と残りのMで作る。ラウンドの合計点(13、14、2)とは違う値にする。
+    const fiftyThirtyId = await addRound(
+      credentials,
+      "五十から三十",
+      "2026-05-01",
+      {
+        completed: true,
+        distances: outdoorDistances(50, 30),
+        shots: [
+          ...completedShots([9], 6, 6, 0),
+          ...completedShots([4], 6, 6, 1),
+        ],
+      },
+    );
     await addRound(credentials, "七十から五十", "2026-05-02", {
       completed: true,
       distances: outdoorDistances(70, 50),
-      shots: [
-        { scoreStr: "6", scoreInt: 6, distanceIndex: 0 },
-        { scoreStr: "8", scoreInt: 8, distanceIndex: 1 },
-      ],
+      shots: [...completedShots([6], 6, 6, 0), ...completedShots([8], 6, 6, 1)],
     });
     await addRound(credentials, "五十だけ", "2026-05-03", {
       completed: true,
       distances: outdoorDistances(50),
-      shots: [{ scoreStr: "2", scoreInt: 2 }],
+      shots: completedShots([2], 6, 6),
     });
     await addRound(credentials, "入力中の五十", "2026-05-04", {
       distances: outdoorDistances(50),
@@ -683,6 +722,14 @@ test.describe("履歴", () => {
       distanceCard("七十から五十", "2026-05-02", 2, 50, 8),
     ]);
     expect(requests.rounds()).toBe(1);
+
+    // 構成をまたいで見つかった50mのカードから、そのラウンドの詳細へ進む。
+    await page.getByRole("link", { name: /五十から三十/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/rounds/${fiftyThirtyId}`));
+    await waitForHydration(page);
+    await expect(
+      page.getByRole("main").getByRole("button", { name: /^五十から三十/ }),
+    ).toBeVisible();
   });
 
   test("距離単位の条件は、再読み込みと詳細からの戻りで保たれ、取得し直さず、リセットでラウンド単位に戻る", async ({
@@ -725,7 +772,9 @@ test.describe("履歴", () => {
     await expect(unitDistance).toHaveAttribute("aria-checked", "true");
     await expect(rowSummary).toContainText("50m");
     await page.keyboard.press("Escape");
-    await expect(page.getByTestId("history-controls")).toHaveCount(0);
+    await expect(
+      page.getByRole("region", { name: roundsText("historyFilterTitle") }),
+    ).toBeHidden();
 
     // 件を押して詳細へ移り、戻るリンクで履歴へ戻ると、同じ表示が取得し直されずに残る。
     await cards.first().click();
@@ -746,7 +795,10 @@ test.describe("履歴", () => {
     await expect(
       page.getByTestId("history-filter-distance-select"),
     ).toBeVisible();
-    await page.getByTestId("history-controls-reset").click();
+    await page
+      .getByTestId("history-controls-reset")
+      .filter({ visible: true })
+      .click();
     await expect(unitDistance).toHaveAttribute("aria-checked", "false");
     await expect(
       page.getByTestId("history-filter-distance-select"),
@@ -768,7 +820,7 @@ test.describe("履歴", () => {
       name: roundsText("bowTypeOption.compound"),
     });
 
-    // フィルターのポップアップを開き、種別の選択を開いたまま弓種を押すと、種別が閉じて弓種の選択が開き、ポップアップは開いたまま弓種を選べる。
+    // フィルターのパネルを開き、種別の選択を開いたまま弓種を押すと、種別が閉じて弓種の選択が開き、パネルは開いたまま弓種を選べる。
     await openFilter(page);
     await page.getByTestId("history-filter-format").click();
     await expect(indoor).toBeVisible();
@@ -935,14 +987,14 @@ test.describe("履歴", () => {
       }
     });
 
-    test("履歴を開いた直後とスクロールした後のどちらでも、フィルターのアイコンは最前面にあり、押してポップアップを開ける", async ({
+    test("履歴を開いた直後とスクロールした後のどちらでも、フィルターのアイコンは最前面にあり、押してパネルを開ける", async ({
       page,
     }) => {
       const credentials = await signInFreshUser(page, "e2e-history");
       await addCompletedRounds(credentials, "アイコン", 25);
       const toggle = page.getByTestId("history-controls-toggle");
 
-      // 履歴を開いた直後に、アイコンも先頭のカードのメニューも覆われず、アイコンを押してポップアップを開き、Escで閉じる。
+      // 履歴を開いた直後に、アイコンも先頭のカードのメニューも覆われず、アイコンを押してパネルを開き、Escで閉じる。
       await page.goto("/rounds/history");
       await expectUncovered(
         page.getByRole("listitem").first().getByTestId("round-menu-trigger"),
@@ -951,9 +1003,11 @@ test.describe("履歴", () => {
       await expectUncovered(toggle, 8);
       await openFilter(page);
       await page.keyboard.press("Escape");
-      await expect(page.getByTestId("history-controls")).toHaveCount(0);
+      await expect(
+        page.getByRole("region", { name: roundsText("historyFilterTitle") }),
+      ).toBeHidden();
 
-      // 末尾までスクロールしても、アイコンは覆われず、押してポップアップを開ける。
+      // 末尾までスクロールしても、アイコンは覆われず、押してパネルを開ける。
       await scrollToHistoryEnd(page);
       await expectUncovered(toggle, 8);
       await openFilter(page);

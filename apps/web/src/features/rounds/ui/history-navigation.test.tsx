@@ -238,7 +238,6 @@ describe("点数一覧とメニューの接続", () => {
       await waitForBody(state);
       await act(async () => {});
       const before = rig.roundsList.mock.calls.length;
-      expect(before).toBeGreaterThan(0);
 
       // When
       await toggleMenu(user);
@@ -251,6 +250,7 @@ describe("点数一覧とメニューの接続", () => {
       if (state === "取得中") await act(async () => pending.resolve(complete));
 
       // Then
+      expect(before).toBeGreaterThan(0);
       expect(rig.roundsList).toHaveBeenCalledTimes(before);
       expect(screen.getByText("午前練習")).toBeInTheDocument();
       expectMenu(panels()[0]);

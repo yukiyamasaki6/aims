@@ -208,13 +208,15 @@ describe("useHistoryPages", () => {
         { condition: null },
         { loads: [ok(first)] },
       );
-      expect(loadList).not.toHaveBeenCalled();
-      expect(result.current.view).toEqual({ status: "loading" });
+      const callsBeforeCondition = loadList.mock.calls.length;
+      const viewBeforeCondition = result.current.view;
 
       // When
       rerender({ condition: DEFAULT_HISTORY_CONDITION });
 
       // Then
+      expect(callsBeforeCondition).toBe(0);
+      expect(viewBeforeCondition).toEqual({ status: "loading" });
       await waitFor(() =>
         expect(result.current.view).toEqual({ status: "ok", data: first }),
       );
@@ -258,8 +260,22 @@ describe("useHistoryPages", () => {
       // Then
       expect(result.current.view).toEqual({ status: "loading" });
       expect(loadList).toHaveBeenLastCalledWith(scoreCondition, null, 16);
+    });
+
+    it("条件を変えた後の取得が終わると、新しい条件の結果を表示する", async () => {
+      // Given
+      const next = Promise.withResolvers<FetchResult<LoadedRoundsList>>();
+      const { result, rerender } = setup(undefined, {
+        loads: [ok(page(["a"])), next.promise],
+      });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      rerender({ condition: scoreCondition });
       const second = page(["b"]);
+
+      // When
       await act(async () => next.resolve(ok(second)));
+
+      // Then
       expect(result.current.view).toEqual({ status: "ok", data: second });
     });
 
@@ -322,8 +338,22 @@ describe("useHistoryPages", () => {
         null,
         16,
       );
+    });
+
+    it("単位を変えた後の取得が終わると、新しい単位の結果を表示する", async () => {
+      // Given
+      const next = Promise.withResolvers<FetchResult<LoadedRoundsList>>();
+      const { result, rerender } = setup(undefined, {
+        loads: [ok(page(["a"])), next.promise],
+      });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      rerender({ condition: distanceUnitCondition });
       const second = distancePage(["d-1"]);
+
+      // When
       await act(async () => next.resolve(ok(second)));
+
+      // Then
       expect(result.current.view).toEqual({ status: "ok", data: second });
     });
 
@@ -578,10 +608,9 @@ describe("useHistoryPages", () => {
     it("末尾が近づくと、前のページの最後のラウンドを起点に1ページだけ取得して連結する", async () => {
       // Given
       const next = Promise.withResolvers<FetchResult<LoadedRoundsList>>();
-      const { result, loadList, intersection, attachTail, itemIds } = setup(
-        undefined,
-        { loads: [ok(page(["a", "b"], { hasMore: true })), next.promise] },
-      );
+      const { result, loadList, intersection, attachTail } = setup(undefined, {
+        loads: [ok(page(["a", "b"], { hasMore: true })), next.promise],
+      });
       await waitFor(() => expect(result.current.view.status).toBe("ok"));
       attachTail();
 
@@ -597,7 +626,22 @@ describe("useHistoryPages", () => {
         "b",
         16,
       );
+    });
+
+    it("続きの取得が終わると、取得済みの下に連結し、続きの取得を終える", async () => {
+      // Given
+      const next = Promise.withResolvers<FetchResult<LoadedRoundsList>>();
+      const { result, intersection, attachTail, itemIds } = setup(undefined, {
+        loads: [ok(page(["a", "b"], { hasMore: true })), next.promise],
+      });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      attachTail();
+      act(() => intersection.intersect());
+
+      // When
       await act(async () => next.resolve(ok(page(["c"]))));
+
+      // Then
       expect(result.current.more).toEqual({ status: "idle" });
       expect(itemIds()).toEqual(["a", "b", "c"]);
     });
@@ -605,7 +649,7 @@ describe("useHistoryPages", () => {
     it("距離単位の続きの取得は、前のページの最後の項目の距離のID(属するラウンドのIDでない)を起点にする", async () => {
       // Given
       const next = Promise.withResolvers<FetchResult<LoadedRoundsList>>();
-      const { result, loadList, intersection, attachTail, itemIds } = setup(
+      const { result, loadList, intersection, attachTail } = setup(
         { condition: distanceUnitCondition },
         {
           loads: [
@@ -627,7 +671,28 @@ describe("useHistoryPages", () => {
         "d-2",
         16,
       );
+    });
+
+    it("距離単位の続きの取得が終わると、取得済みの下に連結する", async () => {
+      // Given
+      const next = Promise.withResolvers<FetchResult<LoadedRoundsList>>();
+      const { result, intersection, attachTail, itemIds } = setup(
+        { condition: distanceUnitCondition },
+        {
+          loads: [
+            ok(distancePage(["d-1", "d-2"], { hasMore: true })),
+            next.promise,
+          ],
+        },
+      );
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      attachTail();
+      act(() => intersection.intersect());
+
+      // When
       await act(async () => next.resolve(ok(distancePage(["d-3"]))));
+
+      // Then
       expect(itemIds()).toEqual(["d-1", "d-2", "d-3"]);
     });
 
@@ -737,12 +802,13 @@ describe("useHistoryPages", () => {
       attachTail();
       await act(async () => intersection.intersect());
       await act(async () => procedures.returnOnline());
-      expect(loadList).toHaveBeenCalledTimes(2);
+      const callsAfterReturnOnline = loadList.mock.calls.length;
 
       // When
       await act(async () => result.current.retryMore());
 
       // Then
+      expect(callsAfterReturnOnline).toBe(2);
       expect(loadList).toHaveBeenCalledTimes(3);
       expect(loadList).toHaveBeenLastCalledWith(
         DEFAULT_HISTORY_CONDITION,
@@ -1084,13 +1150,14 @@ describe("useHistoryPages", () => {
         loads: [ok(page(["a"])), ok(page(["b"]))],
       });
       await waitFor(() => expect(result.current.view.status).toBe("ok"));
-      expect(loadList).toHaveBeenCalledTimes(1);
+      const callsBeforeReplace = loadList.mock.calls.length;
 
       // When
       // 履歴の項目を押すと、Next.jsは印の無いURLへ検索部を替える。
       act(() => fakeSearchParams.set(""));
 
       // Then
+      expect(callsBeforeReplace).toBe(1);
       await waitFor(() =>
         expect(result.current.view).toEqual({
           status: "ok",

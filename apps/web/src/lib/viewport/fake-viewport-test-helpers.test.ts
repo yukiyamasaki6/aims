@@ -125,4 +125,33 @@ describe("installFakeViewport", () => {
     expect(kept).toHaveBeenCalledTimes(1);
     expect(removed).not.toHaveBeenCalled();
   });
+  it("向きの変更は専用購読へ通知し幅の判定と動きを減らす設定を変えない", () => {
+    // Given
+    const viewport = installFakeViewport({ reducedMotion: true });
+    const query = window.matchMedia("(orientation: landscape)");
+    const changed = vi.fn();
+    const removed = vi.fn();
+    const wide = vi.fn();
+    query.addEventListener("change", changed);
+    query.addEventListener("change", removed);
+    query.removeEventListener("change", removed);
+    window.matchMedia("(min-width: 768px)").addEventListener("change", wide);
+
+    // When
+    viewport.setLandscape(true);
+    const horizontal = query.matches;
+    viewport.setLandscape(false);
+    const portrait = query.matches;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    viewport.restore();
+    viewport.setLandscape(true);
+
+    // Then
+    expect([horizontal, portrait, reduced]).toEqual([true, false, true]);
+    expect(changed).toHaveBeenCalledTimes(2);
+    expect(removed).not.toHaveBeenCalled();
+    expect(wide).not.toHaveBeenCalled();
+  });
 });

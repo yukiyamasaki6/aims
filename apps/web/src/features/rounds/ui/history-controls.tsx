@@ -1,75 +1,62 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import type { Ref } from "react";
 import { buttonVariants } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { isDefaultHistoryCondition } from "../domain/history-filter-draft";
-import type {
-  HistoryCondition,
-  HistoryInput,
-} from "../domain/history-view-state";
-import { HistoryFilterForm } from "./history-filter-form";
+import type { HistoryCondition } from "../domain/history-view-state";
 
-// 履歴のヘッダーの右端のフィルター(置き場は画面が持つ)。アイコンのボタンと、導出されるフィルターが既定でないときの印(点)、既存のDialogのポップアップ(名前と中身。閉じるのはEsc、外側のタップ、適用)を描く。開閉は保持しない。
+// ヘッダーの操作。図柄と名前は開閉によらず一定で、開閉は`aria-expanded`と背景(開いている間は`bg-muted`、そのホバーはより濃い`bg-foreground/10`)で示す。印は適用済み条件だけから決める。
 export function HistoryControls({
-  input,
   condition,
-  onApply,
+  open,
+  panelId,
+  buttonRef,
+  onToggle,
 }: {
-  input: HistoryInput;
   condition: HistoryCondition;
-  onApply: (input: HistoryInput) => void;
+  open: boolean;
+  panelId: string;
+  buttonRef: Ref<HTMLButtonElement>;
+  onToggle: () => void;
 }) {
   const t = useTranslations("rounds");
-  const [open, setOpen] = useState(false);
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        aria-label={t("historyFilterTitle")}
-        data-testid="history-controls-toggle"
-        className={cn(
-          buttonVariants({ variant: "ghost" }),
-          "relative size-8 px-0",
-        )}
+    <button
+      type="button"
+      ref={buttonRef}
+      aria-expanded={open}
+      aria-controls={panelId}
+      onClick={onToggle}
+      data-testid="history-controls-toggle"
+      className={cn(
+        buttonVariants({ variant: "ghost" }),
+        "relative size-8 px-0",
+        open && "bg-muted hover:bg-foreground/10",
+      )}
+    >
+      <span className="sr-only">{t("historyFilterTitle")}</span>
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        className="size-5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       >
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 24 24"
-          className="size-5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <path d="M3 5h18l-7 8v6l-4 2v-8z" />
+      </svg>
+      {!isDefaultHistoryCondition(condition) && (
+        <span
+          className="absolute top-1 right-1 size-2.5 rounded-full bg-primary ring-2 ring-card"
+          data-testid="history-controls-active"
         >
-          <path d="M3 5h18l-7 8v6l-4 2v-8z" />
-        </svg>
-        {!isDefaultHistoryCondition(condition) && (
-          <span
-            className="absolute top-1 right-1 size-2.5 rounded-full bg-primary ring-2 ring-card"
-            data-testid="history-controls-active"
-          >
-            <span className="sr-only">{t("historyFilterActive")}</span>
-          </span>
-        )}
-      </DialogTrigger>
-      <DialogContent className="flex flex-col gap-4 overflow-y-hidden">
-        <DialogTitle className="sr-only">{t("historyFilterTitle")}</DialogTitle>
-        <HistoryFilterForm
-          input={input}
-          onApply={(next) => {
-            onApply(next);
-            setOpen(false);
-          }}
-        />
-      </DialogContent>
-    </Dialog>
+          <span className="sr-only">{t("historyFilterActive")}</span>
+        </span>
+      )}
+    </button>
   );
 }

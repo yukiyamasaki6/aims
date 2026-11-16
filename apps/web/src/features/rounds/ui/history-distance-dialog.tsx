@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -208,6 +208,7 @@ export function HistoryDistanceDialog({
   triggerClassName,
   onConfirm,
   onDelete,
+  deletedFocus,
 }: {
   mode: HistoryDistanceDialogMode;
   row: HistoryDistanceRow | null;
@@ -218,27 +219,44 @@ export function HistoryDistanceDialog({
   onConfirm: (row: HistoryDistanceRow) => void;
   // 編集のときだけ渡す(追加・選択には削除がない)。
   onDelete?: () => void;
+  deletedFocus?: () => HTMLElement | null;
 }) {
   const t = useTranslations("rounds");
   const [open, setOpen] = useState(false);
+  const deleted = useRef(false);
   const title = {
     add: t("addDistance"),
     select: t("historyFilterDistanceSelect"),
     edit: t("historyDistanceEdit"),
   }[mode];
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) deleted.current = false;
+        setOpen(next);
+      }}
+    >
       <DialogTrigger data-testid={triggerTestId} className={triggerClassName}>
         {trigger}
       </DialogTrigger>
-      <DialogContent nested>
+      <DialogContent
+        nested
+        finalFocus={() => (deleted.current ? (deletedFocus?.() ?? true) : true)}
+      >
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DistanceForm
           mode={mode}
           row={row}
           filter={filter}
           onConfirm={onConfirm}
-          onDelete={onDelete}
+          onDelete={
+            onDelete &&
+            (() => {
+              deleted.current = true;
+              onDelete();
+            })
+          }
           onClose={() => setOpen(false)}
         />
       </DialogContent>

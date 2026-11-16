@@ -52,7 +52,7 @@ function RangeInput({
   );
 }
 
-// 日付順(必ず指定)。編集中の値を変えるだけで、適用で反映する。
+// 日付順(必ず指定)。編集中の値を変えるだけで、検索で反映する。
 function DateDirectionSelect({
   draft,
   onChange,
@@ -81,7 +81,7 @@ function DateDirectionSelect({
   );
 }
 
-// 得点順(指定なしがある)。編集中の値を変えるだけで、適用で反映する。
+// 得点順(指定なしがある)。編集中の値を変えるだけで、検索で反映する。
 function ScoreDirectionSelect({
   draft,
   onChange,
