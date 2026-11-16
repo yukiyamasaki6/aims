@@ -8,6 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
@@ -25,6 +26,7 @@ import {
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../domain/round-constants";
 import type {
   DistanceListItem,
+  HistoryListItem,
   LoadedRoundsList,
   RoundListItem,
 } from "../domain/round-list";
@@ -38,6 +40,9 @@ import {
   createFakeRoundProcedures,
   createFakeRoundsListStore,
   createFakeRoundWindow,
+  distanceListItem,
+  roundListItem,
+  WIDE_CARD_METRICS,
 } from "./round-stores-test-helpers";
 import {
   RoundProceduresProvider,
@@ -45,6 +50,7 @@ import {
   RoundWindowProvider,
 } from "./rounds-context";
 import { RoundsHistory } from "./rounds-history";
+import { CardMetricsOverride } from "./use-card-fit";
 
 const suspense = vi.hoisted(() => ({ pending: null as Promise<void> | null }));
 
@@ -70,7 +76,7 @@ let intersection: ReturnType<typeof installFakeIntersectionObserver>;
 
 // 続きの有無と起点は、既定では続きなし・最後の項目。
 function loaded(
-  items: RoundListItem[],
+  items: HistoryListItem[],
   overrides: Partial<LoadedRoundsList> = {},
 ): LoadedRoundsList {
   return {
@@ -82,6 +88,17 @@ function loaded(
   };
 }
 
+// jsdomは幅を測れないため、全ての要素が入る測定値を渡す。
+function WithCardMetrics({ children }: { children: ReactNode }) {
+  return (
+    <IntlTestProvider>
+      <CardMetricsOverride value={WIDE_CARD_METRICS}>
+        {children}
+      </CardMetricsOverride>
+    </IntlTestProvider>
+  );
+}
+
 function renderHistory() {
   return render(
     <RoundWindowProvider roundWindow={fakeWindow.roundWindow}>
@@ -91,7 +108,7 @@ function renderHistory() {
         </RoundProceduresProvider>
       </RoundsListStoreProvider>
     </RoundWindowProvider>,
-    { wrapper: IntlTestProvider },
+    { wrapper: WithCardMetrics },
   );
 }
 
@@ -100,7 +117,7 @@ function roundItem(
   name: string,
   overrides: Partial<RoundListItem> = {},
 ): RoundListItem {
-  return { id, name, roundDate: "2026-09-15", total: 0, ...overrides };
+  return roundListItem({ id, name, total: 0, ...overrides });
 }
 
 const completed: RoundListItem[] = [
@@ -122,28 +139,17 @@ function distanceItem(
   name: string,
   overrides: Partial<DistanceListItem> = {},
 ): DistanceListItem {
-  return {
-    id,
-    roundId,
-    name,
-    roundDate: "2026-09-15",
-    number: 1,
-    distance: 50,
-    isMarked: true,
-    total: 300,
-    ...overrides,
-  };
+  return distanceListItem({ id, roundId, name, ...overrides });
 }
 
 // サーバーが返す距離単位の並び。ラウンドの並びも小計の順でもなく、同じラウンドの距離を離して置き、端末が並べ直さないことを見分けられる。
 const distances: DistanceListItem[] = [
   distanceItem("d-1", "round-1", "午前練習", {
-    number: 2,
     distance: 30,
     total: 320,
   }),
   distanceItem("d-2", "round-2", "午後練習", { total: 280 }),
-  distanceItem("d-3", "round-1", "午前練習", { number: 1, total: 300 }),
+  distanceItem("d-3", "round-1", "午前練習", { total: 300 }),
 ];
 
 function shownNames(): (string | undefined)[] {
@@ -162,7 +168,7 @@ function remember(state: { condition: HistoryCondition }) {
 }
 
 function fetchResolves(
-  items: RoundListItem[],
+  items: HistoryListItem[],
   overrides: Partial<LoadedRoundsList> = {},
 ) {
   fake.store.loadList.mockResolvedValue({
@@ -287,11 +293,6 @@ async function selectDistance(
 ) {
   await user.click(screen.getByTestId("history-filter-distance-select"));
   await confirmDistanceDialog(user, distance, arrowsPerEnd);
-}
-
-function markedTextOf(distance: number) {
-  return () =>
-    roundsText("historyDistanceMarked", { distance: String(distance) });
 }
 
 async function openDeleteDialog(
@@ -1129,10 +1130,10 @@ describe("RoundsHistory", () => {
         expect.any(Number),
       );
       expect(screen.getByText("午後練習")).toBeInTheDocument();
-      expect(screen.getByText("2026-09-15")).toBeInTheDocument();
-      expect(
-        screen.getByText(roundsText("roundTotalPoints", { total: "300" })),
-      ).toBeInTheDocument();
+      expect(screen.getByText("2026/09/15")).toBeInTheDocument();
+      expect(screen.getByText("午前練習").closest("li")?.textContent).toMatch(
+        /300$/,
+      );
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
 
@@ -3658,12 +3659,6 @@ describe("RoundsHistory", () => {
     const userEvents = () => userEvent.setup();
     const shownCards = () =>
       screen.queryAllByRole("listitem").map((card) => card.textContent);
-    const lineOf = (date: string, number: number, distanceText: string) =>
-      roundsText("historyDistanceLine", {
-        date,
-        number: String(number),
-        distance: distanceText,
-      });
     const markedText = (distance: number) =>
       roundsText("historyDistanceMarked", { distance: String(distance) });
 
@@ -3695,12 +3690,11 @@ describe("RoundsHistory", () => {
     });
 
     describe("距離単位のカード", () => {
-      it("各件に、ラウンドの名前、実施日と射つ順の番号と距離、小計を出し、小計が0の件も出す", async () => {
+      it("各件に、ラウンドの名前、実施日、距離、小計を出し、小計が0の件も出す", async () => {
         // Given
         fetchResolves([
           distanceItem("d-1", "round-1", "午前練習", {
             roundDate: "2026-09-15",
-            number: 2,
             distance: 30,
             total: 320,
           }),
@@ -3714,50 +3708,11 @@ describe("RoundsHistory", () => {
 
         // Then
         const [first, second] = screen.getAllByRole("listitem");
-        expect(first).toHaveTextContent(
-          lineOf("2026-09-15", 2, markedText(30)),
-        );
-        expect(first).toHaveTextContent(
-          roundsText("distanceSubtotal", { total: "320" }),
-        );
-        expect(second).toHaveTextContent(
-          roundsText("distanceSubtotal", { total: "0" }),
-        );
+        expect(first).toHaveTextContent("2026/09/15");
+        expect(first).toHaveTextContent(markedText(30));
+        expect(first.textContent).toMatch(/320$/);
+        expect(second.textContent).toMatch(/(?<!\d)0$/);
       });
-
-      it.each([
-        [
-          "距離が判明している",
-          { distance: 50, isMarked: true },
-          markedTextOf(50),
-        ],
-        [
-          "無印で距離がある",
-          { distance: 50, isMarked: false },
-          () => roundsText("historyDistanceUnmarkedLength", { distance: "50" }),
-        ],
-        [
-          "距離が無い",
-          { distance: null, isMarked: false },
-          () => roundsText("distanceUnmarked"),
-        ],
-      ])(
-        "%s件は、距離の表示を場合分けして出す",
-        async (_name, override, expectedText) => {
-          // Given
-          fetchResolves([distanceItem("d-1", "round-1", "午前練習", override)]);
-          remember({ condition: distanceCondition() });
-
-          // When
-          renderHistory();
-          await screen.findByText("午前練習");
-
-          // Then
-          expect(screen.getByRole("listitem")).toHaveTextContent(
-            lineOf("2026-09-15", 1, expectedText()),
-          );
-        },
-      );
 
       it("同じラウンドの複数の距離を別のカードで、サーバーが返した並びのまま表示し、端末で並べ直さない", async () => {
         // Given
@@ -3771,9 +3726,9 @@ describe("RoundsHistory", () => {
         // Then
         const cards = shownCards();
         expect(cards).toHaveLength(3);
-        expect(cards[0]).toContain(lineOf("2026-09-15", 2, markedText(30)));
+        expect(cards[0]).toContain(markedText(30));
         expect(cards[1]).toContain("午後練習");
-        expect(cards[2]).toContain(lineOf("2026-09-15", 1, markedText(50)));
+        expect(cards[2]).toContain(markedText(50));
       });
 
       it("距離単位のカードには、削除のメニューが無い", async () => {

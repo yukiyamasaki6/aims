@@ -3,6 +3,7 @@ import type { FetchView } from "./fetch-status";
 import { DEFAULT_HISTORY_CONDITION } from "./history-view-state";
 import type {
   DistanceListItem,
+  HistoryListItem,
   LoadedRoundsList,
   LocalRoundsList,
   RoundListItem,
@@ -10,24 +11,32 @@ import type {
 import { historyView, homeView } from "./rounds-list-view";
 
 function item(id: string, roundDate = "2026-09-15", total = 0): RoundListItem {
-  return { id, name: id, roundDate, total };
-}
-
-function distanceItem(
-  id: string,
-  roundId: string,
-  number: number,
-): DistanceListItem {
   return {
-    ...item(id),
-    roundId,
-    number,
-    distance: 50,
-    isMarked: true,
+    id,
+    name: id,
+    roundDate,
+    format: "outdoor",
+    bowType: "recurve",
+    total,
+    distances: [],
   };
 }
 
-const ids = (rounds: RoundListItem[] | null | undefined) =>
+function distanceItem(id: string, roundId: string): DistanceListItem {
+  return {
+    id,
+    roundId,
+    name: id,
+    roundDate: "2026-09-15",
+    format: "outdoor",
+    bowType: "recurve",
+    distance: 50,
+    isMarked: true,
+    total: 0,
+  };
+}
+
+const ids = (rounds: HistoryListItem[] | null | undefined) =>
   rounds?.map((r) => r.id);
 
 describe("homeView", () => {
@@ -181,12 +190,12 @@ describe("historyView", () => {
   it("距離単位では、端末の入力中・削除済み・この画面で削除したラウンドに属する距離を全て除き、他のラウンドの距離と並びは残す", () => {
     // Given
     const items = [
-      distanceItem("d-1", "r-keep", 1),
-      distanceItem("d-2", "p1", 1),
-      distanceItem("d-3", "r-deleted", 1),
-      distanceItem("d-4", "r-removed", 1),
-      distanceItem("d-5", "r-keep", 2),
-      distanceItem("d-6", "p1", 2),
+      distanceItem("d-1", "r-keep"),
+      distanceItem("d-2", "p1"),
+      distanceItem("d-3", "r-deleted"),
+      distanceItem("d-4", "r-removed"),
+      distanceItem("d-5", "r-keep"),
+      distanceItem("d-6", "p1"),
     ];
     const local: LocalRoundsList = { inProgress: [item("p1")] };
 
@@ -208,7 +217,7 @@ describe("historyView", () => {
 
     // When
     const view = historyView(
-      loaded({ items: [distanceItem("d-1", "p1", 1)], hasMore: true }),
+      loaded({ items: [distanceItem("d-1", "p1")], hasMore: true }),
       local,
       new Set(),
       DEFAULT_HISTORY_CONDITION,

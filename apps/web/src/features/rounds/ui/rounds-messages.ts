@@ -80,11 +80,10 @@ export const roundsMessages = {
       distanceInvalid: "距離は1〜100の整数で入力してください",
       arrowsPerEndInvalid: "1エンドの矢数は1〜12の整数で入力してください",
     } satisfies Record<HistoryDistanceError, string>,
-    historyDistanceLine: "{date} / 距離{number} {distance}",
+    // 点数カードの中央で、表示しきれない距離の数。
+    historyDistancesRest: "+{count}",
     historyDistanceMarked: "{distance}m",
-    historyDistanceUnmarkedLength: "Unmarked {distance}m",
     newRoundLabel: "ラウンドを開始",
-    roundTotalPoints: "{total}点",
     roundMenuLabel: "ラウンドのメニュー",
     roundMenuLabelNamed: "「{name}」のメニュー",
     roundDelete: "ラウンドを削除",

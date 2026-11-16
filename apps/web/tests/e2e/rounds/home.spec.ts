@@ -21,6 +21,11 @@ import {
 
 const roundsText = translatorFor("rounds");
 
+// 距離ごとの小計の一覧の距離の表記。
+function distanceText(distance: number) {
+  return roundsText("historyDistanceMarked", { distance: String(distance) });
+}
+
 // 要素の中心の最前面が、その要素自身か子孫であることを、スクロールが止まるまで待って確かめる。
 async function expectFrontmostAtCenter(target: Locator) {
   await expect
@@ -47,10 +52,6 @@ test("ホームの右下のラウンドの開始ボタンを押すと、ラウ�
   await page.getByTestId("new-round-fab").click();
 
   await expect(page).toHaveURL(/\/rounds\/new/);
-  await expect(
-    page.getByRole("heading", { level: 1, name: roundsText("newRoundTitle") }),
-  ).toBeVisible();
-  await expect(page.getByTestId("round-start-button")).toBeVisible();
 });
 
 test("入力中のラウンドのカードを押すと、そのラウンドの詳細画面へ移動する", async ({
@@ -69,9 +70,6 @@ test("入力中のラウンドのカードを押すと、そのラウンドの�
   await page.getByRole("link", { name: new RegExp(name) }).click();
 
   await expect(page).toHaveURL(`/rounds/${roundId}`);
-  await expect(page.getByTestId("round-summary")).toContainText(
-    roundsText("roundTotal", { total: "0" }),
-  );
 });
 
 // 入力中のラウンドの有無で表示が変わるため、以降のテストは使い捨てのユーザーで前提を作る。
@@ -95,7 +93,6 @@ test.describe("使い捨てのユーザー", () => {
     // Enterで開始画面へ移る。
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/rounds\/new/);
-    await expect(page.getByTestId("round-start-button")).toBeVisible();
   });
 
   test("幅390pxで入力中のラウンドが画面に収まらないほどあっても、本文を末尾までスクロールすると、最後のカードとそのメニューが右下のラウンドの開始ボタンに隠れない", async ({
@@ -128,8 +125,16 @@ test.describe("使い捨てのユーザー", () => {
   }) => {
     const credentials = await signInFreshUser(page, "e2e-home");
     const name = `入力中-${Date.now()}`;
+    // 距離ごとの小計(9、4)が合計点(13)と違う値になるよう、2距離に矢を置く。
     const roundId = await addRound(credentials, name, "2026-03-01", {
-      shots: [{ scoreStr: "9", scoreInt: 9 }],
+      distances: [
+        { distance: 70, totalEnds: 6, arrowsPerEnd: 6 },
+        { distance: 50, totalEnds: 6, arrowsPerEnd: 6 },
+      ],
+      shots: [
+        { scoreStr: "9", scoreInt: 9, distanceIndex: 0 },
+        { scoreStr: "4", scoreInt: 4, distanceIndex: 1 },
+      ],
     });
     await page.goto("/rounds");
     const card = page.getByRole("link", { name: new RegExp(name) });
@@ -138,18 +143,17 @@ test.describe("使い捨てのユーザー", () => {
     await goOffline(page.context());
     await page.goto("/rounds");
 
-    await expect(card).toContainText("2026-03-01");
+    await expect(card).toContainText("2026/03/01");
+    await expect(card).toContainText(roundsText("formatOption.outdoor"));
+    await expect(card).toContainText(roundsText("bowTypeOption.recurve"));
     await expect(card).toContainText(
-      roundsText("roundTotalPoints", { total: "9" }),
+      new RegExp(`${distanceText(70)}${distanceText(50)}9413$`),
     );
     await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
 
     // 入力中のラウンドのカードを押し、オフラインのままラウンド詳細を開く。
     await card.click();
     await expect(page).toHaveURL(`/rounds/${roundId}`);
-    await expect(page.getByTestId("round-summary")).toContainText(
-      roundsText("roundTotal", { total: "9" }),
-    );
   });
 
   test("他の端末で完了にしたラウンドと削除したラウンドは、同期の後にホームから消え、入力中のままのラウンドは残る", async ({

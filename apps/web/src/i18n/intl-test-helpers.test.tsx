@@ -17,7 +17,7 @@ function Shown() {
 function MissingValue() {
   // 差し込みの値を渡さず、書式の誤りにする。
   const t = useTranslations("rounds") as unknown as (key: string) => string;
-  return <p>{t("roundTotalPoints")}</p>;
+  return <p>{t("historyDistanceMarked")}</p>;
 }
 
 describe("IntlTestProvider", () => {

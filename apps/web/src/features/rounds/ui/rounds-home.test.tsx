@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
@@ -8,6 +9,8 @@ import {
   createFakeRoundProcedures,
   createFakeRoundsListStore,
   createFakeRoundWindow,
+  roundListItem,
+  WIDE_CARD_METRICS,
 } from "./round-stores-test-helpers";
 import {
   RoundProceduresProvider,
@@ -15,6 +18,7 @@ import {
   RoundWindowProvider,
 } from "./rounds-context";
 import { RoundsHome } from "./rounds-home";
+import { CardMetricsOverride } from "./use-card-fit";
 
 const roundsText = translatorFor("rounds");
 
@@ -22,6 +26,17 @@ const roundsText = translatorFor("rounds");
 let fake: ReturnType<typeof createFakeRoundsListStore>;
 let fakeWindow: ReturnType<typeof createFakeRoundWindow>;
 let procedures: ReturnType<typeof createFakeRoundProcedures>;
+
+// jsdomは幅を測れないため、全ての要素が入る測定値を渡す。
+function WithCardMetrics({ children }: { children: ReactNode }) {
+  return (
+    <IntlTestProvider>
+      <CardMetricsOverride value={WIDE_CARD_METRICS}>
+        {children}
+      </CardMetricsOverride>
+    </IntlTestProvider>
+  );
+}
 
 function renderHome() {
   return render(
@@ -32,13 +47,18 @@ function renderHome() {
         </RoundProceduresProvider>
       </RoundsListStoreProvider>
     </RoundWindowProvider>,
-    { wrapper: IntlTestProvider },
+    { wrapper: WithCardMetrics },
   );
 }
 
 const inProgress: RoundListItem[] = [
-  { id: "round-1", name: "午前練習", roundDate: "2026-09-15", total: 300 },
-  { id: "round-2", name: "午後練習", roundDate: "2026-09-16", total: 280 },
+  roundListItem({ id: "round-1", total: 300 }),
+  roundListItem({
+    id: "round-2",
+    name: "午後練習",
+    roundDate: "2026-09-16",
+    total: 280,
+  }),
 ];
 
 async function openDeleteDialog(
@@ -72,10 +92,8 @@ describe("RoundsHome", () => {
       expect(cards).toHaveLength(2);
       expect(cards[0]).toHaveTextContent("午後練習");
       expect(cards[1]).toHaveTextContent("午前練習");
-      expect(screen.getByText("2026-09-15")).toBeInTheDocument();
-      expect(
-        screen.getByText(roundsText("roundTotalPoints", { total: "300" })),
-      ).toBeInTheDocument();
+      expect(screen.getByText("2026/09/15")).toBeInTheDocument();
+      expect(cards[1].textContent).toMatch(/300$/);
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
     });
 
@@ -249,7 +267,12 @@ describe("RoundsHome", () => {
       fakeWindow.setLocal({
         inProgress: [
           inProgress[0],
-          { id: "round-9", name: "", roundDate: "2026-09-17", total: 100 },
+          roundListItem({
+            id: "round-9",
+            name: "",
+            roundDate: "2026-09-17",
+            total: 100,
+          }),
         ],
       });
 
@@ -271,14 +294,19 @@ describe("RoundsHome", () => {
       // Given
       fakeWindow.setLocal({
         inProgress: [
-          { id: "round-9", name: "", roundDate: "2026-09-17", total: 100 },
+          roundListItem({
+            id: "round-9",
+            name: "",
+            roundDate: "2026-09-17",
+            total: 100,
+          }),
         ],
       });
       const user = userEvent.setup();
       renderHome();
 
       // When
-      await openDeleteDialog(user, "2026-09-17");
+      await openDeleteDialog(user, "2026/09/17");
 
       // Then
       expect(

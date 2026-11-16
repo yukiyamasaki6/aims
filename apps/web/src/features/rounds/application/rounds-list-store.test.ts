@@ -20,7 +20,17 @@ function loadListWith(
 }
 
 const page: RoundsPage = {
-  items: [{ id: "round-1", name: "午前", roundDate: "2026-09-15", total: 0 }],
+  items: [
+    {
+      id: "round-1",
+      name: "午前",
+      roundDate: "2026-09-15",
+      format: "outdoor",
+      bowType: "recurve",
+      total: 0,
+      distances: [],
+    },
+  ],
   hasMore: true,
   after: "round-1",
 };

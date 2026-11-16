@@ -759,7 +759,10 @@ describe("fetchRoundsList", () => {
     id,
     name: `ラウンド${id}`,
     round_date: "2026-09-15",
+    format: "outdoor",
+    bow_type: "recurve",
     total,
+    distances: [{ distance: 70, is_marked: true, total }],
   });
 
   it("取得できたら、各行を一覧の1件にして問い合わせの返した順のまま返し、続きの有無と、最後の行のIDを起点にして返す", async () => {
@@ -786,13 +789,19 @@ describe("fetchRoundsList", () => {
             id: "round-2",
             name: "ラウンドround-2",
             roundDate: "2026-09-15",
+            format: "outdoor",
+            bowType: "recurve",
             total: 10,
+            distances: [{ distance: 70, isMarked: true, total: 10 }],
           },
           {
             id: "round-1",
             name: "ラウンドround-1",
             roundDate: "2026-09-15",
+            format: "outdoor",
+            bowType: "recurve",
             total: 9,
+            distances: [{ distance: 70, isMarked: true, total: 9 }],
           },
         ],
         hasMore: true,

@@ -29,7 +29,10 @@ const loaded: LocalRoundsList = {
       id: "r1",
       name: roundsText("homeEmpty"),
       roundDate: "2026-09-15",
+      format: "outdoor",
+      bowType: "recurve",
       total: 3,
+      distances: [{ distance: 70, isMarked: true, total: 3 }],
     },
   ],
 };

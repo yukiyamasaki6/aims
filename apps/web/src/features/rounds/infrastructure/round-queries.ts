@@ -35,19 +35,35 @@ function chunkIds(ids: readonly string[]): string[][] {
   return chunks;
 }
 
-// 履歴の関数の戻り値を、ページの形に写す。ラウンド単位は({ rounds: [{ id, name, round_date, total }], has_more })、距離単位は({ distances: [{ id, round_id, name, round_date, number, distance, is_marked, total }], has_more })。
+// 履歴の関数の戻り値を、ページの形に写す。ラウンド単位は({ rounds: [{ id, name, round_date, format, bow_type, total, distances }], has_more })、距離単位は({ distances: [{ id, round_id, name, round_date, format, bow_type, distance, is_marked, total }], has_more })。
+// 追加の項目が無い応答(DBのmigrationが画面より遅れた間)は、nullを返す。
 function pageOfResponse(
   data: unknown,
   unit: HistoryCondition["unit"],
-): ServerHistoryPage {
+): ServerHistoryPage | null {
   const body = data as {
-    rounds: Extract<ServerHistoryPage, { rounds: unknown }>["rounds"];
-    distances: Extract<ServerHistoryPage, { distances: unknown }>["distances"];
+    rounds?: Extract<ServerHistoryPage, { rounds: unknown }>["rounds"];
+    distances?: Extract<ServerHistoryPage, { distances: unknown }>["distances"];
     has_more: boolean;
   };
-  return unit === "distance"
-    ? { distances: body.distances, hasMore: body.has_more }
-    : { rounds: body.rounds, hasMore: body.has_more };
+  if (unit === "distance") {
+    const items = body.distances;
+    const complete = items?.every(
+      (item) =>
+        typeof item.format === "string" && typeof item.bow_type === "string",
+    );
+    return items && complete
+      ? { distances: items, hasMore: body.has_more }
+      : null;
+  }
+  const items = body.rounds;
+  const complete = items?.every(
+    (item) =>
+      typeof item.format === "string" &&
+      typeof item.bow_type === "string" &&
+      Array.isArray(item.distances),
+  );
+  return items && complete ? { rounds: items, hasMore: body.has_more } : null;
 }
 
 // 期間と得点の範囲の引数。指定があるものだけ送る(指定が全くなければ旧い版と同じ6引数)。
@@ -204,10 +220,8 @@ export function createRoundQueries(
           : await database.rpc("rounds_list", args);
       const failure = failureOfResponses([response]);
       if (failure) return failure;
-      return {
-        status: "ok",
-        data: pageOfResponse(response.data, condition.unit),
-      };
+      const page = pageOfResponse(response.data, condition.unit);
+      return page ? { status: "ok", data: page } : { status: "failed" };
     },
     // preset_roundsのRLSは認証済みの全員に全行を見せるため、他人の個人プリセットを除くクエリの絞りが必須である。
     async presets(userId) {
