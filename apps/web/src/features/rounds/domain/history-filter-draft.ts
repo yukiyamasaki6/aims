@@ -8,7 +8,7 @@ import {
   historyRangeOf,
 } from "./history-view-state";
 
-// フィルターのポップアップの編集中の値。開くたびに入力値から作り、閉じると破棄する。
+// フィルターのパネルの編集中の値。開くたびに入力値から作り、閉じると破棄する。
 // 種別・弓種・向き・単位は入力値と同じ型、期間と得点の範囲は入力途中の文字、ラウンド構成と絞り込む距離は距離のダイアログで確定した検証済みの行である。
 export type HistoryFilterDraft = {
   unit: HistoryInput["unit"];
@@ -22,7 +22,7 @@ export type HistoryFilterDraft = {
   distanceRow: HistoryDistanceRow | null;
 };
 
-// 適用で見つかったエラー。期間と得点の範囲の原因の一覧(距離は距離のダイアログの確定で検証済み)。
+// 検索で見つかったエラー。期間と得点の範囲の原因の一覧(距離は距離のダイアログの確定で検証済み)。
 export type HistoryFilterErrors = {
   range: HistoryRangeError[];
 };

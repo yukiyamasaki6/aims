@@ -16,7 +16,7 @@ export type HistoryViewControls = {
   applyInput: (input: HistoryInput) => void;
 };
 
-// 履歴の入力値を、表示の開始後に記憶から読み、適用のたびに記憶へ書く。導出されるフィルターは保存せず、値が同じなら同じ内容を返す。
+// 履歴の入力値を、表示の開始後に記憶から読み、検索のたびに記憶へ書く。導出されるフィルターは保存せず、値が同じなら同じ内容を返す。
 export function useHistoryView(memory: HistoryViewMemory): HistoryViewControls {
   const [input, setInput] = useState<HistoryInput | null>(null);
   const previous = useRef<{ key: string; condition: HistoryCondition } | null>(

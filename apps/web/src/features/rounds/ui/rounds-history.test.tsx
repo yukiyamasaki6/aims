@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { installFakeViewport } from "@/lib/viewport/fake-viewport-test-helpers";
 import { createFakeHistoryViewMemory } from "../application/fake-history-view-memory-test-helpers";
 import {
   DEFAULT_HISTORY_CONDITION,
@@ -64,6 +65,7 @@ let fake: ReturnType<typeof createFakeRoundsListStore>;
 let fakeWindow: ReturnType<typeof createFakeRoundWindow>;
 let procedures: ReturnType<typeof createFakeRoundProcedures>;
 let memory: ReturnType<typeof createFakeHistoryViewMemory>;
+let viewport: ReturnType<typeof installFakeViewport>;
 let intersection: ReturnType<typeof installFakeIntersectionObserver>;
 
 // 続きの有無と起点は、既定では続きなし・最後の項目。
@@ -303,6 +305,7 @@ async function openDeleteDialog(
 }
 
 beforeEach(() => {
+  viewport = installFakeViewport();
   fake = createFakeRoundsListStore();
   fake.store.loadList.mockReturnValue(new Promise(() => {}));
   procedures = createFakeRoundProcedures();
@@ -317,9 +320,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
+  viewport.restore();
   suspense.pending = null;
   fakeSearchParams.reset();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -338,13 +344,13 @@ function selectedOf(testId: string) {
   return screen.getByTestId(testId).textContent;
 }
 
-// 右上のフィルターのアイコンを押して、ポップアップを開く。
+// 右上のフィルターのアイコンを押して、パネルを開く。
 async function openFilter(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId("history-controls-toggle"));
-  await screen.findByTestId("history-controls");
+  await screen.findByRole("region", { name: roundsText("historyFilterTitle") });
 }
 
-// 一覧を表示してから、ポップアップを開く。
+// 一覧を表示してから、パネルを開く。
 async function renderOpenedHistory() {
   fetchResolves(varied);
   renderHistory();
@@ -354,9 +360,16 @@ async function renderOpenedHistory() {
   return user;
 }
 
+// 操作行はパネルの中に1つだけある。
+function filterAction(action: "apply" | "reset") {
+  return within(
+    screen.getByRole("region", { name: roundsText("historyFilterTitle") }),
+  ).getByTestId(`history-controls-${action}`);
+}
+
 // 適用を押す。
 function applyFilter() {
-  fireEvent.click(screen.getByTestId("history-controls-apply"));
+  fireEvent.click(filterAction("apply"));
 }
 
 const FORMAT_TEST_ID = "history-filter-format";
@@ -437,9 +450,8 @@ describe("RoundsHistory", () => {
       suspense.pending = pending.promise;
       fetchResolves(completed);
       renderHistory();
-      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-        /^点数一覧$/,
-      );
+      const headingWhilePending = screen.getByRole("heading", { level: 1 });
+      const titleWhilePending = headingWhilePending.textContent;
 
       // When
       await act(async () => {
@@ -448,9 +460,655 @@ describe("RoundsHistory", () => {
       });
 
       // Then
+      expect(titleWhilePending).toBe("点数一覧");
       expect(await screen.findByText("午前練習")).toBeVisible();
       expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
         /^点数一覧$/,
+      );
+    });
+  });
+
+  describe("非モーダルの編集セッション", () => {
+    it("開閉状態と操作対象のregionをヘッダーから参照できる", async () => {
+      // Given
+      fetchResolves(varied);
+      renderHistory();
+      await screen.findByText("夜練習");
+      const toggle = screen.getByTestId("history-controls-toggle");
+      const expandedBefore = toggle.getAttribute("aria-expanded");
+
+      // When
+      fireEvent.click(toggle);
+
+      // Then
+      expect(expandedBefore).toBe("false");
+      const region = screen.getByRole("region", {
+        name: roundsText("historyFilterTitle"),
+      });
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(toggle).toHaveAttribute("aria-controls", region.id);
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it.each([
+      ["縦長", false],
+      ["横長", true],
+    ])(
+      "%sでヘッダーのフィルターを押すと未適用値とエラーを破棄してヘッダーへ戻す",
+      async (_orientation, landscape) => {
+        // Given
+        viewport.setLandscape(landscape);
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "9");
+        draftRange("scoreMax", "1");
+        applyFilter();
+        const requests = [...fake.store.loadList.mock.calls];
+        const stored = memory.stored();
+        const toggle = screen.getByTestId("history-controls-toggle");
+
+        // When
+        await user.click(toggle);
+        const focused = document.activeElement;
+        await openFilter(user);
+
+        // Then
+        expect(focused).toBe(toggle);
+        expect(rangeInput("scoreMin")).toHaveValue("");
+        expect(screen.queryByRole("alert")).toBeNull();
+        expect(fake.store.loadList.mock.calls).toEqual(requests);
+        expect(memory.stored()).toEqual(stored);
+      },
+    );
+
+    it("パネルには、リセットと検索の操作行が1組だけあり、先頭の条件より前に並ぶ", async () => {
+      // Given
+      await renderOpenedHistory();
+
+      // When
+      const resets = screen.getAllByTestId("history-controls-reset");
+      const applies = screen.getAllByTestId("history-controls-apply");
+
+      // Then
+      expect(resets).toHaveLength(1);
+      expect(applies).toHaveLength(1);
+      expect(
+        resets[0].compareDocumentPosition(applies[0]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        applies[0].compareDocumentPosition(rangeInput("dateFrom")) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("操作行の表示は、指定された日本語「リセット」と「検索」である", async () => {
+      // Given
+      await renderOpenedHistory();
+
+      // When
+      const reset = filterAction("reset");
+      const search = filterAction("apply");
+
+      // Then
+      expect(reset).toHaveTextContent(/^リセット$/);
+      expect(search).toHaveTextContent(/^検索$/);
+    });
+
+    it.each([
+      ["入力欄", () => rangeInput("scoreMin")],
+      ["操作行", () => filterAction("apply")],
+    ])(
+      "パネルの%s内のEscで閉じてヘッダーへフォーカスを戻す",
+      async (_place, target) => {
+        // Given
+        await renderOpenedHistory();
+        draftRange("scoreMin", "19");
+
+        // When
+        fireEvent.keyDown(target(), { key: "Escape" });
+
+        // Then
+        expect(
+          screen.queryByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          }),
+        ).toBeNull();
+        expect(screen.getByTestId("history-controls-toggle")).toHaveFocus();
+      },
+    );
+
+    it("ヘッダーの操作内のEscでは閉じず、編集中の条件とエラーを保つ", async () => {
+      // Given
+      await renderOpenedHistory();
+      draftRange("scoreMin", "9");
+      draftRange("scoreMax", "1");
+      applyFilter();
+      const toggle = screen.getByTestId("history-controls-toggle");
+
+      // When
+      fireEvent.keyDown(toggle, { key: "Escape" });
+
+      // Then
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(rangeInput("scoreMin")).toHaveValue("9");
+      expect(
+        screen.getByTestId("history-filter-error-scoreOrder"),
+      ).toBeInTheDocument();
+    });
+
+    it("一覧内のEscと外側クリックでは下書きとエラーを保つ", async () => {
+      // Given
+      await renderOpenedHistory();
+      draftRange("scoreMin", "9");
+      draftRange("scoreMax", "1");
+      applyFilter();
+      const requests = [...fake.store.loadList.mock.calls];
+      const main = screen.getByRole("main");
+
+      // When
+      fireEvent.click(main);
+      fireEvent.keyDown(main, { key: "Escape" });
+
+      // Then
+      expect(
+        screen.getByRole("region", { name: roundsText("historyFilterTitle") }),
+      ).toBeInTheDocument();
+      expect(rangeInput("scoreMin")).toHaveValue("9");
+      expect(
+        screen.getByTestId("history-filter-error-scoreOrder"),
+      ).toBeInTheDocument();
+      expect(fake.store.loadList.mock.calls).toEqual(requests);
+    });
+
+    it("処理済みのEscでは外側を閉じない", async () => {
+      // Given
+      await renderOpenedHistory();
+      const event = new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      });
+      event.preventDefault();
+
+      // When
+      fireEvent(rangeInput("scoreMin"), event);
+
+      // Then
+      expect(
+        screen.getByRole("region", { name: roundsText("historyFilterTitle") }),
+      ).toBeInTheDocument();
+    });
+
+    it.each(["Enter", "Tab"])(
+      "エラー後の修正と%sで検証・保存・取得・閉鎖を起こさない",
+      async (key) => {
+        // Given
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "9");
+        draftRange("scoreMax", "1");
+        applyFilter();
+        const requests = [...fake.store.loadList.mock.calls];
+        const stored = memory.stored();
+        rangeInput("scoreMin").focus();
+
+        // When
+        draftRange("scoreMin", "0");
+        await user.keyboard(`{${key}}`);
+
+        // Then
+        expect(rangeInput("scoreMin")).toHaveValue("0");
+        expect(
+          screen.getByTestId("history-filter-error-scoreOrder"),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          }),
+        ).toBeInTheDocument();
+        expect(fake.store.loadList.mock.calls).toEqual(requests);
+        expect(memory.stored()).toEqual(stored);
+      },
+    );
+
+    it("正しい値へ修正して適用すると閉じて条件を確定する", async () => {
+      // Given
+      await renderOpenedHistory();
+      draftRange("scoreMin", "9");
+      draftRange("scoreMax", "1");
+      applyFilter();
+      draftRange("scoreMin", "0");
+
+      // When
+      applyFilter();
+
+      // Then
+      expect(
+        screen.queryByRole("region", {
+          name: roundsText("historyFilterTitle"),
+        }),
+      ).toBeNull();
+      expect(memory.stored().input).toMatchObject({ scoreMin: 0, scoreMax: 1 });
+      expect(fake.store.loadList).toHaveBeenLastCalledWith(
+        expect.objectContaining({ scoreMin: 0, scoreMax: 1 }),
+        null,
+        expect.any(Number),
+      );
+      expect(screen.getByTestId("history-controls-toggle")).toHaveFocus();
+    });
+
+    it.each(["ok", "error"])(
+      "保留中の一覧取得が%sになっても編集文字とエラーを維持する",
+      async (status) => {
+        // Given
+        const pending = Promise.withResolvers<unknown>();
+        fake.store.loadList.mockReturnValue(pending.promise);
+        renderHistory();
+        const user = userEvent.setup();
+        await openFilter(user);
+        draftRange("scoreMin", "-");
+        applyFilter();
+
+        // When
+        await act(async () =>
+          pending.resolve(
+            status === "ok"
+              ? { status, data: loaded(varied) }
+              : { status, reason: "failed" },
+          ),
+        );
+
+        // Then
+        expect(
+          screen.getByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          }),
+        ).toBeInTheDocument();
+        expect(rangeInput("scoreMin")).toHaveValue("-");
+        expect(
+          screen.getByTestId("history-filter-error-scoreInvalid"),
+        ).toBeInTheDocument();
+        expect(memory.stored()).toEqual(DEFAULT_HISTORY_VIEW_STATE);
+      },
+    );
+
+    it("再試行は適用済み条件を使い下書きとエラーを維持する", async () => {
+      // Given
+      fake.store.loadList.mockResolvedValue({
+        status: "error",
+        reason: "failed",
+      });
+      renderHistory();
+      const user = userEvent.setup();
+      await screen.findByRole("button", { name: roundsText("fetchRetry") });
+      await openFilter(user);
+      draftRange("scoreMin", "-");
+      applyFilter();
+      fetchResolves(varied);
+
+      // When
+      await user.click(
+        screen.getByRole("button", { name: roundsText("fetchRetry") }),
+      );
+
+      // Then
+      expect(await screen.findByText("夜練習")).toBeInTheDocument();
+      expect(fake.store.loadList).toHaveBeenLastCalledWith(
+        DEFAULT_HISTORY_CONDITION,
+        null,
+        expect.any(Number),
+      );
+      expect(rangeInput("scoreMin")).toHaveValue("-");
+      expect(
+        screen.getByTestId("history-filter-error-scoreInvalid"),
+      ).toBeInTheDocument();
+    });
+
+    it.each(["apply", "reset"] as const)(
+      "操作行の%sにフォーカスして縦長と横長へ回転しても、フォーカスも開閉も動かない",
+      async (action) => {
+        // Given
+        await renderOpenedHistory();
+        const target = filterAction(action);
+        target.focus();
+        const toggle = screen.getByTestId("history-controls-toggle");
+
+        // When
+        act(() => viewport.setLandscape(true));
+        const horizontal = document.activeElement;
+        act(() => viewport.setLandscape(false));
+
+        // Then
+        expect(horizontal).toBe(target);
+        expect(target).toHaveFocus();
+        expect(toggle).toHaveAttribute("aria-expanded", "true");
+        expect(filterAction(action)).toBe(target);
+      },
+    );
+
+    describe("検索後の挙動は検索を押した時点の向きで決まる", () => {
+      it("横長で有効な変更を検索すると、閉じず、入力値とフォーカスを保ち、条件を確定して先頭から取得する", async () => {
+        // Given
+        viewport.setLandscape(true);
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "5");
+
+        // When
+        await user.click(filterAction("apply"));
+
+        // Then
+        expect(
+          screen.getByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          }),
+        ).toBeInTheDocument();
+        expect(rangeInput("scoreMin")).toHaveValue("5");
+        expect(filterAction("apply")).toHaveFocus();
+        expect(memory.stored().input.scoreMin).toBe(5);
+        expect(fake.store.loadList).toHaveBeenLastCalledWith(
+          expect.objectContaining({ scoreMin: 5 }),
+          null,
+          expect.any(Number),
+        );
+        expect(screen.getByTestId("history-controls-active")).toBeVisible();
+      });
+
+      it("横長で検索した後に別の値へ編集し、検索に残ったフォーカスのままEnterで再度検索できる", async () => {
+        // Given
+        viewport.setLandscape(true);
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "5");
+        await user.click(filterAction("apply"));
+        draftRange("scoreMin", "7");
+
+        // When
+        await user.keyboard("{Enter}");
+
+        // Then
+        expect(filterAction("apply")).toHaveFocus();
+        expect(memory.stored().input.scoreMin).toBe(7);
+        expect(rangeInput("scoreMin")).toHaveValue("7");
+      });
+
+      it("横長で検索した後のEscは、その後の未適用の変更を破棄して閉じ、再表示は直近に検索した条件で始まる", async () => {
+        // Given
+        viewport.setLandscape(true);
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "5");
+        await user.click(filterAction("apply"));
+        draftRange("scoreMin", "8");
+
+        // When
+        fireEvent.keyDown(rangeInput("scoreMin"), { key: "Escape" });
+        await openFilter(user);
+
+        // Then
+        expect(rangeInput("scoreMin")).toHaveValue("5");
+        expect(memory.stored().input.scoreMin).toBe(5);
+      });
+
+      it("横長で不正な値を検索すると、エラーを示して開いたままで、一覧も記憶も変えない", async () => {
+        // Given
+        viewport.setLandscape(true);
+        const user = await renderOpenedHistory();
+        const requests = [...fake.store.loadList.mock.calls];
+        const stored = memory.stored();
+        draftRange("scoreMin", "9");
+        draftRange("scoreMax", "1");
+
+        // When
+        await user.click(filterAction("apply"));
+
+        // Then
+        expect(
+          screen.getByTestId("history-filter-error-scoreOrder"),
+        ).toBeInTheDocument();
+        expect(rangeInput("scoreMin")).toHaveValue("9");
+        expect(fake.store.loadList.mock.calls).toEqual(requests);
+        expect(memory.stored()).toEqual(stored);
+      });
+
+      it("横長で条件を変えずに検索すると、開いたままで表示済みの一覧を維持し、取得し直さない", async () => {
+        // Given
+        viewport.setLandscape(true);
+        const user = await renderOpenedHistory();
+        const fetches = fake.store.loadList.mock.calls.length;
+
+        // When
+        await user.click(filterAction("apply"));
+
+        // Then
+        expect(
+          screen.getByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          }),
+        ).toBeInTheDocument();
+        expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
+        expect(screen.getByText("夜練習")).toBeInTheDocument();
+        expect(screen.queryByRole("status")).toBeNull();
+      });
+
+      it("横長でリセットして検索すると、既定の条件を確定して開いたままで、適用中の印が消える", async () => {
+        // Given
+        viewport.setLandscape(true);
+        remember({
+          condition: { ...DEFAULT_HISTORY_CONDITION, format: "indoor" },
+        });
+        const user = await renderOpenedHistory();
+        await user.click(filterAction("reset"));
+
+        // When
+        await user.click(filterAction("apply"));
+
+        // Then
+        expect(fake.store.loadList).toHaveBeenLastCalledWith(
+          DEFAULT_HISTORY_CONDITION,
+          null,
+          expect.any(Number),
+        );
+        expect(screen.queryByTestId("history-controls-active")).toBeNull();
+        expect(
+          screen.getByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          }),
+        ).toBeInTheDocument();
+      });
+
+      it("縦長から横長へ変えただけでは開閉もフォーカスも変わらず、変えた後の検索は閉じず検索にフォーカスが残る", async () => {
+        // Given
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "5");
+        const search = filterAction("apply");
+        search.focus();
+
+        // When
+        act(() => viewport.setLandscape(true));
+        const rotated = document.activeElement;
+        const expandedAfterRotation = screen
+          .getByTestId("history-controls-toggle")
+          .getAttribute("aria-expanded");
+        await user.click(search);
+
+        // Then
+        expect(rotated).toBe(search);
+        expect(expandedAfterRotation).toBe("true");
+        expect(
+          screen.getByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          }),
+        ).toBeInTheDocument();
+        expect(search).toHaveFocus();
+        expect(memory.stored().input.scoreMin).toBe(5);
+      });
+
+      it("横長から縦長へ変えた後の検索は閉じ、フォーカスがヘッダーのフィルターへ戻る", async () => {
+        // Given
+        viewport.setLandscape(true);
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "5");
+        act(() => viewport.setLandscape(false));
+
+        // When
+        await user.click(filterAction("apply"));
+
+        // Then
+        expect(
+          screen.queryByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          }),
+        ).toBeNull();
+        expect(screen.getByTestId("history-controls-toggle")).toHaveFocus();
+        expect(memory.stored().input.scoreMin).toBe(5);
+      });
+
+      it("縦長で検索すると閉じてフォーカスがヘッダーのフィルターへ戻る", async () => {
+        // Given
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "5");
+
+        // When
+        await user.click(filterAction("apply"));
+
+        // Then
+        expect(
+          screen.queryByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          }),
+        ).toBeNull();
+        expect(screen.getByTestId("history-controls-toggle")).toHaveFocus();
+      });
+    });
+
+    it("入力中のEnterでは検索せず、一覧・記憶・印を変えず、閉じず、エラー検証も起こさない", async () => {
+      // Given
+      const user = await renderOpenedHistory();
+      const requests = [...fake.store.loadList.mock.calls];
+      const stored = memory.stored();
+      await user.type(rangeInput("scoreMin"), "9");
+      draftRange("scoreMax", "1");
+
+      // When
+      await user.type(rangeInput("scoreMin"), "{Enter}");
+
+      // Then
+      expect(
+        screen.getByRole("region", { name: roundsText("historyFilterTitle") }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByTestId("history-controls-active")).toBeNull();
+      expect(fake.store.loadList.mock.calls).toEqual(requests);
+      expect(memory.stored()).toEqual(stored);
+    });
+
+    it("回転しても入力のフォーカスと下書きを保ち取得も保存もしない", async () => {
+      // Given
+      await renderOpenedHistory();
+      vi.useFakeTimers();
+      draftRange("scoreMin", "-");
+      rangeInput("scoreMin").focus();
+      const requests = [...fake.store.loadList.mock.calls];
+      const stored = memory.stored();
+
+      // When
+      act(() => {
+        viewport.setLandscape(true);
+        vi.advanceTimersByTime(20);
+      });
+
+      // Then
+      expect(rangeInput("scoreMin")).toHaveFocus();
+      expect(rangeInput("scoreMin")).toHaveValue("-");
+      expect(fake.store.loadList.mock.calls).toEqual(requests);
+      expect(memory.stored()).toEqual(stored);
+    });
+
+    it("動きを減らす設定で閉じると待機せずフォームを破棄する", async () => {
+      // Given
+      viewport.restore();
+      viewport = installFakeViewport({ reducedMotion: true });
+      await renderOpenedHistory();
+      vi.useFakeTimers();
+      draftRange("scoreMin", "99");
+
+      // When
+      fireEvent.click(screen.getByTestId("history-controls-toggle"));
+      act(() => vi.advanceTimersByTime(0));
+
+      // Then
+      expect(screen.queryByTestId("history-controls")).toBeNull();
+      expect(screen.getByTestId("history-controls-toggle")).toHaveFocus();
+    });
+
+    it("格納中の古いフォームからsubmitが届いても条件を確定しない", async () => {
+      // Given
+      await renderOpenedHistory();
+      vi.useFakeTimers();
+      draftRange("scoreMin", "123");
+      const form = screen.getByTestId("history-controls");
+      fireEvent.click(screen.getByTestId("history-controls-toggle"));
+      const requests = [...fake.store.loadList.mock.calls];
+      const stored = memory.stored();
+
+      // When
+      fireEvent.submit(form);
+
+      // Then
+      expect(memory.stored()).toEqual(stored);
+      expect(fake.store.loadList.mock.calls).toEqual(requests);
+      expect(screen.getByTestId("history-controls-toggle")).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+    });
+
+    it("格納終了イベントがなくても編集を破棄し新しい編集を始められる", async () => {
+      // Given
+      await renderOpenedHistory();
+      vi.useFakeTimers();
+      draftRange("scoreMin", "19");
+      fireEvent.click(screen.getByTestId("history-controls-toggle"));
+
+      // When
+      act(() => vi.advanceTimersByTime(200));
+      fireEvent.click(screen.getByTestId("history-controls-toggle"));
+
+      // Then
+      expect(rangeInput("scoreMin")).toHaveValue("");
+      expect(
+        screen.getByRole("region", { name: roundsText("historyFilterTitle") }),
+      ).toBeInTheDocument();
+    });
+
+    it("格納途中に開き直すと古い編集と終了通知が新しい編集を壊さない", async () => {
+      // Given
+      await renderOpenedHistory();
+      vi.useFakeTimers();
+      draftRange("scoreMin", "19");
+      const timers = vi.spyOn(window, "setTimeout");
+      fireEvent.click(screen.getByTestId("history-controls-toggle"));
+      const oldCollapse = timers.mock.calls.findLast(
+        (call) => call[1] === 200,
+      )?.[0];
+      fireEvent.click(screen.getByTestId("history-controls-toggle"));
+      const reopenedScoreMin = (rangeInput("scoreMin") as HTMLInputElement)
+        .value;
+      draftRange("scoreMin", "25");
+
+      // When
+      act(() => {
+        if (typeof oldCollapse !== "function")
+          throw new Error("Missing collapse notification");
+        oldCollapse();
+        vi.advanceTimersByTime(200);
+      });
+      applyFilter();
+
+      // Then
+      expect(reopenedScoreMin).toBe("");
+      expect(memory.stored().input.scoreMin).toBe(25);
+      expect(fake.store.loadList).toHaveBeenLastCalledWith(
+        expect.objectContaining({ scoreMin: 25 }),
+        null,
+        expect.any(Number),
       );
     });
   });
@@ -555,9 +1213,10 @@ describe("RoundsHistory", () => {
     });
   });
 
-  describe("フィルターのポップアップ", () => {
+  describe("フィルターのパネル", () => {
     const toggle = () => screen.getByTestId("history-controls-toggle");
-    const popup = () => screen.queryByTestId("history-controls");
+    const panel = () =>
+      screen.queryByRole("region", { name: roundsText("historyFilterTitle") });
     const mark = () => screen.queryByTestId("history-controls-active");
     const optionNames = () =>
       screen.getAllByRole("option").map((o) => o.textContent);
@@ -570,7 +1229,7 @@ describe("RoundsHistory", () => {
       );
 
     describe("開閉と印", () => {
-      it("初期はポップアップが無く、名前「フィルター」のアイコンのボタンがあり、印は無い", async () => {
+      it("初期はパネルが無く、名前「フィルター」のアイコンのボタンがあり、印は無い", async () => {
         // Given
         fetchResolves(varied);
 
@@ -579,7 +1238,7 @@ describe("RoundsHistory", () => {
         await screen.findByText("夜練習");
 
         // Then
-        expect(popup()).toBeNull();
+        expect(panel()).toBeNull();
         expect(mark()).toBeNull();
         expect(
           screen.getByRole("button", {
@@ -588,7 +1247,7 @@ describe("RoundsHistory", () => {
         ).toBe(toggle());
       });
 
-      it("アイコンを押すと、見出し「フィルター」のポップアップが開き、Escで閉じる", async () => {
+      it("アイコンを押すと、名前「フィルター」のregionが開く", async () => {
         // Given
         fetchResolves(varied);
         const user = userEvent.setup();
@@ -600,13 +1259,11 @@ describe("RoundsHistory", () => {
 
         // Then
         expect(
-          screen.getByRole("dialog", {
+          screen.getByRole("region", {
             name: roundsText("historyFilterTitle"),
           }),
         ).toBeInTheDocument();
         expect(screen.queryByText("並べ替え・絞り込み")).toBeNull();
-        await user.keyboard("{Escape}");
-        await waitFor(() => expect(popup()).toBeNull());
       });
 
       it("保存された入力値が既定でなければ、閉じていてもアイコンに「適用中」の印が出る", async () => {
@@ -621,11 +1278,11 @@ describe("RoundsHistory", () => {
         await screen.findByText("夜練習");
 
         // Then
-        expect(popup()).toBeNull();
+        expect(panel()).toBeNull();
         expect(mark()).toHaveTextContent(roundsText("historyFilterActive"));
       });
 
-      it("適用して導出が既定でなくなると、印が出て、既定に戻して適用すると消える", async () => {
+      it("非既定の条件から既定に戻して適用すると印が消える", async () => {
         // Given
         fetchResolves(varied);
         const user = userEvent.setup();
@@ -638,20 +1295,23 @@ describe("RoundsHistory", () => {
           roundsText("formatOption.indoor"),
         );
 
-        // When
         applyFilter();
 
-        // Then
-        await waitFor(() => expect(popup()).toBeNull());
-        expect(mark()).not.toBeNull();
+        await waitFor(() => expect(panel()).toBeNull());
+        const markAfterNonDefault = mark();
         await openFilter(user);
         await chooseFilter(
           user,
           FORMAT_TEST_ID,
           roundsText("historyFilterNone"),
         );
+
+        // When
         applyFilter();
-        await waitFor(() => expect(popup()).toBeNull());
+
+        // Then
+        expect(markAfterNonDefault).not.toBeNull();
+        await waitFor(() => expect(panel()).toBeNull());
         expect(mark()).toBeNull();
       });
 
@@ -694,6 +1354,259 @@ describe("RoundsHistory", () => {
       });
     });
 
+    describe("閉じるボタンと展開中の漏斗", () => {
+      const orientations = [
+        ["縦長", false],
+        ["横長", true],
+      ] as const;
+      const closeButton = () =>
+        within(
+          screen.getByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          }),
+        ).getByRole("button", { name: roundsText("historyFilterClose") });
+      // 見た目の出力は、開閉の状態そのものである`aria-expanded`を除いたクラスで比べる。
+      const funnelLook = () => toggle().className;
+
+      it.each(orientations)(
+        "%sで開くと、操作行にフォーム外の通常のボタン「閉じる」が1つだけあり、リセット・検索の後ろに並ぶ",
+        async (_orientation, landscape) => {
+          // Given
+          viewport.setLandscape(landscape);
+
+          // When
+          await renderOpenedHistory();
+
+          // Then
+          const region = screen.getByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          });
+          expect(
+            within(region).getAllByRole("button", {
+              name: roundsText("historyFilterClose"),
+            }),
+          ).toHaveLength(1);
+          const close = closeButton();
+          expect(close).toHaveAttribute("type", "button");
+          expect(close.closest("form")).toBeNull();
+          expect(close).not.toHaveAttribute("form");
+          expect(isBefore(filterAction("reset"), filterAction("apply"))).toBe(
+            true,
+          );
+          expect(isBefore(filterAction("apply"), close)).toBe(true);
+        },
+      );
+
+      it("閉じるボタンの名前は「閉じる」で、図柄(✖)は名前を持たない", async () => {
+        // Given
+        await renderOpenedHistory();
+
+        // When
+        const close = closeButton();
+
+        // Then
+        expect(close).toHaveAccessibleName("閉じる");
+        expect(close.querySelector("svg")).toHaveAttribute(
+          "aria-hidden",
+          "true",
+        );
+        expect(close.querySelector("svg")).not.toHaveAccessibleName();
+      });
+
+      it.each(orientations)(
+        "%sで閉じるボタンを押すと、未適用の変更とエラーを破棄して閉じ、漏斗へフォーカスが戻り、取得も記憶もしない",
+        async (_orientation, landscape) => {
+          // Given
+          viewport.setLandscape(landscape);
+          const user = await renderOpenedHistory();
+          draftRange("scoreMin", "9");
+          draftRange("scoreMax", "1");
+          applyFilter();
+          draftRange("scoreMax", "7");
+          const requests = [...fake.store.loadList.mock.calls];
+          const stored = memory.stored();
+
+          // When
+          await user.click(closeButton());
+
+          // Then
+          expect(panel()).toBeNull();
+          expect(toggle()).toHaveFocus();
+          expect(toggle()).toHaveAttribute("aria-expanded", "false");
+          expect(mark()).toBeNull();
+          expect(fake.store.loadList.mock.calls).toEqual(requests);
+          expect(memory.stored()).toEqual(stored);
+          await openFilter(user);
+          expect(rangeInput("scoreMin")).toHaveValue("");
+          expect(rangeInput("scoreMax")).toHaveValue("");
+          expect(screen.queryByRole("alert")).toBeNull();
+        },
+      );
+
+      it("横長で検索して開いたままでも、閉じるボタンで閉じ、検索した条件は残り、検索後の未適用の変更だけを破棄する", async () => {
+        // Given
+        viewport.setLandscape(true);
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "5");
+        await user.click(filterAction("apply"));
+        draftRange("scoreMin", "9");
+
+        // When
+        await user.click(closeButton());
+
+        // Then
+        expect(panel()).toBeNull();
+        expect(toggle()).toHaveFocus();
+        expect(memory.stored().input.scoreMin).toBe(5);
+        expect(mark()).not.toBeNull();
+        await openFilter(user);
+        expect(rangeInput("scoreMin")).toHaveValue("5");
+      });
+
+      it("閉じるボタンを押しても、検索もリセットも起きない", async () => {
+        // Given
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "5");
+        const requests = [...fake.store.loadList.mock.calls];
+
+        // When
+        await user.click(closeButton());
+
+        // Then
+        expect(memory.stored().input.scoreMin).toBeNull();
+        expect(fake.store.loadList.mock.calls).toEqual(requests);
+        await openFilter(user);
+        expect(rangeInput("scoreMin")).toHaveValue("");
+      });
+
+      it.each([
+        [
+          "縦長の漏斗の再押下",
+          false,
+          async (user: ReturnType<typeof userEvent.setup>) =>
+            user.click(toggle()),
+        ],
+        [
+          "横長の漏斗の再押下",
+          true,
+          async (user: ReturnType<typeof userEvent.setup>) =>
+            user.click(toggle()),
+        ],
+        [
+          "縦長の閉じるボタン",
+          false,
+          async (user: ReturnType<typeof userEvent.setup>) =>
+            user.click(closeButton()),
+        ],
+        [
+          "横長の閉じるボタン",
+          true,
+          async (user: ReturnType<typeof userEvent.setup>) =>
+            user.click(closeButton()),
+        ],
+        [
+          "縦長のEsc",
+          false,
+          async () =>
+            fireEvent.keyDown(rangeInput("scoreMin"), { key: "Escape" }),
+        ],
+        [
+          "横長のEsc",
+          true,
+          async () =>
+            fireEvent.keyDown(rangeInput("scoreMin"), { key: "Escape" }),
+        ],
+        [
+          "縦長の検索",
+          false,
+          async (user: ReturnType<typeof userEvent.setup>) =>
+            user.click(filterAction("apply")),
+        ],
+      ])(
+        "%sで閉じると、開いている間だけ変わった漏斗の見た目が閉じた状態と同じに戻り、図柄と名前は変わらない",
+        async (_route, landscape, close) => {
+          // Given
+          viewport.setLandscape(landscape);
+          fetchResolves(varied);
+          renderHistory();
+          await screen.findByText("夜練習");
+          const user = userEvent.setup();
+          const closedLook = funnelLook();
+          const closedSvg = toggle().querySelector("svg")?.outerHTML;
+          const name = toggle().textContent;
+
+          // When
+          await openFilter(user);
+          const openLook = funnelLook();
+          await close(user);
+
+          // Then
+          expect(openLook).not.toBe(closedLook);
+          expect(panel()).toBeNull();
+          expect(funnelLook()).toBe(closedLook);
+          expect(toggle().querySelector("svg")?.outerHTML).toBe(closedSvg);
+          expect(toggle().textContent).toBe(name);
+        },
+      );
+
+      it("横長で検索して開いたままのときは、展開中の漏斗の見た目が続く", async () => {
+        // Given
+        viewport.setLandscape(true);
+        fetchResolves(varied);
+        renderHistory();
+        await screen.findByText("夜練習");
+        const user = userEvent.setup();
+        const closedLook = funnelLook();
+        await openFilter(user);
+        const openLook = funnelLook();
+        draftRange("scoreMin", "5");
+
+        // When
+        await user.click(filterAction("apply"));
+
+        // Then
+        expect(toggle()).toHaveAttribute("aria-expanded", "true");
+        expect(funnelLook()).toBe(openLook);
+        expect(funnelLook()).not.toBe(closedLook);
+      });
+
+      it("適用済みの条件が既定でなければ、開くと展開中の見た目と適用中の印が同時にあり、閉じると印だけが残る", async () => {
+        // Given
+        remember({
+          condition: { ...DEFAULT_HISTORY_CONDITION, format: "indoor" },
+        });
+        fetchResolves(varied);
+        renderHistory();
+        await screen.findByText("夜練習");
+        const user = userEvent.setup();
+        const closedLook = funnelLook();
+
+        // When
+        await openFilter(user);
+
+        // Then
+        expect(funnelLook()).not.toBe(closedLook);
+        expect(mark()).toHaveTextContent(roundsText("historyFilterActive"));
+        await user.click(toggle());
+        expect(funnelLook()).toBe(closedLook);
+        expect(mark()).toHaveTextContent(roundsText("historyFilterActive"));
+      });
+
+      it("適用済みの条件が既定なら、開いても印は出ない", async () => {
+        // Given
+        fetchResolves(varied);
+        renderHistory();
+        await screen.findByText("夜練習");
+        const user = userEvent.setup();
+
+        // When
+        await openFilter(user);
+
+        // Then
+        expect(mark()).toBeNull();
+      });
+    });
+
     describe("中身と順序", () => {
       it("開いた中に、種別、弓種、ラウンド構成、期間、得点、距離単位で表示、リセット、適用が出る", async () => {
         // Given
@@ -713,8 +1626,8 @@ describe("RoundsHistory", () => {
           rangeInput("dateFrom"),
           rangeInput("scoreMin"),
           screen.getByTestId("history-unit-toggle"),
-          screen.getByTestId("history-controls-reset"),
-          screen.getByTestId("history-controls-apply"),
+          filterAction("reset"),
+          filterAction("apply"),
         ];
         for (const item of items) {
           expect(item).toBeVisible();
@@ -819,7 +1732,9 @@ describe("RoundsHistory", () => {
         await openFilter(user);
 
         // Then
-        expect(screen.queryByRole("group")).toBeNull();
+        expect(
+          within(screen.getByTestId("history-controls")).queryByRole("group"),
+        ).toBeNull();
         const separators = within(
           screen.getByTestId("history-controls"),
         ).getAllByText("~");
@@ -894,7 +1809,7 @@ describe("RoundsHistory", () => {
         expect(shownNames()).toEqual(VARIED_NAMES);
       });
 
-      it("適用すると、変更した値の条件で先頭から取得し直して表示済みをスケルトンに替え、ポップアップが閉じる", async () => {
+      it("適用すると、変更した値の条件で先頭から取得し直して表示済みをスケルトンに替え、パネルが閉じる", async () => {
         // Given
         const user = await renderOpenedHistory();
         nextFetchPends();
@@ -926,7 +1841,7 @@ describe("RoundsHistory", () => {
           roundsText("fetchLoading"),
         );
         expect(screen.queryByRole("listitem")).toBeNull();
-        await waitFor(() => expect(popup()).toBeNull());
+        await waitFor(() => expect(panel()).toBeNull());
         expect(memory.stored().input).toMatchObject({
           format: "indoor",
           bowType: "compound",
@@ -965,7 +1880,7 @@ describe("RoundsHistory", () => {
         );
       });
 
-      it("日付順と得点順の項目(新しい順/古い順、高い順/低い順/指定なし)は、日付の向き(desc/asc)と得点の向き(desc/asc/null)の条件に写って取得し直す", async () => {
+      it("得点順を指定なしへ戻して適用すると日付順だけの条件を取得する", async () => {
         // Given
         const user = await renderOpenedHistory();
         await chooseFilter(
@@ -981,15 +1896,10 @@ describe("RoundsHistory", () => {
         const lastCondition = () =>
           fake.store.loadList.mock.calls.at(-1)?.[0] as HistoryCondition;
 
-        // When
         applyFilter();
 
-        // Then
-        expect(lastCondition()).toMatchObject({
-          dateDirection: "asc",
-          scoreDirection: "asc",
-        });
-        await waitFor(() => expect(popup()).toBeNull());
+        const ascendingCondition = lastCondition();
+        await waitFor(() => expect(panel()).toBeNull());
         await openFilter(user);
         await chooseFilter(
           user,
@@ -1002,25 +1912,34 @@ describe("RoundsHistory", () => {
           roundsText("historyScoreDirection.desc"),
         );
         applyFilter();
-        expect(lastCondition()).toMatchObject({
-          dateDirection: "desc",
-          scoreDirection: "desc",
-        });
-        await waitFor(() => expect(popup()).toBeNull());
+        const descendingCondition = lastCondition();
+        await waitFor(() => expect(panel()).toBeNull());
         await openFilter(user);
         await chooseFilter(
           user,
           SCORE_DIRECTION_TEST_ID,
           roundsText("historyFilterNone"),
         );
+
+        // When
         applyFilter();
+
+        // Then
+        expect(ascendingCondition).toMatchObject({
+          dateDirection: "asc",
+          scoreDirection: "asc",
+        });
+        expect(descendingCondition).toMatchObject({
+          dateDirection: "desc",
+          scoreDirection: "desc",
+        });
         expect(lastCondition()).toMatchObject({
           dateDirection: "desc",
           scoreDirection: null,
         });
       });
 
-      it("何も変えずに適用すると、取得し直さず、ポップアップが閉じる", async () => {
+      it("何も変えずに適用すると、取得し直さず、パネルが閉じる", async () => {
         // Given
         await renderOpenedHistory();
         const fetches = fake.store.loadList.mock.calls.length;
@@ -1029,7 +1948,7 @@ describe("RoundsHistory", () => {
         applyFilter();
 
         // Then
-        await waitFor(() => expect(popup()).toBeNull());
+        await waitFor(() => expect(panel()).toBeNull());
         expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
         expect(screen.queryByRole("status")).toBeNull();
       });
@@ -1077,7 +1996,7 @@ describe("RoundsHistory", () => {
         expect(screen.queryByRole("listitem")).toBeNull();
       });
 
-      it("不正な入力(開始日が終了日より後、最低点が最高点より大きい、ラウンド構成に行がある)で適用すると、範囲の欄の下にだけエラーが同時に出て、距離のエラーは出ず、取得せず、ポップアップは開いたままである", async () => {
+      it("不正な入力(開始日が終了日より後、最低点が最高点より大きい、ラウンド構成に行がある)で適用すると、範囲の欄の下にだけエラーが同時に出て、距離のエラーは出ず、取得せず、パネルは開いたままである", async () => {
         // Given
         const user = await renderOpenedHistory();
         await addDistance(user, "50");
@@ -1101,7 +2020,7 @@ describe("RoundsHistory", () => {
         expect(screen.getAllByRole("alert")).toHaveLength(2);
         expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
         expect(memory.stored()).toEqual(before);
-        expect(popup()).not.toBeNull();
+        expect(panel()).not.toBeNull();
         expect(rangeInput("dateFrom")).toHaveValue("2026-06-01");
       });
 
@@ -1128,7 +2047,7 @@ describe("RoundsHistory", () => {
         expect(beforeApply).toBeNull();
         expect(shown).toBe(true);
         expect(afterFix).not.toBeNull();
-        await waitFor(() => expect(popup()).toBeNull());
+        await waitFor(() => expect(panel()).toBeNull());
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
           { ...DEFAULT_HISTORY_CONDITION, scoreMin: 9, scoreMax: 20 },
           null,
@@ -1168,7 +2087,7 @@ describe("RoundsHistory", () => {
 
         // When
         await user.keyboard("{Escape}");
-        await waitFor(() => expect(popup()).toBeNull());
+        await waitFor(() => expect(panel()).toBeNull());
         await openFilter(user);
 
         // Then
@@ -1190,7 +2109,7 @@ describe("RoundsHistory", () => {
 
         // When
         await user.keyboard("{Escape}");
-        await waitFor(() => expect(popup()).toBeNull());
+        await waitFor(() => expect(panel()).toBeNull());
         await openFilter(user);
 
         // Then
@@ -1199,7 +2118,7 @@ describe("RoundsHistory", () => {
         expect(rangeInput("scoreMin")).toHaveValue("");
       });
 
-      it("リセットすると、編集中の値(エラー、ラウンド構成と選んだ距離を含む)が既定に戻り、要約が消えて「距離を追加」だけになり、ポップアップは閉じず、入力値も取得も変わらない", async () => {
+      it("リセットすると、編集中の値(エラー、ラウンド構成と選んだ距離を含む)が既定に戻り、要約が消えて「距離を追加」だけになり、パネルは閉じず、入力値も取得も変わらない", async () => {
         // Given
         remember({
           condition: {
@@ -1218,10 +2137,10 @@ describe("RoundsHistory", () => {
         applyFilter();
 
         // When
-        await user.click(screen.getByTestId("history-controls-reset"));
+        await user.click(filterAction("reset"));
 
         // Then
-        expect(popup()).not.toBeNull();
+        expect(panel()).not.toBeNull();
         expect(selectedOf(FORMAT_TEST_ID)).toBe(
           roundsText("historyFilterNone"),
         );
@@ -1249,7 +2168,7 @@ describe("RoundsHistory", () => {
           condition: { ...DEFAULT_HISTORY_CONDITION, format: "indoor" },
         });
         const user = await renderOpenedHistory();
-        await user.click(screen.getByTestId("history-controls-reset"));
+        await user.click(filterAction("reset"));
 
         // When
         applyFilter();
@@ -1261,7 +2180,7 @@ describe("RoundsHistory", () => {
           expect.any(Number),
         );
         expect(memory.stored()).toEqual(DEFAULT_HISTORY_VIEW_STATE);
-        await waitFor(() => expect(popup()).toBeNull());
+        await waitFor(() => expect(panel()).toBeNull());
         expect(mark()).toBeNull();
       });
     });
@@ -1288,45 +2207,50 @@ describe("RoundsHistory", () => {
         expect(screen.queryByTestId("history-unit-distance")).toBeNull();
       });
 
-      it("切り替えると、適用の前でも「距離を選択」が出て消え、取得は適用まで起きない", async () => {
+      it("距離単位をオフへ戻すと距離の選択を隠し適用前の取得を起こさない", async () => {
         // Given
         const user = await renderOpenedHistory();
         const fetches = fake.store.loadList.mock.calls.length;
         const off = selectButton();
+
+        await user.click(unitToggle());
+        const checkedOn = unitToggle().getAttribute("aria-checked");
+        const selectLabelOn = selectButton()?.textContent;
+        const fetchesOn = fake.store.loadList.mock.calls.length;
 
         // When
         await user.click(unitToggle());
 
         // Then
         expect(off).toBeNull();
-        expect(unitToggle()).toHaveAttribute("aria-checked", "true");
-        expect(selectButton()).toHaveTextContent(
-          roundsText("historyFilterDistanceSelect"),
-        );
-        expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
-        await user.click(unitToggle());
+        expect(checkedOn).toBe("true");
+        expect(selectLabelOn).toBe(roundsText("historyFilterDistanceSelect"));
+        expect(fetchesOn).toBe(fetches);
         expect(selectButton()).toBeNull();
       });
 
-      it("オンにして適用すると、単位が距離の条件で取得し直し、もう一度オフにして適用するとラウンド単位に戻る", async () => {
+      it("距離単位からラウンド単位に戻して適用するとラウンド条件を取得する", async () => {
         // Given
         const user = await renderOpenedHistory();
+        await user.click(unitToggle());
+
+        applyFilter();
+
+        const distanceCondition = fake.store.loadList.mock.calls.at(-1)?.[0];
+        await waitFor(() => expect(panel()).toBeNull());
+        await openFilter(user);
+        const checkedAfterReopen = unitToggle().getAttribute("aria-checked");
         await user.click(unitToggle());
 
         // When
         applyFilter();
 
         // Then
-        expect(fake.store.loadList).toHaveBeenLastCalledWith(
-          { ...DEFAULT_HISTORY_CONDITION, unit: "distance" },
-          null,
-          expect.any(Number),
-        );
-        await waitFor(() => expect(popup()).toBeNull());
-        await openFilter(user);
-        expect(unitToggle()).toHaveAttribute("aria-checked", "true");
-        await user.click(unitToggle());
-        applyFilter();
+        expect(distanceCondition).toEqual({
+          ...DEFAULT_HISTORY_CONDITION,
+          unit: "distance",
+        });
+        expect(checkedAfterReopen).toBe("true");
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
           DEFAULT_HISTORY_CONDITION,
           null,
@@ -1350,7 +2274,7 @@ describe("RoundsHistory", () => {
         expect(summary()).toHaveTextContent("50m");
       });
 
-      it("距離を選んでオフのまま適用すると、取得も印も無く、距離の行は入力値に保存され、開き直してオンにすると要約が出る", async () => {
+      it("ラウンド単位で保持した距離は開き直して距離単位へ戻すと要約に復元する", async () => {
         // Given
         const user = await renderOpenedHistory();
         const fetches = fake.store.loadList.mock.calls.length;
@@ -1358,20 +2282,25 @@ describe("RoundsHistory", () => {
         await selectDistance(user, "50");
         await user.click(unitToggle());
 
-        // When
         applyFilter();
 
-        // Then
-        await waitFor(() => expect(popup()).toBeNull());
-        expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
-        expect(mark()).toBeNull();
-        expect(memory.stored().input.distanceRow).toEqual(distanceRow(50));
+        await waitFor(() => expect(panel()).toBeNull());
+        const fetchesAfterApply = fake.store.loadList.mock.calls.length;
+        const markAfterApply = mark();
+        const storedRow = memory.stored().input.distanceRow;
         await openFilter(user);
+
+        // When
         await user.click(unitToggle());
+
+        // Then
+        expect(fetchesAfterApply).toBe(fetches);
+        expect(markAfterApply).toBeNull();
+        expect(storedRow).toEqual(distanceRow(50));
         expect(summary()).toHaveTextContent("50m");
       });
 
-      it("オンで距離を選んで適用した後、開き直してオフで適用すると、導出から外れて取得に渡らず、距離の行は保たれ、再度オンで適用すると使われる", async () => {
+      it("保持した距離で距離単位を再適用すると取得条件へ戻る", async () => {
         // Given
         remember({
           condition: {
@@ -1387,21 +2316,26 @@ describe("RoundsHistory", () => {
         await openFilter(user);
         await user.click(unitToggle());
 
+        applyFilter();
+
+        const roundCondition = fake.store.loadList.mock.calls.at(-1)?.[0];
+        const storedRow = memory.stored().input.distanceRow;
+        await waitFor(() => expect(panel()).toBeNull());
+        await openFilter(user);
+        await user.click(unitToggle());
+        const restoredSummary = summary()?.textContent;
+
         // When
         applyFilter();
 
         // Then
-        expect(fake.store.loadList).toHaveBeenLastCalledWith(
-          { ...DEFAULT_HISTORY_CONDITION, unit: "round", distanceRow: null },
-          null,
-          expect.any(Number),
-        );
-        expect(memory.stored().input.distanceRow).toEqual(distanceRow(50));
-        await waitFor(() => expect(popup()).toBeNull());
-        await openFilter(user);
-        await user.click(unitToggle());
-        expect(summary()).toHaveTextContent("50m");
-        applyFilter();
+        expect(roundCondition).toEqual({
+          ...DEFAULT_HISTORY_CONDITION,
+          unit: "round",
+          distanceRow: null,
+        });
+        expect(storedRow).toEqual(distanceRow(50));
+        expect(restoredSummary).toContain("50m");
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
           {
             ...DEFAULT_HISTORY_CONDITION,
@@ -1415,7 +2349,7 @@ describe("RoundsHistory", () => {
     });
 
     describe("保持", () => {
-      it("保存された入力値が各欄に復元され、ポップアップは閉じていて、取得の条件は入力値から導出したものである", async () => {
+      it("保存された入力値が各欄に復元され、パネルは閉じていて、取得の条件は入力値から導出したものである", async () => {
         // Given
         remember({
           condition: {
@@ -1433,7 +2367,7 @@ describe("RoundsHistory", () => {
         // When
         renderHistory();
         await screen.findByText("朝練習");
-        const closed = popup();
+        const closed = panel();
         await openFilter(user);
 
         // Then
@@ -1502,7 +2436,7 @@ describe("RoundsHistory", () => {
         );
       });
 
-      it("編集中の値とエラーは保持されず、画面を離れて戻ると、ポップアップは閉じていて保存した入力値が出る", async () => {
+      it("編集中の値とエラーは保持されず、画面を離れて戻ると、パネルは閉じていて保存した入力値が出る", async () => {
         // Given
         const user = await renderOpenedHistory();
         await chooseFilter(
@@ -1518,7 +2452,7 @@ describe("RoundsHistory", () => {
         // When
         renderHistory();
         await screen.findByText("夜練習");
-        const closed = popup();
+        const closed = panel();
         await openFilter(user);
 
         // Then
@@ -1984,26 +2918,31 @@ describe("RoundsHistory", () => {
         );
       });
 
-      it("距離のダイアログで的を選ぶと、ダイアログは開いたまま的の領域に反映され、入力した距離は失われず、確定すると要約に的が出る", async () => {
+      it("的を選択済みの距離を確定すると要約に的を表示する", async () => {
         // Given
         procedures.fetching.savedTargetFaces.mockReturnValue(FACES);
         const user = await renderWithDistances();
         await user.click(addButton());
         await user.type(dialogInput("distance"), "50");
 
-        // When
         await user.click(screen.getByTestId("history-distance-dialog-target"));
         await user.click(
           await screen.findByTestId(`target-face-option-${OUTDOOR_FACE.id}`),
         );
+        const dialogStillOpen = confirmButton().isConnected;
+        const typedDistance = (dialogInput("distance") as HTMLInputElement)
+          .value;
+        const targetLabel = screen.getByTestId(
+          "history-distance-dialog-target",
+        ).textContent;
+
+        // When
+        await user.click(confirmButton());
 
         // Then
-        expect(confirmButton()).toBeInTheDocument();
-        expect(dialogInput("distance")).toHaveValue("50");
-        expect(
-          screen.getByTestId("history-distance-dialog-target"),
-        ).not.toHaveTextContent(roundsText("historyFilterNone"));
-        await user.click(confirmButton());
+        expect(dialogStillOpen).toBe(true);
+        expect(typedDistance).toBe("50");
+        expect(targetLabel).not.toBe(roundsText("historyFilterNone"));
         await waitForDistanceDialogClosed();
         expect(summaries()[0]).not.toHaveTextContent(
           roundsText("historyFilterNone"),
@@ -2206,14 +3145,13 @@ describe("RoundsHistory", () => {
     });
 
     describe("編集と削除", () => {
-      it("要約を押すと、その行の値が入ったダイアログが「確定」と「削除」で開き、確定すると、その位置の行だけが置き換わり、適用で取得し直す", async () => {
+      it("既存の距離を変更して適用すると置き換えた構成で取得する", async () => {
         // Given
         const user = await renderWithDistances([
           distanceRow(50, { arrowsPerEnd: 6 }),
           distanceRow(30),
         ]);
 
-        // When
         await user.click(screen.getByTestId("history-filter-distance-0"));
         const opened = {
           distance: (dialogInput("distance") as HTMLInputElement).value,
@@ -2225,15 +3163,18 @@ describe("RoundsHistory", () => {
         await user.type(dialogInput("distance"), "70");
         await user.click(confirmButton());
         await waitForDistanceDialogClosed();
+        const editedSummaries = summaries().map((row) => row.textContent);
+
+        // When
+        applyFilter();
 
         // Then
         expect(opened.distance).toBe("50");
         expect(opened.arrowsPerEnd).toBe("6");
         expect(opened.confirm).toBe(roundsText("confirm"));
         expect(opened.hasDelete).not.toBeNull();
-        expect(summaries()[0]).toHaveTextContent("70m");
-        expect(summaries()[1]).toHaveTextContent("30m");
-        applyFilter();
+        expect(editedSummaries[0]).toContain("70m");
+        expect(editedSummaries[1]).toContain("30m");
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
           conditionWith([
             distanceRow(70, { arrowsPerEnd: 6 }),
@@ -2259,24 +3200,26 @@ describe("RoundsHistory", () => {
         expect(summaries()[0]).toHaveTextContent("50m");
       });
 
-      it("値を変えて閉じると、行は元のままである", async () => {
+      it("未確定で閉じた距離を開き直すと元の値を表示する", async () => {
         // Given
         const user = await renderWithDistances([distanceRow(50)]);
         await user.click(screen.getByTestId("history-filter-distance-0"));
         await user.clear(dialogInput("distance"));
         await user.type(dialogInput("distance"), "70");
 
-        // When
         await user.keyboard("{Escape}");
         await waitForDistanceDialogClosed();
+        const summaryAfterDiscard = summaries()[0]?.textContent;
+
+        // When
+        await user.click(screen.getByTestId("history-filter-distance-0"));
 
         // Then
-        expect(summaries()[0]).toHaveTextContent("50m");
-        await user.click(screen.getByTestId("history-filter-distance-0"));
+        expect(summaryAfterDiscard).toContain("50m");
         expect(dialogInput("distance")).toHaveValue("50");
       });
 
-      it("「削除」を押すと、確認なしでその行が要約から消え、他の行の順は保たれ、適用で取得に反映される", async () => {
+      it("距離を削除して適用すると残る構成で取得する", async () => {
         // Given
         const user = await renderWithDistances([
           distanceRow(50),
@@ -2285,17 +3228,21 @@ describe("RoundsHistory", () => {
         ]);
         const fetches = fake.store.loadList.mock.calls.length;
 
-        // When
         await user.click(screen.getByTestId("history-filter-distance-1"));
         await user.click(screen.getByTestId("history-distance-dialog-delete"));
         await waitForDistanceDialogClosed();
 
-        // Then
-        expect(summaries()).toHaveLength(2);
-        expect(summaries()[0]).toHaveTextContent("50m");
-        expect(summaries()[1]).toHaveTextContent("70m");
-        expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
+        const remainingSummaries = summaries().map((row) => row.textContent);
+        const fetchesAfterDelete = fake.store.loadList.mock.calls.length;
+
+        // When
         applyFilter();
+
+        // Then
+        expect(remainingSummaries).toHaveLength(2);
+        expect(remainingSummaries[0]).toContain("50m");
+        expect(remainingSummaries[1]).toContain("70m");
+        expect(fetchesAfterDelete).toBe(fetches);
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
           conditionWith([distanceRow(50), distanceRow(70)]),
           null,
@@ -2351,7 +3298,7 @@ describe("RoundsHistory", () => {
     });
 
     describe("的", () => {
-      it("的の領域を押すと、保存した的の一覧が先頭の「指定なし」とともにすべての種別・弓種で開き、選ぶとダイアログの的の領域に反映され、確定して適用するとその的を持つ条件で取得し直す", async () => {
+      it("的の領域を押すと、保存した的が先頭の「指定なし」の後に全て並び、種別と弓種の絞り込みは指定なしで開く", async () => {
         // Given
         procedures.fetching.savedTargetFaces.mockReturnValue(FACES);
         const user = await renderWithDistances();
@@ -2380,12 +3327,26 @@ describe("RoundsHistory", () => {
         expect(
           screen.getByTestId("target-face-bow-type-select"),
         ).toHaveTextContent(roundsText("targetFaceFilterNone"));
+      });
+
+      it("的を選んだ距離を確定して適用すると的を含む条件で取得する", async () => {
+        // Given
+        procedures.fetching.savedTargetFaces.mockReturnValue(FACES);
+        const user = await renderWithDistances();
+        await user.click(addButton());
+        await user.type(dialogInput("distance"), "50");
+
+        await user.click(screen.getByTestId("history-distance-dialog-target"));
         await user.click(
-          screen.getByTestId(`target-face-option-${OUTDOOR_FACE.id}`),
+          await screen.findByTestId(`target-face-option-${OUTDOOR_FACE.id}`),
         );
         await user.click(confirmButton());
         await waitForDistanceDialogClosed();
+
+        // When
         applyFilter();
+
+        // Then
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
           conditionWith([distanceRow(50, { targetFaceId: OUTDOOR_FACE.id })]),
           null,
@@ -2393,7 +3354,7 @@ describe("RoundsHistory", () => {
         );
       });
 
-      it("的を指定済みの行を編集すると、選んだ的がダイアログの領域に出て、一覧の「指定なし」を選んで保存するとnullになり、取得し直す", async () => {
+      it("的を指定なしへ変更して適用すると的を含まない条件で取得する", async () => {
         // Given
         procedures.fetching.savedTargetFaces.mockReturnValue(FACES);
         const user = await renderWithDistances([
@@ -2404,7 +3365,6 @@ describe("RoundsHistory", () => {
           "history-distance-dialog-target",
         ).textContent;
 
-        // When
         await user.click(screen.getByTestId("history-distance-dialog-target"));
         await user.click(
           await screen.findByTestId("history-distance-dialog-target-none"),
@@ -2412,9 +3372,11 @@ describe("RoundsHistory", () => {
         await user.click(confirmButton());
         await waitForDistanceDialogClosed();
 
+        // When
+        applyFilter();
+
         // Then
         expect(before).not.toBe(roundsText("historyFilterNone"));
-        applyFilter();
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
           conditionWith([distanceRow(50)]),
           null,
@@ -2422,7 +3384,7 @@ describe("RoundsHistory", () => {
         );
       });
 
-      it("選んだ的の領域を押すと選び直せ、別の的を選んで保存すると取得し直す", async () => {
+      it("別の的へ選び直して適用すると新しい的の条件で取得する", async () => {
         // Given
         procedures.fetching.savedTargetFaces.mockReturnValue(FACES);
         const user = await renderWithDistances([
@@ -2430,7 +3392,6 @@ describe("RoundsHistory", () => {
         ]);
         await user.click(screen.getByTestId("history-filter-distance-0"));
 
-        // When
         await user.click(screen.getByTestId("history-distance-dialog-target"));
         await user.click(
           await screen.findByTestId(`target-face-option-${INDOOR_FACE.id}`),
@@ -2438,8 +3399,10 @@ describe("RoundsHistory", () => {
         await user.click(confirmButton());
         await waitForDistanceDialogClosed();
 
-        // Then
+        // When
         applyFilter();
+
+        // Then
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
           conditionWith([distanceRow(50, { targetFaceId: INDOOR_FACE.id })]),
           null,
@@ -2585,7 +3548,7 @@ describe("RoundsHistory", () => {
         );
       });
 
-      it("保存した一覧に無い的の行も、編集で一覧の「指定なし」を選べば外せ、外すと取得し直す", async () => {
+      it("保存した一覧にない的を指定なしへ変更して適用すると解除する", async () => {
         // Given
         procedures.fetching.savedTargetFaces.mockReturnValue([INDOOR_FACE]);
         const user = await renderWithDistances([
@@ -2593,17 +3556,21 @@ describe("RoundsHistory", () => {
         ]);
         await user.click(screen.getByTestId("history-filter-distance-0"));
 
-        // When
         await user.click(screen.getByTestId("history-distance-dialog-target"));
         await user.click(
           await screen.findByTestId("history-distance-dialog-target-none"),
         );
         await user.click(confirmButton());
         await waitForDistanceDialogClosed();
+        const missingNotice = screen.queryByText(
+          roundsText("targetFaceMissing"),
+        );
+
+        // When
+        applyFilter();
 
         // Then
-        expect(screen.queryByText(roundsText("targetFaceMissing"))).toBeNull();
-        applyFilter();
+        expect(missingNotice).toBeNull();
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
           conditionWith([distanceRow(50)]),
           null,
@@ -2673,7 +3640,10 @@ describe("RoundsHistory", () => {
 
         // Then
         expect(screen.queryByTestId("history-filter-distance-0")).toBeNull();
-        expect(screen.queryByTestId("history-controls-reset")).toBeNull();
+        expect(screen.getByTestId("history-controls-toggle")).toHaveAttribute(
+          "aria-expanded",
+          "false",
+        );
         expect(screen.queryByRole("alert")).toBeNull();
         expect(fake.store.loadList).toHaveBeenCalledExactlyOnceWith(
           conditionWith([distanceRow(50)]),
@@ -2894,7 +3864,7 @@ describe("RoundsHistory", () => {
         });
       });
 
-      it("要約を押すと、同じダイアログが「保存」と「削除」で開き、保存すると置き換わり、「削除」を押すと指定が外れて「距離を選択」に戻り、適用でnullの条件で取得し直す", async () => {
+      it("選択済みの距離を削除して適用すると距離指定なしで取得する", async () => {
         // Given
         const user = await renderDistanceUnit({ distanceRow: distanceRow(50) });
         await user.click(screen.getByTestId("history-filter-distance-row"));
@@ -2904,16 +3874,19 @@ describe("RoundsHistory", () => {
         await waitForDistanceDialogClosed();
         const replaced = summary()?.textContent;
 
-        // When
         await user.click(screen.getByTestId("history-filter-distance-row"));
         await user.click(screen.getByTestId("history-distance-dialog-delete"));
         await waitForDistanceDialogClosed();
+        const summaryAfterDelete = summary();
+        const selectAfterDelete = selectButton();
+
+        // When
+        applyFilter();
 
         // Then
         expect(replaced).toContain("30m");
-        expect(summary()).toBeNull();
-        expect(selectButton()).not.toBeNull();
-        applyFilter();
+        expect(summaryAfterDelete).toBeNull();
+        expect(selectAfterDelete).not.toBeNull();
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
           distanceCondition({ distanceRow: null }),
           null,
@@ -3153,13 +4126,16 @@ describe("RoundsHistory", () => {
       const retry = await screen.findByRole("button", {
         name: roundsText("fetchRetry"),
       });
-      expect(screen.getByText("午前練習")).toBeInTheDocument();
-      expect(screen.getByText(roundsText("fetchOffline"))).toBeInTheDocument();
+      const keptName = screen.queryByText("午前練習") !== null;
+      const offlineNotice =
+        screen.queryByText(roundsText("fetchOffline")) !== null;
 
       // When
       await user.click(retry);
 
       // Then
+      expect(keptName).toBe(true);
+      expect(offlineNotice).toBe(true);
       expect(await screen.findByText("午後練習")).toBeInTheDocument();
       expect(fake.store.loadList).toHaveBeenLastCalledWith(
         DEFAULT_HISTORY_CONDITION,
@@ -3302,23 +4278,22 @@ describe("RoundsHistory", () => {
   describe("ラウンドの削除", () => {
     it("確認すると、そのラウンドを削除し、ダイアログがすぐ閉じ、履歴から取り除く", async () => {
       // Given
-      // 削除の保存は終わらない。
       procedures.deletion.deleteRound.mockReturnValue(new Promise(() => {}));
       fetchResolves(completed);
       const user = userEvent.setup();
       renderHistory();
       await screen.findByText("午前練習");
       await openDeleteDialog(user, "午前練習");
-      expect(
-        screen.getByText(
+      const confirmMessageShown =
+        screen.queryByText(
           roundsText("roundDeleteConfirmNamed", { name: "午前練習" }),
-        ),
-      ).toBeInTheDocument();
+        ) !== null;
 
       // When
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
       // Then
+      expect(confirmMessageShown).toBe(true);
       expect(procedures.deletion.deleteRound).toHaveBeenCalledExactlyOnceWith(
         "round-1",
       );

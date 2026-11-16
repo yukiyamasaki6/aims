@@ -2,6 +2,7 @@
 
 import { ChevronRight, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useRef } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { HistoryDistanceRow } from "../domain/history-view-state";
@@ -71,8 +72,9 @@ export function HistoryDistanceList({
 }) {
   const t = useTranslations("rounds");
   const targetFaces = useSavedTargetFaces();
+  const listRef = useRef<HTMLDivElement>(null);
   return (
-    <div className="flex flex-col gap-2">
+    <div ref={listRef} className="flex flex-col gap-2">
       <span className="text-muted-foreground text-sm">
         {t("historyFilterDistances")}
       </span>
@@ -90,6 +92,11 @@ export function HistoryDistanceList({
             onChange(rows.map((r, i) => (i === index ? next : r)))
           }
           onDelete={() => onChange(rows.filter((_, i) => i !== index))}
+          deletedFocus={() =>
+            listRef.current?.querySelector<HTMLButtonElement>(
+              '[data-testid="history-filter-distance-add"]',
+            ) ?? null
+          }
         />
       ))}
       <HistoryDistanceDialog

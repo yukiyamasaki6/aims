@@ -1,8 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import {
   DEFAULT_HISTORY_FILTER_DRAFT,
@@ -52,15 +51,10 @@ function FormatAndBowType({
   );
 }
 
-// フィルターのポップアップの中身。入力欄の領域だけがスクロールし、リセットと適用は下部に固定して表示する。開くたびに入力値から編集中の値を作り、閉じると破棄する。「適用」で検証し、正しければ新しい入力値を渡す。不正なときは入力値を変えず、エラーを次の適用まで残す。
-export function HistoryFilterForm({
-  input,
-  onApply,
-}: {
-  input: HistoryInput;
-  onApply: (input: HistoryInput) => void;
-}) {
-  const t = useTranslations("rounds");
+function useFilterDraft(
+  input: HistoryInput,
+  onApply: (input: HistoryInput) => void,
+) {
   const [draft, setDraft] = useState(() => historyFilterDraftOf(input));
   const [errors, setErrors] = useState(NO_HISTORY_FILTER_ERRORS);
   const change: Change = (patch) =>
@@ -76,9 +70,57 @@ export function HistoryFilterForm({
     }
   }
 
+  const reset = () => {
+    setDraft(DEFAULT_HISTORY_FILTER_DRAFT);
+    setErrors(NO_HISTORY_FILTER_ERRORS);
+  };
+  return { draft, errors, change, apply, reset };
+}
+
+// 編集セッションごとの下書きと検証を持つ単一フォーム。
+export function HistoryFilterForm({
+  input,
+  formId,
+  onApply,
+}: {
+  input: HistoryInput;
+  formId: string;
+  onApply: (input: HistoryInput) => void;
+}) {
+  const t = useTranslations("rounds");
+  const formRef = useRef<HTMLFormElement>(null);
+  useLayoutEffect(() => {
+    formRef.current?.querySelector("input")?.focus({ preventScroll: true });
+  }, []);
+  const { draft, errors, change, apply, reset } = useFilterDraft(
+    input,
+    onApply,
+  );
+
   return (
-    <div className="flex min-h-0 flex-col gap-4" data-testid="history-controls">
-      <div className="-mx-1 flex min-h-0 flex-col gap-4 overflow-y-auto px-1 pb-1">
+    <form
+      id={formId}
+      ref={formRef}
+      className="flex min-h-0 flex-col gap-4 overflow-y-auto p-4"
+      data-testid="history-controls"
+      onSubmit={(event) => {
+        event.preventDefault();
+        apply();
+      }}
+      onReset={(event) => {
+        event.preventDefault();
+        reset();
+      }}
+      onKeyDown={(event) => {
+        if (
+          event.key === "Enter" &&
+          event.target instanceof HTMLInputElement &&
+          event.currentTarget.contains(event.target)
+        )
+          event.preventDefault();
+      }}
+    >
+      <div className="flex flex-col gap-4">
         <HistoryRangeFields
           draft={draft}
           errors={errors.range}
@@ -104,28 +146,6 @@ export function HistoryFilterForm({
           />
         )}
       </div>
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="flex-1"
-          data-testid="history-controls-reset"
-          onClick={() => {
-            setDraft(DEFAULT_HISTORY_FILTER_DRAFT);
-            setErrors(NO_HISTORY_FILTER_ERRORS);
-          }}
-        >
-          {t("historyControlsReset")}
-        </Button>
-        <Button
-          type="button"
-          className="flex-1"
-          data-testid="history-controls-apply"
-          onClick={apply}
-        >
-          {t("historyControlsApply")}
-        </Button>
-      </div>
-    </div>
+    </form>
   );
 }

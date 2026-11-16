@@ -1,9 +1,20 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { type ReactNode, Suspense, useLayoutEffect, useRef } from "react";
+import {
+  type ReactNode,
+  Suspense,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { ScreenFrame } from "@/components/screen-frame";
-import type { HistoryUnit } from "../domain/history-view-state";
+import type {
+  HistoryCondition,
+  HistoryInput,
+  HistoryUnit,
+} from "../domain/history-view-state";
 import {
   type HistoryListItem,
   isDistanceListItem,
@@ -12,6 +23,8 @@ import {
 import { historyView } from "../domain/rounds-list-view";
 import { FetchState } from "./fetch-state";
 import { HistoryControls } from "./history-controls";
+import { HistoryFilterForm } from "./history-filter-form";
+import { HistoryFilterPanel } from "./history-filter-panel";
 import {
   DistanceCards,
   HistoryNotice,
@@ -37,7 +50,7 @@ export function RoundsHistory() {
   return (
     <Suspense
       fallback={
-        <HistoryFrame icon={null}>
+        <HistoryFrame>
           <RoundCardsSkeleton />
         </HistoryFrame>
       }
@@ -47,19 +60,94 @@ export function RoundsHistory() {
   );
 }
 
-// 履歴の枠。ヘッダーの右端にフィルターのアイコンを置き、本文はスクロールの入れ物に入れる。
+type FilterSession = { id: number; input: HistoryInput; open: boolean };
+
+// 閉じたセッションから遅れて届く検索・格納通知を無視する。
+function useHistoryFilterSession(input: HistoryInput | null) {
+  const [session, setSession] = useState<FilterSession | null>(null);
+  const sequence = useRef(0);
+  const activeId = useRef<number | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const close = () => {
+    if (activeId.current === null) return;
+    activeId.current = null;
+    setSession((current) => current && { ...current, open: false });
+    buttonRef.current?.focus({ preventScroll: true });
+  };
+  const toggle = () => {
+    if (activeId.current !== null) return close();
+    if (!input) return;
+    const id = ++sequence.current;
+    activeId.current = id;
+    setSession({ id, input, open: true });
+  };
+  const collapse = (id: number | undefined) => {
+    setSession((current) =>
+      current && current.id === id && !current.open ? null : current,
+    );
+  };
+  return { session, activeId, buttonRef, close, toggle, collapse };
+}
+
+// 本文だけを分割し、一覧のスクロール要素は開閉・向き変更でも保つ。
 function HistoryFrame({
-  icon,
+  input = null,
+  condition = null,
+  onApply,
   children,
 }: {
-  icon: ReactNode;
+  input?: HistoryInput | null;
+  condition?: HistoryCondition | null;
+  onApply?: (input: HistoryInput) => void;
   children: ReactNode;
 }) {
   const t = useTranslations("rounds");
+  const formId = useId();
+  const panelId = useId();
+  const filter = useHistoryFilterSession(input);
+  const { session, activeId, buttonRef, close, toggle, collapse } = filter;
   return (
-    <ScreenFrame title={t("historyTitle")} trailing={icon}>
-      <div className="h-full overflow-y-auto">
-        <main className="mx-auto max-w-xl px-8 py-8">{children}</main>
+    <ScreenFrame
+      title={t("historyTitle")}
+      trailing={
+        input &&
+        condition && (
+          <HistoryControls
+            condition={condition}
+            open={session?.open ?? false}
+            panelId={panelId}
+            buttonRef={buttonRef}
+            onToggle={toggle}
+          />
+        )
+      }
+    >
+      <div className="flex h-full min-h-0 flex-col landscape:flex-row">
+        <HistoryFilterPanel
+          open={session?.open ?? false}
+          panelId={panelId}
+          formId={formId}
+          onClose={close}
+          onCollapsed={() => collapse(session?.id)}
+        >
+          {session && (
+            <HistoryFilterForm
+              key={session.id}
+              input={session.input}
+              formId={formId}
+              onApply={(next) => {
+                if (activeId.current !== session.id) return;
+                onApply?.(next);
+                // 検索を押した時点の向きで決める。縦長は閉じ、横長は開いたまま(フォーカスも動かさない)。
+                if (!window.matchMedia("(orientation: landscape)").matches)
+                  close();
+              }}
+            />
+          )}
+        </HistoryFilterPanel>
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <main className="mx-auto max-w-xl px-8 py-8">{children}</main>
+        </div>
       </div>
     </ScreenFrame>
   );
@@ -190,12 +278,8 @@ function RoundsHistoryScreen() {
     if (shown) restoreScroll();
   }, [shown]);
 
-  const icon = input && condition && (
-    <HistoryControls input={input} condition={condition} onApply={applyInput} />
-  );
-
   return (
-    <HistoryFrame icon={icon}>
+    <HistoryFrame input={input} condition={condition} onApply={applyInput}>
       <div ref={anchorRef}>
         <HistoryBody
           content={content}

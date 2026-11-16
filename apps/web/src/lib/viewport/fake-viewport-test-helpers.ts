@@ -9,6 +9,8 @@ export type FakeViewportOptions = {
   standalone: boolean;
   // 幅768px以上(min-width: 768px)に一致するか。
   wide: boolean;
+  landscape: boolean;
+  reducedMotion: boolean;
   // navigator.virtualKeyboardを持つか。
   virtualKeyboard: boolean;
   // nullならvisualViewportを持たない。
@@ -22,6 +24,7 @@ export type FakeViewport = {
   setInnerHeight(height: number): void;
   // 幅768px以上かを替え、matchMediaのchangeの購読者へ通知する(actで包むのは呼ぶ側)。
   setWide(wide: boolean): void;
+  setLandscape(landscape: boolean): void;
   // visualViewportのresizeを発火する。
   fireVisualViewportResize(): void;
   // 解除されていない購読(resize)の数。
@@ -32,6 +35,8 @@ export type FakeViewport = {
 const DEFAULTS: FakeViewportOptions = {
   standalone: false,
   wide: false,
+  landscape: false,
+  reducedMotion: false,
   virtualKeyboard: false,
   visualViewport: null,
   innerHeight: 800,
@@ -97,21 +102,30 @@ export function installFakeViewport(
   const unwatch = [watch(window), watch(document)];
 
   let wide = options.wide;
+  let landscape = options.landscape;
+  const orientationListeners = new Set<() => void>();
   const wideListeners = new Set<() => void>();
   defineValue(window, "matchMedia", (query: string) => {
     const isWide = query === WIDE_QUERY;
+    const isOrientation = query === "(orientation: landscape)";
+    const listeners = isOrientation ? orientationListeners : wideListeners;
     return {
       get matches() {
+        if (isOrientation) return landscape;
+        if (query === "(prefers-reduced-motion: reduce)")
+          return options.reducedMotion;
         return isWide
           ? wide
           : options.standalone && query === "(display-mode: standalone)";
       },
       media: query,
       addEventListener(type: string, listener: () => void) {
-        if (isWide && type === "change") wideListeners.add(listener);
+        if ((isWide || isOrientation) && type === "change")
+          listeners.add(listener);
       },
       removeEventListener(type: string, listener: () => void) {
-        if (isWide && type === "change") wideListeners.delete(listener);
+        if ((isWide || isOrientation) && type === "change")
+          listeners.delete(listener);
       },
     };
   });
@@ -137,12 +151,17 @@ export function installFakeViewport(
       wide = next;
       for (const listener of [...wideListeners]) listener();
     },
+    setLandscape(next) {
+      landscape = next;
+      for (const listener of [...orientationListeners]) listener();
+    },
     fireVisualViewportResize() {
       viewport?.dispatchEvent(new Event("resize"));
     },
     subscriptions: () => registrations.length,
     restore() {
       wideListeners.clear();
+      orientationListeners.clear();
       for (const undo of unwatch) undo();
       for (const restoreProperty of restores) restoreProperty();
       document.documentElement.style.removeProperty("--app-height");
