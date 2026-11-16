@@ -43,7 +43,15 @@ describe("watchLocalList / localList", () => {
     expect(before).toBeNull();
     expect(loading).toBeNull();
     expect(roundWindow.localList()?.inProgress).toEqual([
-      { id: "round-1", name: "端末", roundDate: "2026-09-15", total: 0 },
+      {
+        id: "round-1",
+        name: "端末",
+        roundDate: "2026-09-15",
+        format: "outdoor",
+        bowType: "recurve",
+        total: 0,
+        distances: [],
+      },
     ]);
     expect(listener).toHaveBeenCalledTimes(1);
   });

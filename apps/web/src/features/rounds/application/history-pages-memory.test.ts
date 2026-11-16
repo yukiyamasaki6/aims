@@ -6,7 +6,17 @@ import {
 
 const snapshot = (id: string): HistoryPagesSnapshot => ({
   list: {
-    items: [{ id, name: id, roundDate: "2026-09-15", total: 500 }],
+    items: [
+      {
+        id,
+        name: id,
+        roundDate: "2026-09-15",
+        format: "outdoor",
+        bowType: "recurve",
+        total: 500,
+        distances: [{ distance: 70, isMarked: true, total: 500 }],
+      },
+    ],
     hasMore: true,
     after: id,
     deleted: new Set(),

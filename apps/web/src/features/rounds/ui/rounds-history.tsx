@@ -18,6 +18,7 @@ import type {
 import {
   type HistoryListItem,
   isDistanceListItem,
+  isRoundListItem,
   type RoundListItem,
 } from "../domain/round-list";
 import { historyView } from "../domain/rounds-list-view";
@@ -208,7 +209,13 @@ function HistoryCards({
       />
     );
   }
-  return <RoundCards rounds={items} origin="history" onDelete={onDelete} />;
+  return (
+    <RoundCards
+      rounds={items.filter(isRoundListItem)}
+      origin="history"
+      onDelete={onDelete}
+    />
+  );
 }
 
 // 一覧の本体。取得の状態、0件、カードと末尾。

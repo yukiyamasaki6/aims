@@ -2,22 +2,39 @@ import type { Tables } from "@/types/supabase";
 import type { RecordSnapshot } from "./round-record";
 import { isRoundInProgress } from "./round-retention";
 import { deriveRoundState } from "./round-view";
-import type { ScoringTargetFace } from "./scorecard-scoring";
+import {
+  compareDistancePosition,
+  type ScoringTargetFace,
+} from "./scorecard-scoring";
 import { hasRoundDeletion, roundIdOfStream } from "./sync-events";
 
+// 距離ごとの小計の1件。距離は無印の距離で判明していないときnull。
+export type DistanceSubtotal = {
+  distance: number | null;
+  isMarked: boolean;
+  total: number;
+};
+
+// ラウンド単位の1件。`distances`は射つ順の距離ごとの小計で、`total`はその和。
 export type RoundListItem = {
   id: string;
   name: string;
   roundDate: string;
+  format: string;
+  bowType: string;
   total: number;
+  distances: DistanceSubtotal[];
 };
 
-// 履歴の関数(rounds_list)が返す1件。行の列は生成型(rounds)から導き、合計点だけを足す。
+// 履歴の関数(rounds_list)が返す1件。行の列は生成型(rounds、distances)から導き、合計点と距離ごとの小計だけを足す。
 export type ServerRoundSummary = Pick<
   Tables<"rounds">,
-  "id" | "name" | "round_date"
+  "id" | "name" | "round_date" | "format" | "bow_type"
 > & {
   total: number;
+  distances: (Pick<Tables<"distances">, "distance" | "is_marked"> & {
+    total: number;
+  })[];
 };
 
 // 履歴の関数が返す1ページ。続きがあるかを添える。
@@ -26,13 +43,12 @@ export type ServerRoundsPage = {
   hasMore: boolean;
 };
 
-// 距離単位の履歴の関数(distances_list)が返す1件。距離のID、属するラウンドのID・名前・実施日、射つ順の番号、距離、無印か、小計。行の列は生成型(distances、rounds)から導き、番号と小計だけを足す。
+// 距離単位の履歴の関数(distances_list)が返す1件。距離のID、属するラウンドのID・名前・実施日・種別・弓種、距離、無印か、小計。行の列は生成型(distances、rounds)から導き、小計だけを足す。
 type ServerDistanceSummary = Pick<
   Tables<"distances">,
   "id" | "round_id" | "distance" | "is_marked"
 > &
-  Pick<Tables<"rounds">, "name" | "round_date"> & {
-    number: number;
+  Pick<Tables<"rounds">, "name" | "round_date" | "format" | "bow_type"> & {
     total: number;
   };
 
@@ -46,11 +62,16 @@ type ServerDistancesPage = {
 export type ServerHistoryPage = ServerRoundsPage | ServerDistancesPage;
 
 // 距離単位の1件。`id`は距離のID、`total`は小計で、`roundId`は属するラウンドのID。
-export type DistanceListItem = RoundListItem & {
+export type DistanceListItem = {
+  id: string;
   roundId: string;
-  number: number;
+  name: string;
+  roundDate: string;
+  format: string;
+  bowType: string;
   distance: number | null;
   isMarked: boolean;
+  total: number;
 };
 
 // 履歴の1件。ラウンド単位はラウンド、距離単位は距離。
@@ -60,6 +81,10 @@ export function isDistanceListItem(
   item: HistoryListItem,
 ): item is DistanceListItem {
   return "roundId" in item;
+}
+
+export function isRoundListItem(item: HistoryListItem): item is RoundListItem {
+  return !isDistanceListItem(item);
 }
 
 // 項目が属するラウンドのID。端末の除外はこのIDで行う。
@@ -89,7 +114,14 @@ export function roundListItemOf(summary: ServerRoundSummary): RoundListItem {
     id: summary.id,
     name: summary.name,
     roundDate: summary.round_date,
+    format: summary.format,
+    bowType: summary.bow_type,
     total: summary.total,
+    distances: summary.distances.map((d) => ({
+      distance: d.distance,
+      isMarked: d.is_marked,
+      total: d.total,
+    })),
   };
 }
 
@@ -99,7 +131,8 @@ function distanceListItemOf(summary: ServerDistanceSummary): DistanceListItem {
     roundId: summary.round_id,
     name: summary.name,
     roundDate: summary.round_date,
-    number: summary.number,
+    format: summary.format,
+    bowType: summary.bow_type,
     distance: summary.distance,
     isMarked: summary.is_marked,
     total: summary.total,
@@ -172,7 +205,7 @@ export function deletedRoundIdsOf(
 // 一覧は的を読まない。未送信の矢の点数が的に無い異常系だけ、合計が詳細と異なり得る。
 const NO_TARGET_FACES: ScoringTargetFace[] = [];
 
-// 端末の各組から、詳細と同じ導出と表示の規則で入力中のラウンドを求める。削除済みの組は、導出が削除済みの状態を返し、入力中の判定(`isRoundInProgress`)が除く。
+// 端末の各組から、詳細と同じ導出と表示の規則で入力中のラウンドを求める。距離は射つ順に並べ、合計点は小計の和(矢の点の和と同じ値)。削除済みの組は、導出が削除済みの状態を返し、入力中の判定(`isRoundInProgress`)が除く。
 export function localRoundsList(
   snapshots: ReadonlyMap<string, RecordSnapshot>,
 ): LocalRoundsList {
@@ -180,11 +213,23 @@ export function localRoundsList(
   for (const [roundId, { base, operations }] of snapshots) {
     const state = deriveRoundState(base, operations, NO_TARGET_FACES);
     if (!state || !isRoundInProgress(state)) continue;
+    const distances = [...state.distances]
+      .sort(compareDistancePosition)
+      .map((d) => ({
+        distance: d.distance,
+        isMarked: d.is_marked,
+        total: state.shots
+          .filter((shot) => shot.distance_id === d.id)
+          .reduce((sum, shot) => sum + shot.score_int, 0),
+      }));
     inProgress.push({
       id: roundId,
       name: state.roundConfig.name,
       roundDate: state.roundConfig.roundDate,
-      total: state.shots.reduce((sum, shot) => sum + shot.score_int, 0),
+      format: state.roundConfig.format,
+      bowType: state.roundConfig.bowType,
+      total: distances.reduce((sum, d) => sum + d.total, 0),
+      distances,
     });
   }
   return { inProgress };

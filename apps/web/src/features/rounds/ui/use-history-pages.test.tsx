@@ -51,7 +51,10 @@ function page(
       id,
       name: id,
       roundDate: "2026-09-15",
+      format: "outdoor",
+      bowType: "recurve",
       total: 0,
+      distances: [],
     })),
     hasMore: false,
     after: ids.at(-1) ?? null,
@@ -66,12 +69,13 @@ function distancePage(
   overrides: Partial<LoadedRoundsList> = {},
 ): LoadedRoundsList {
   return {
-    items: ids.map((id, index) => ({
+    items: ids.map((id) => ({
       id,
       roundId: `round-of-${id}`,
       name: id,
       roundDate: "2026-09-15",
-      number: index + 1,
+      format: "outdoor",
+      bowType: "recurve",
       distance: 50,
       isMarked: true,
       total: 0,
