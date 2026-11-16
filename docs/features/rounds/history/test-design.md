@@ -22,7 +22,7 @@
 | 手動表示確認 | 上側・右側の配置、寸法、並び、折り返し、展開と格納の見え方 | ビルド済みpreviewで設計と変更前の画像を比較する。 |
 
 配置候補は`apps/web/src/features/rounds/ui/rounds-history.test.tsx`と`apps/web/tests/e2e/rounds/history.spec.ts`である。
-部品単独で保証できるケースは履歴専用部品のテストへ置いてよく、ファイル名や内部ツリーを契約にしない。
+部品単独で保証できるケースは点数一覧専用部品のテストへ置いてよく、ファイル名や内部ツリーを契約にしない。
 既存の`history-filter-draft.test.ts`、`history-view-state.test.ts`、`use-history-view.test.ts`、`use-history-pages.test.tsx`、`history-navigation.test.tsx`、`browser-history-view-memory.test.ts`などは担当する契約の安全網として再利用する。
 テスト内容の確認と不足分の選別は後続担当が行い、同等ケースがあれば更新して重複追加しない。
 private処理、描画回数、Effect回数、固定のCSSクラス、SVGのpath、DOM全体のスナップショットは期待値にしない。

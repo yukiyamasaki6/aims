@@ -69,10 +69,10 @@
 | rounds | score-entry | 矢の点数を記録・修正する | 素点テンキー入力、誤入力修正・差し替え |
 | rounds | setup | ラウンドの設定を変える | 基本属性入力、的（ターゲット）管理、ラウンド・種目管理 |
 | rounds | preset | 構成をプリセットにして管理する | ラウンド・種目管理 |
-| rounds | history | 入力中のラウンドをホームから、完了したラウンドを履歴から探す | ホーム・履歴 |
-| rounds | detail | ラウンドの成績を見る | 履歴一覧・スコア詳細 |
-| rounds | completion | ラウンドの入力を完了にする | 履歴一覧・スコア詳細 |
-| rounds | delete | ラウンドを削除する | 履歴一覧・スコア詳細 |
+| rounds | history | 入力中のラウンドをホームから、完了したラウンドを点数一覧から探す | 点数一覧・ラウンド詳細 |
+| rounds | detail | ラウンドの成績を見る | 点数一覧・ラウンド詳細 |
+| rounds | completion | ラウンドの入力を完了にする | 点数一覧・ラウンド詳細 |
+| rounds | delete | ラウンドを削除する | 点数一覧・ラウンド詳細 |
 | rounds | sync | 記録を失わず同期する | RDBMS・データ基盤 |
 | app | navigation | 迷わず移動する | 最小限の紹介画面、基本テーマ |
 | app | offline-pwa | アプリとして入れて、オフラインでも使う | PWA・オフライン点数記録 |
@@ -97,10 +97,10 @@ flowchart TD
 
     subgraph main ["(main)"]
         LeftPanel(("レフトパネル<br/>（全画面に常設）"))
-        Settings["#settings/…<br/>設定パネル<br/>（ホーム・履歴・作成・詳細の上に重ねる）"]
+        Settings["#settings/…<br/>設定パネル<br/>（ホーム・点数一覧・作成・詳細の上に重ねる）"]
         subgraph rounds ["rounds"]
             Rounds["/rounds<br/>ホーム"]
-            History["/rounds/history<br/>履歴"]
+            History["/rounds/history<br/>点数一覧"]
             RoundsNew["/rounds/new<br/>ラウンド新規作成"]
             RoundDetail["/rounds/[id]<br/>ラウンド入力・閲覧"]
         end
@@ -129,10 +129,10 @@ flowchart TD
     RoundsNew -->|「戻る」リンク| Rounds
     RoundsNew -->|開始| RoundDetail
     RoundDetail -->|入力を完了する| Rounds
-    RoundDetail -->|「戻る」リンク（遷移元によりホームまたは履歴）| Rounds
-    RoundDetail -->|「戻る」リンク（履歴から開いたとき）| History
+    RoundDetail -->|「戻る」リンク（遷移元によりホームまたは点数一覧）| Rounds
+    RoundDetail -->|「戻る」リンク（点数一覧から開いたとき）| History
     RoundDetail -->|ラウンド削除成功（遷移元）| Rounds
-    RoundDetail -->|ラウンド削除成功（履歴から開いたとき）| History
+    RoundDetail -->|ラウンド削除成功（点数一覧から開いたとき）| History
     LeftPanel -->|AIMSロゴ| Landing
     LeftPanel -->|「ホーム」項目| Rounds
     LeftPanel -->|「点数一覧」項目| History
