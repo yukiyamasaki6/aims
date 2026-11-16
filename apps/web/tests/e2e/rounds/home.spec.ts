@@ -1,3 +1,4 @@
+import type { Locator } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
@@ -20,14 +21,35 @@ import {
 
 const roundsText = translatorFor("rounds");
 
+// 要素の中心の最前面が、その要素自身か子孫であることを、スクロールが止まるまで待って確かめる。
+async function expectFrontmostAtCenter(target: Locator) {
+  await expect
+    .poll(() =>
+      target.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          r.left + r.width / 2,
+          r.top + r.height / 2,
+        );
+        return hit !== null && el.contains(hit);
+      }),
+    )
+    .toBe(true);
+}
+
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
-test("新規作成ボタンを押すと、ラウンド作成画面へ移動する", async ({ page }) => {
+test("ホームの右下のラウンドの開始ボタンを押すと、ラウンドの開始画面へ移動する", async ({
+  page,
+}) => {
   await page.goto("/rounds");
 
   await page.getByTestId("new-round-fab").click();
 
   await expect(page).toHaveURL(/\/rounds\/new/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: roundsText("newRoundTitle") }),
+  ).toBeVisible();
   await expect(page.getByTestId("round-start-button")).toBeVisible();
 });
 
@@ -55,6 +77,51 @@ test("入力中のラウンドのカードを押すと、そのラウンドの�
 // 入力中のラウンドの有無で表示が変わるため、以降のテストは使い捨てのユーザーで前提を作る。
 test.describe("使い捨てのユーザー", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("ホームの右下のラウンドの開始ボタンへTabで届き、Enterでラウンドの開始画面へ移動する", async ({
+    page,
+  }) => {
+    // ホームを開き、右下のボタンへTabで進む。
+    await signInFreshUser(page, "e2e-home-tab");
+    await page.goto("/rounds");
+    const button = page.getByTestId("new-round-fab");
+    await expect(button).toHaveAttribute("data-hydrated", "true");
+    for (let i = 0; i < 30; i++) {
+      if (await button.evaluate((el) => el === document.activeElement)) break;
+      await page.keyboard.press("Tab");
+    }
+    await expect(button).toBeFocused();
+
+    // Enterで開始画面へ移る。
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/rounds\/new/);
+    await expect(page.getByTestId("round-start-button")).toBeVisible();
+  });
+
+  test("幅390pxで入力中のラウンドが画面に収まらないほどあっても、本文を末尾までスクロールすると、最後のカードとそのメニューが右下のラウンドの開始ボタンに隠れない", async ({
+    page,
+  }) => {
+    // 画面に収まらない数の入力中のラウンドを用意して、幅390pxのホームを開く。
+    const credentials = await signInFreshUser(page, "e2e-home-cover");
+    for (let i = 0; i < 10; i++) {
+      await addRound(
+        credentials,
+        `被り確認-${i}`,
+        `2026-03-${String(i + 1).padStart(2, "0")}`,
+      );
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/rounds");
+    await expect(page.getByRole("listitem")).toHaveCount(10);
+
+    // 本文を末尾までスクロールして、最後のカードとメニューの中心の最前面が、それら自身である。
+    await page
+      .getByRole("main")
+      .evaluate((main) => main.parentElement?.scrollTo(0, main.scrollHeight));
+    const lastItem = page.getByRole("listitem").last();
+    await expectFrontmostAtCenter(lastItem.getByRole("link"));
+    await expectFrontmostAtCenter(lastItem.getByTestId("round-menu-trigger"));
+  });
 
   test("オンラインでホームを表示した後にオフラインで開き直しても、入力中のラウンドが合計点つきで表示され、そのカードからラウンド詳細を開ける", async ({
     page,

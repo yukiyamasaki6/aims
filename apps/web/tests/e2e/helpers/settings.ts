@@ -59,9 +59,31 @@ export async function pressAtCenter(page: Page, target: Locator) {
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
 
-// 背景のホームの「新規ラウンド」ボタン。パネルの外にあり、座標で押す先に使う。
-export function backgroundFab(page: Page) {
-  return page.getByTestId("new-round-fab");
+// 背景のホームの現在地の見出し。背景がホームであることの目印に使う。
+export function homeHeading(page: Page) {
+  return page.getByRole("heading", {
+    level: 1,
+    name: translatorFor("rounds")("homeTitle"),
+  });
+}
+
+// 設定パネルの外側の点を、座標で押す。外側の点は、パネルの領域とビューポートの寸法から、左右の余白の中央として求める。
+// 他の機能の要素の位置や形に頼らない。パネルが画面全体を覆う幅(外側の余白がない)では、押す点がないため例外にする。
+export async function pressOutsidePanel(page: Page) {
+  const box = await settingsPanel(page).boundingBox();
+  const viewport = page.viewportSize();
+  if (box === null || viewport === null)
+    throw new Error("パネルの領域かビューポートが得られません");
+  const rightMargin = viewport.width - (box.x + box.width);
+  const leftMargin = box.x;
+  const y = viewport.height / 2;
+  if (rightMargin > 0) {
+    await page.mouse.click(box.x + box.width + rightMargin / 2, y);
+  } else if (leftMargin > 0) {
+    await page.mouse.click(leftMargin / 2, y);
+  } else {
+    throw new Error("パネルの外側に押す点がありません");
+  }
 }
 
 // 設定パネルの中の項目の画面の水和が済むまで待つ。背景のホームも目印を持つため、パネルの中に絞る。

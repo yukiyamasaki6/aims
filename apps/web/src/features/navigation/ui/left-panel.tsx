@@ -1,6 +1,6 @@
 "use client";
 
-import { House, ListOrdered, Menu, Settings, X } from "lucide-react";
+import { House, ListOrdered, Menu, Plus, Settings, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -18,6 +18,7 @@ import { ScreenMenuProvider } from "@/components/screen-frame";
 import { cn } from "@/lib/utils";
 import {
   HOME_PATH,
+  NEW_ROUND_PATH,
   ROUNDS_HISTORY_PATH,
   ROUNDS_HOME_PATH,
   SETTINGS_ACCOUNT_HASH,
@@ -262,7 +263,6 @@ function useSettingsItem(
   const nav: PanelNav = {
     onNavigate: closeDrawer,
     onOpenSettings: openSettings,
-    settingsOpen: settings.open,
   };
   return { railSettingsRef, contentRef, skipDrawerReturn, nav };
 }
@@ -497,26 +497,23 @@ function LogoLink({ className }: { className?: string }) {
 
 function navItemClassName(current: boolean) {
   return cn(
-    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
-    current && "bg-muted font-medium",
+    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+    current ? "bg-foreground/10 font-medium" : "hover:bg-foreground/5",
   );
 }
 
-// 現在のビューの項目に、aria-current="page"と現在の見た目を付ける。
-// 設定パネルが開いている間は「設定」項目だけに、それ以外はパスが項目の行き先と等しい項目に付ける。詳細・作成ではホーム・履歴のどちらにも付かない。
+// 現在のビューの項目に、aria-current="page"と現在の見た目を付ける。パスが項目の行き先と等しい項目に付け、設定パネルの開閉には依らない。詳細・ラウンドの開始画面ではホーム・履歴のどちらにも付かない。
 function NavItem({
   href,
   onNavigate,
-  settingsOpen,
   children,
 }: {
   href: string;
   onNavigate: () => void;
-  settingsOpen: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const current = !settingsOpen && pathname === href;
+  const current = pathname === href;
   return (
     <Link
       href={href}
@@ -530,32 +527,47 @@ function NavItem({
 }
 
 // 項目の押下と現在のビュー。onNavigate: ホーム・点数一覧の項目の押下。onOpenSettings: 「設定」項目の押下。
-// settingsOpen: 設定パネルが開いているか。settingsRef: 「設定」項目の要素(列だけが渡す。閉じたときのフォーカスの戻し先)。
+// settingsRef: 「設定」項目の要素(列だけが渡す。閉じたときのフォーカスの戻し先)。
 type PanelNav = {
   onNavigate: () => void;
   onOpenSettings: () => void;
-  settingsOpen: boolean;
   settingsRef?: RefObject<HTMLAnchorElement | null>;
 };
+
+// ラウンドの開始画面への入口。押すとドロワーを閉じる。開始画面を表示中は遷移を止め、画面の選択を保つ。
+function StartRoundLink({ onNavigate }: { onNavigate: () => void }) {
+  const t = useTranslations("navigation");
+  const pathname = usePathname();
+  return (
+    <div className="px-4 pt-1 pb-4">
+      <Link
+        href={NEW_ROUND_PATH}
+        onClick={(event) => {
+          if (pathname === NEW_ROUND_PATH) event.preventDefault();
+          onNavigate();
+        }}
+        // transition-allだと継承したvisibilityの切替が遅れ、閉じたパネルの中身が閉じた後も届く。色だけに限る。
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 font-medium text-sm transition-colors hover:bg-foreground/5"
+      >
+        <Plus aria-hidden="true" className="size-5 shrink-0" />
+        {t("leftPanelStartRound")}
+      </Link>
+    </div>
+  );
+}
 
 function PanelBody({ nav }: { nav: PanelNav }) {
   const t = useTranslations("navigation");
   return (
     <>
+      <StartRoundLink onNavigate={nav.onNavigate} />
+
       <nav className="flex flex-1 flex-col gap-1 px-4 pt-1">
-        <NavItem
-          href={ROUNDS_HOME_PATH}
-          onNavigate={nav.onNavigate}
-          settingsOpen={nav.settingsOpen}
-        >
+        <NavItem href={ROUNDS_HOME_PATH} onNavigate={nav.onNavigate}>
           <House aria-hidden="true" className="size-5 shrink-0" />
           {t("leftPanelHome")}
         </NavItem>
-        <NavItem
-          href={ROUNDS_HISTORY_PATH}
-          onNavigate={nav.onNavigate}
-          settingsOpen={nav.settingsOpen}
-        >
+        <NavItem href={ROUNDS_HISTORY_PATH} onNavigate={nav.onNavigate}>
           <ListOrdered aria-hidden="true" className="size-5 shrink-0" />
           {t("leftPanelHistory")}
         </NavItem>
@@ -570,8 +582,7 @@ function PanelBody({ nav }: { nav: PanelNav }) {
             event.preventDefault();
             nav.onOpenSettings();
           }}
-          aria-current={nav.settingsOpen ? "page" : undefined}
-          className={navItemClassName(nav.settingsOpen)}
+          className={navItemClassName(false)}
         >
           <Settings aria-hidden="true" className="size-5 shrink-0" />
           {t("leftPanelSettings")}

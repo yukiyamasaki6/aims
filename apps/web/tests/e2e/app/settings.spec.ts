@@ -21,11 +21,13 @@ import { collectHydrationErrors } from "../helpers/hydration";
 import { createRound } from "../helpers/rounds";
 import {
   accountCategory,
-  backgroundFab,
   closeButton,
+  homeHeading,
   openHomeThenSettings,
   openSettingsByItem,
   pressAtCenter,
+  pressOutsidePanel,
+  railItem,
   settingsPanel,
 } from "../helpers/settings";
 
@@ -49,7 +51,7 @@ async function openHome(page: Page) {
 async function expectClosedOnHome(page: Page) {
   await expect(settingsPanel(page)).toBeHidden();
   await expect(page).toHaveURL(/\/rounds$/);
-  await expect(backgroundFab(page)).toBeVisible();
+  await expect(homeHeading(page)).toBeVisible();
 }
 
 test.describe("認証済み", () => {
@@ -91,22 +93,25 @@ test.describe("認証済み", () => {
       expect(reloads).toEqual([]);
     });
 
-    for (const screen of ["履歴", "作成", "詳細"] as const) {
-      test(`${screen}の画面でも、「設定」項目から設定パネルを開ける`, async ({
+    for (const screen of [
+      "履歴の画面",
+      "ラウンドの開始画面",
+      "詳細の画面",
+    ] as const) {
+      test(`${screen}でも、「設定」項目から設定パネルを開ける`, async ({
         page,
       }) => {
         // ホームから、背景にする画面へ移る。
         await openHome(page);
-        if (screen === "履歴") {
+        if (screen === "履歴の画面") {
           await page
             .getByRole("link", { name: navigationText("leftPanelHistory") })
             .click();
           await expect(page).toHaveURL(
             new RegExp(`${ROUNDS_HISTORY_PATH}\\?return=1$`),
           );
-        } else if (screen === "作成") {
-          await backgroundFab(page).click();
-          await expect(page).toHaveURL(new RegExp(`${NEW_ROUND_PATH}$`));
+        } else if (screen === "ラウンドの開始画面") {
+          await page.goto(NEW_ROUND_PATH);
           await waitForHydration(page);
         } else {
           const roundId = await createRound({
@@ -166,7 +171,7 @@ test.describe("認証済み", () => {
         await expect(signOutButton(page)).toBeVisible();
         await page.goBack();
         await expect(page).toHaveURL(/\/rounds$/);
-        await expect(backgroundFab(page)).toBeVisible();
+        await expect(homeHeading(page)).toBeVisible();
       });
     }
 
@@ -272,8 +277,11 @@ test.describe("認証済み", () => {
         }
       }
 
-      // 背景の「新規ラウンド」ボタンを座標で押すと、パネルが閉じるだけで、ボタンの動作は起きない。
-      await pressAtCenter(page, backgroundFab(page));
+      // 背景の縦の列の「点数一覧」を座標で押すと、パネルが閉じるだけで、項目の動作は起きない。
+      await pressAtCenter(
+        page,
+        railItem(page, navigationText("leftPanelHistory")),
+      );
       await expectClosedOnHome(page);
     });
 
@@ -409,7 +417,7 @@ test.describe("認証済み", () => {
 
         if (how === "閉じる操作") await closeButton(page).click();
         else if (how === "Esc") await page.keyboard.press("Escape");
-        else await pressAtCenter(page, backgroundFab(page));
+        else await pressOutsidePanel(page);
 
         await expectClosedOnHome(page);
       });
@@ -586,7 +594,7 @@ test.describe("認証済み", () => {
       // どの閉じる・移る操作も受け付けず、パネルは実行中のままである。
       await expect(closeButton(page)).toBeDisabled();
       await page.keyboard.press("Escape");
-      await pressAtCenter(page, backgroundFab(page));
+      await pressOutsidePanel(page);
       await accountCategory(page).click({ force: true });
       await settingsPanel(page)
         .getByRole("link", { name: authText("back") })

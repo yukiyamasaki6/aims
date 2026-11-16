@@ -32,7 +32,7 @@
 
 - ラウンド(`features/rounds/`): 業務の規則、端末の記録、画面に渡す正しい状態と変更の方法、送信の機構(送信器、列ごとの送信の状態、送れる要求の計画、失敗の分類、操作の送信と確定の記録)、ベースの取得と反映を持つ。
 - 同期(`features/round-sync/`): 契機を受けて、いつ取り直すかを決める唯一の手続きと、契機の受け取りを持つ。他の機能へ公開する名前が無いため、入口を置かない。ラウンドの入口が公開する記録の制御`RoundRecordControl`(3操作: `start`、`isRecordUser`、`signInChanged`)と、取り直しの制御`RoundRefreshControl`(4操作: `refreshNeeds`、`onRefreshNeeds`、`refreshAll`、`refreshRound`)の、平らな操作だけを使う。送信の内部の概念(送信の待ち、保留、リトライ待機、衝突、lane、失敗の分類)は境界を越えない。サインインの変化への反応(保留の再開)と、通信の回復での再送は、ラウンドが決める。利用者の切り替えはラウンドが行わず、認証の見張りが記録の利用者(`isRecordUser`)との不一致でページ全体を読み込み直す。
-- 画面は、画面ごとの文脈から受け取る状態と変更の方法(履歴の取得は`RoundsListStore`、端末内の入力中一覧(ホーム、点数一覧の除外)と詳細は`RoundWindow`。作成は窓口を持たず手続きの入れ物から受ける)だけを使う。共通の構造は[`rounds/design.md`](../design.md)に従う。取得の状態(読み込み中、オフライン、見つからない、エラー)は、画面に渡す見え方の型に持たせる。詳細の窓口は、IDを購読すると記録から存在と画面の状態を導き、ラウンドの取得を1回始める(`retry`で取り直す)。効かなかった結果と重ねられなかった確定済みの操作の取り直しは同期が決める。
+- 画面は、画面ごとの文脈から受け取る状態と変更の方法(履歴の取得は`RoundsListStore`、端末内の入力中一覧(ホーム、点数一覧の除外)と詳細は`RoundWindow`。ラウンドの開始画面は窓口を持たず手続きの入れ物から受ける)だけを使う。共通の構造は[`rounds/design.md`](../design.md)に従う。取得の状態(読み込み中、オフライン、見つからない、エラー)は、画面に渡す見え方の型に持たせる。詳細の窓口は、IDを購読すると記録から存在と画面の状態を導き、ラウンドの取得を1回始める(`retry`で取り直す)。効かなかった結果と重ねられなかった確定済みの操作の取り直しは同期が決める。
 - パッケージ: 画面は`react`、端末の保存は`idb`(`lib/local-op-log/`だけ)、データベースは`@supabase/supabase-js`(機能では認証のインフラ層だけ。他は`lib/supabase/`)を使う。ラウンドと同期は、非画面のパッケージを直接参照しない。
 
 | ファイル | 層 | 内容 |
@@ -48,7 +48,7 @@
 | `features/rounds/domain/round-opening.ts` | domain | 詳細を開くときの判断(`roundOpening`、`isUnknownToServer`)。詳細の窓口が使う |
 | `features/rounds/domain/round-view.ts`、`round-list.ts` | domain | 画面の状態の導出(起点`originOf`、`roundScreenState`)。履歴の材料の型、削除済みと入力中と合計点の導出 |
 | `features/rounds/domain/rounds-list-view.ts` | domain | ホームと点数一覧の表示の内容の決定 |
-| `features/rounds/domain/preset.ts`、`preset-list-view.ts`、`round-start.ts`、`write-result.ts` | domain | プリセットの値と並び・振り分け・除去、作成の画面の表示の決定、プリセットの構成からの、IDを除いた作成の内容の組み立て、書き込みの結果(成功か失敗)と削除、保存の失敗の種類 |
+| `features/rounds/domain/preset.ts`、`preset-list-view.ts`、`round-start.ts`、`write-result.ts` | domain | プリセットの値と並び・振り分け・除去、ラウンドの開始画面の表示の決定、プリセットの構成からの、IDを除いた作成の内容の組み立て、書き込みの結果(成功か失敗)と削除、保存の失敗の種類 |
 | `features/rounds/domain/shot-pointer.ts`、`score-history.ts`、`shot-operations.ts`、`round-progress.ts`、`distance-config.ts`、`distance-operations.ts`、`target-face-filter.ts`、`preset-save.ts`、`ring-color.ts`、`shot-id.ts` | domain | 詳細の画面の規則。指している矢の遷移、取り消しの列、矢の操作の組み立て、完了の確認と状態を変える操作、距離の設定の検証と距離の操作、的の絞り込み、保存するプリセットの内容、リング色、時刻順の矢のID(時刻と乱数は引数) |
 | `features/rounds/domain/round-routes.ts` | domain | ラウンドの画面の経路の判定・変換(`roundFramePathOf`、経路からIDを読む`roundIdOfPath`)。経路の定数(`ROUNDS_PATH`、`NEW_ROUND_PATH`、`roundPath`)は経路表(`src/routes.ts`)が持つ |
 | `features/rounds/domain/fetch-status.ts` | domain | 取得の結果の型(失敗は種類`reason`で持ち、文言は持たない)、サインインの確認の失敗の種類`SignInFailure`、問い合わせの結果の種類から結果への対応`fetchResultOf` |
@@ -68,7 +68,7 @@
 | `features/rounds/ui/rounds-context.tsx` | ui | 窓口の文脈(`RoundsListStoreProvider`と`useRoundsListStore`、`RoundWindowProvider`と`useRoundWindow`)と、手続きの入れ物の文脈(`RoundProceduresProvider`と`useRoundProcedures`) |
 | `features/rounds/ui/rounds-home.tsx`、`rounds-history.tsx`、`round-cards.tsx`、`round-delete.tsx`、`use-local-rounds-list.ts`、`use-history-pages.ts`、`fetch-state.tsx` | ui | ホームと点数一覧の描画と削除のメニュー、端末の入力中のラウンドの読み込み、履歴のページの取得と再取得、取得の状態の表示。点数一覧の先頭のページのオフライン表示の間の読み直しは、`use-history-pages.ts`が画面から受けた`whenOnline`で行う |
 | `features/rounds/ui/`の詳細の画面の部品 | ui | `round-detail-client.tsx`、`scorecard-client.tsx`、`use-round-screen.ts`(`RoundWindow`の詳細の購読と追記のフック)ほか。ホームと点数一覧は`rounds/history`のファイルと層 |
-| `features/rounds/ui/round-preset-select.tsx`、`use-start-round.ts`、`use-preset-delete.ts`、`preset-info.tsx`、`target-face-info.tsx` | ui | 作成の画面の描画と選択、開始と削除の実行中とエラーの状態、プリセットと的の情報の表示 |
+| `features/rounds/ui/round-preset-select.tsx`、`use-start-round.ts`、`use-preset-delete.ts`、`preset-info.tsx`、`target-face-info.tsx` | ui | ラウンドの開始画面の描画と選択、開始と削除の実行中とエラーの状態、プリセットと的の情報の表示 |
 | `features/rounds/domain/send-queue.ts` | domain | 1つの列の送信の状態(待ち、送信中、リトライ待機、保留、単独の印、要求) |
 | `features/rounds/domain/op-plan.ts`、`sync-failure.ts` | domain | 送れる要求の計画(衝突する先行がある操作を含めない。`round-op-conflicts.ts`の衝突の規則と上限を直接使う)。送信の失敗を、再試行する(`retry`。間隔は3秒から倍で60秒まで)・保留する(`hold`。未認証)・破棄する(`discard`。`PT403`と`PT422`)・切り分けるに分ける判定 |
 | `features/round-sync/domain/flight-gate.ts` | domain | 取り直しの同時に1回までの実行の制御 |
@@ -93,7 +93,7 @@
 一括の取得は、常駐の契機(起動、通信の復帰、画面が見える状態)で行う。サインインの通知と、ホーム・点数一覧を開くことは契機ではない。サインイン済みで記録の利用者と同じときだけ取得と反映を行う。一括の取得の対象は、端末が持つ(ベースか操作がある)ラウンドのうち、作成が確定しているものとし、削除の操作の有無では分けない。返らなかった対象は保存を消し、メモリの記録だけが削除済み(ベース`null`)を持つ(確定していない作成は、サーバーにまだ無いため対象にしない)。取得の問い合わせ(個別と一括)には、ライブラリの再試行(GETの520・503とネットワークの例外を最大3回)を付ける。
 1つのラウンドの取り直しは、見つからなかったとき、一括と同じく保存を消してメモリの記録を削除済みにする(未確定の作成だけが起点のラウンドは書かない)。詳細の窓口は、購読の開始ごとに取得を1回始め(サーバーに無いラウンドは、作成が確定した時点で1回。メモリが削除済みのラウンドは取得しない)、効かなかった結果と重ねられなかった確定済みの操作の取り直しは、オフラインでは行わない。端末のベースで開いている間に取得が失敗しても、定期的な取り直しは行わず、次の契機まで保存済みの表示が続く。的は、窓口が個別に取得する(常駐の一括の完了を待たない)。
 
-画面に渡す状態と変更の方法は履歴と詳細の2つの窓口で、詳細と端末内の入力中一覧は窓口(`RoundWindow`)の`watch`/`view`/`retry`/`append`、`watchLocalList`/`localList`が、履歴の取得は`RoundsListStore`の`loadList`が持つ。詳細の画面は、完了(ホームへ)・削除して離れる(遷移元へ)・戻る(遷移元へ)・プリセットの保存・IDの払い出しの手続きを、ホームと点数一覧の画面は、ラウンドの削除の手続きを(点数一覧は`whenOnline`も)、作成の画面は、ラウンドの開始・個人プリセットの削除・プリセットの取得・`whenOnline`を、窓口を通さず手続きの入れ物から受ける。通信の復帰の合図`whenOnline`は、手続きの入れ物から受ける(詳細の窓口は同じ契約で、offlineの間の自動の再取得を窓口の内側で行う)。矢のIDの払い出し`newShotId`も手続きの入れ物から受ける。`loadList`は履歴の取得を自分で行う。合図は表示の読み直しと切り替えの合図で、同期の経路ではない。詳細は、メモリの記録で、削除があれば取得せずに存在しないとし、確定していない作成があれば取得せずに作成の操作を基準にする。端末にベースと的があれば、取得の結果を待たず、取得が失敗しても端末のベースで開く。記録の読み込みを10秒で打ち切り、打ち切った時点の通信の可否でofflineかerrorを出す。各取得は`fetchContent`の10秒で打ち切る。端末の保存(`aims-sync`)は、現在の形のデータだけを前提にする。
+画面に渡す状態と変更の方法は履歴と詳細の2つの窓口で、詳細と端末内の入力中一覧は窓口(`RoundWindow`)の`watch`/`view`/`retry`/`append`、`watchLocalList`/`localList`が、履歴の取得は`RoundsListStore`の`loadList`が持つ。詳細の画面は、完了(ホームへ)・削除して離れる(遷移元へ)・戻る(遷移元へ)・プリセットの保存・IDの払い出しの手続きを、ホームと点数一覧の画面は、ラウンドの削除の手続きを(点数一覧は`whenOnline`も)、ラウンドの開始画面は、ラウンドの開始・個人プリセットの削除・プリセットの取得・`whenOnline`を、窓口を通さず手続きの入れ物から受ける。通信の復帰の合図`whenOnline`は、手続きの入れ物から受ける(詳細の窓口は同じ契約で、offlineの間の自動の再取得を窓口の内側で行う)。矢のIDの払い出し`newShotId`も手続きの入れ物から受ける。`loadList`は履歴の取得を自分で行う。合図は表示の読み直しと切り替えの合図で、同期の経路ではない。詳細は、メモリの記録で、削除があれば取得せずに存在しないとし、確定していない作成があれば取得せずに作成の操作を基準にする。端末にベースと的があれば、取得の結果を待たず、取得が失敗しても端末のベースで開く。記録の読み込みを10秒で打ち切り、打ち切った時点の通信の可否でofflineかerrorを出す。各取得は`fetchContent`の10秒で打ち切る。端末の保存(`aims-sync`)は、現在の形のデータだけを前提にする。
 
 流れは次のとおりである。
 

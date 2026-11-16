@@ -1136,7 +1136,7 @@ describe("RoundsHistory", () => {
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
 
-    it("見出し「履歴」のレベル1がヘッダーにあり、新規作成ボタンは持たない", async () => {
+    it("見出し「履歴」のレベル1がヘッダーにあり、ラウンドの開始ボタンは持たない", async () => {
       // Given
       fetchResolves(completed);
 

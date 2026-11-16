@@ -20,7 +20,7 @@ export function frameHtmlOf(framePath: string): string {
   return `${framePath.slice(1)}.html`;
 }
 
-// ラウンドのホーム、履歴、作成、詳細の画面の経路。
+// ラウンドのホーム、履歴、ラウンドの開始画面、詳細の画面の経路。
 // ROUNDS_PATHはラウンドの画面全体の根(保護の範囲)、ROUNDS_HOME_PATHはホーム画面で、値は同じである。
 // 同値の別名の再エクスポートはknipが重複として報告するため、ROUNDS_HOME_PATHは根から作る。
 export const ROUNDS_PATH = "/rounds";
@@ -49,7 +49,7 @@ export function roundPath(roundId: string, from?: string): string {
 export const ROUND_FRAME_ID = "_";
 export const ROUND_FRAME_PATH = `${ROUNDS_PATH}/${ROUND_FRAME_ID}`;
 
-// 全ての画面の枠の経路。ラウンドのホーム、履歴、作成、詳細の4つ。
+// 全ての画面の枠の経路。ラウンドのホーム、履歴、ラウンドの開始画面、詳細の4つ。
 export const FRAME_PATHS: string[] = [
   ROUNDS_HOME_PATH,
   ROUNDS_HISTORY_PATH,

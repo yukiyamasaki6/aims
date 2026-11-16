@@ -60,7 +60,7 @@ beforeEach(() => {
 
 describe("RoundsHome", () => {
   describe("入力中のラウンドの表示", () => {
-    it("端末の入力中のラウンドを実施日の新しい順にカードで表示し、新規作成ボタンも表示する", () => {
+    it("端末の入力中のラウンドを実施日の新しい順にカードで表示し、ラウンドの開始ボタンも表示する", () => {
       // Given
       fakeWindow.setLocal({ inProgress });
 
@@ -125,7 +125,7 @@ describe("RoundsHome", () => {
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
-    it("入力中が0件なら、入力中のラウンドがないことを示し、新規作成ボタンは表示する", () => {
+    it("入力中が0件なら、入力中のラウンドがないことを示し、ラウンドの開始ボタンは表示する", () => {
       // Given
       fakeWindow.setLocal({ inProgress: [] });
 
@@ -138,7 +138,7 @@ describe("RoundsHome", () => {
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
     });
 
-    it("端末の入力中をまだ読んでいなければ、カードも空の表示も出さず、新規作成ボタンは表示する", () => {
+    it("端末の入力中をまだ読んでいなければ、カードも空の表示も出さず、ラウンドの開始ボタンは表示する", () => {
       // Given
       fakeWindow.roundWindow.localList.mockReturnValue(null);
 
@@ -149,6 +149,53 @@ describe("RoundsHome", () => {
       expect(screen.queryByRole("listitem")).toBeNull();
       expect(screen.queryByText(roundsText("homeEmpty"))).toBeNull();
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
+    });
+  });
+
+  describe("ラウンドの開始ボタン", () => {
+    it("名前は表示の文字と一致する", () => {
+      // Given
+      // When
+      renderHome();
+
+      // Then
+      const link = screen.getByRole("link", {
+        name: roundsText("newRoundLabel"),
+      });
+      expect(link).toHaveTextContent(roundsText("newRoundLabel"));
+    });
+
+    it("アイコンは装飾であり、名前に文字以外を足さない", () => {
+      // Given
+      // When
+      renderHome();
+
+      // Then
+      const link = screen.getByRole("link", {
+        name: roundsText("newRoundLabel"),
+      });
+      expect(link.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+      expect(link).toHaveAccessibleName(link.textContent ?? "");
+    });
+
+    it.each([
+      [
+        "読み込み中",
+        () => fakeWindow.roundWindow.localList.mockReturnValue(null),
+      ],
+      ["0件", () => fakeWindow.setLocal({ inProgress: [] })],
+      ["1件以上", () => fakeWindow.setLocal({ inProgress })],
+    ])("入力中のラウンドが%sのときも表示される", (_state, arrange) => {
+      // Given
+      arrange();
+
+      // When
+      renderHome();
+
+      // Then
+      expect(
+        screen.getByRole("link", { name: roundsText("newRoundLabel") }),
+      ).toBeInTheDocument();
     });
   });
 

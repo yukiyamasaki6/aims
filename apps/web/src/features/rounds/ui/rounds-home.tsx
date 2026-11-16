@@ -23,7 +23,7 @@ export function RoundsHome() {
   return (
     <ScreenFrame title={t("homeTitle")}>
       <div className="h-full overflow-y-auto">
-        <main className="mx-auto flex min-h-full max-w-xl flex-col gap-6 p-8">
+        <main className="mx-auto flex min-h-full max-w-xl flex-col gap-6 p-8 pb-24">
           {rounds !== null &&
             (rounds.length === 0 ? (
               <p className="text-muted-foreground text-sm">{t("homeEmpty")}</p>
@@ -57,10 +57,10 @@ function NewRoundLink({ hydrated }: { hydrated: boolean }) {
       href={NEW_ROUND_PATH}
       data-hydrated={hydrated}
       data-testid="new-round-fab"
-      aria-label={t("newRoundLabel")}
-      className="fixed right-6 bottom-6 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors hover:bg-primary/80"
+      className="fixed right-6 bottom-6 flex h-14 items-center justify-center gap-2 rounded-full bg-primary px-5 text-primary-foreground shadow-lg transition-colors hover:bg-primary/80"
     >
-      <Plus className="size-6" />
+      <Plus aria-hidden="true" className="size-5" />
+      {t("newRoundLabel")}
     </Link>
   );
 }
