@@ -6,6 +6,7 @@ import { translatorFor } from "@/i18n/translator-test-helpers";
 import { SettingsAccount } from "./settings-account";
 
 const settingsText = translatorFor("settings");
+const authText = translatorFor("auth");
 
 function itemLink(name: string) {
   return screen.getByRole("link", { name });
@@ -15,24 +16,24 @@ describe("SettingsAccount", () => {
   it("メールアドレス変更、パスワード変更、アカウント削除、サインアウトの順に行を並べる", () => {
     // Given
     // When
-    render(
+    const { container } = render(
       <SettingsAccount
         onMove={vi.fn()}
-        signOut={<button type="button">サインアウト</button>}
+        signOut={<button type="button">{authText("signOut")}</button>}
       />,
       { wrapper: IntlTestProvider },
     );
 
     // Then
-    const rows = [
-      ...screen.getAllByRole("link"),
-      ...screen.getAllByRole("button"),
-    ].map((row) => row.textContent);
+    const rows = Array.from(
+      container.querySelectorAll("a, button"),
+      (row) => row.textContent,
+    );
     expect(rows).toEqual([
       settingsText("changeEmailItem"),
       settingsText("changePasswordItem"),
       settingsText("deleteAccountItem"),
-      "サインアウト",
+      authText("signOut"),
     ]);
   });
 
@@ -56,7 +57,13 @@ describe("SettingsAccount", () => {
     });
 
     // Then
-    expect(screen.getAllByRole("link")).toHaveLength(3);
+    const links = screen.getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([
+      settingsText("changeEmailItem"),
+      settingsText("changePasswordItem"),
+      settingsText("deleteAccountItem"),
+    ]);
+    expect(links[0].parentElement?.children).toHaveLength(3);
     expect(screen.queryByRole("button")).toBeNull();
   });
 
@@ -84,6 +91,30 @@ describe("SettingsAccount", () => {
       document.removeEventListener("click", defaultPrevented);
       expect(onMove).toHaveBeenCalledExactlyOnceWith(view);
       expect(defaultPrevented).toHaveReturnedWith(true);
+    },
+  );
+
+  it.each([
+    ["changeEmailItem", "email", 1],
+    ["changePasswordItem", "password", 2],
+    ["deleteAccountItem", "delete-account", 3],
+  ] as const)(
+    "%sの行へTabで到達してEnterを押すと、%sへ移る操作を通知する",
+    async (textKey, view, tabCount) => {
+      // Given
+      const user = userEvent.setup();
+      const onMove = vi.fn();
+      render(<SettingsAccount onMove={onMove} signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
+
+      // When
+      for (let index = 0; index < tabCount; index++) await user.tab();
+      await user.keyboard("{Enter}");
+
+      // Then
+      expect(itemLink(settingsText(textKey))).toHaveFocus();
+      expect(onMove).toHaveBeenCalledWith(view);
     },
   );
 });

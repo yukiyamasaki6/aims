@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { UserRound, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import {
   type MouseEvent,
@@ -103,7 +103,7 @@ export function SettingsPanel({
         </div>
         <div className="flex min-h-0 flex-1 max-md:flex-col">
           {/* 幅768px以上は左の縦の列。幅768px未満は上の横並びのタブで、折り返さず、はみ出すと並びだけが横にスクロールする。 */}
-          <nav className="flex shrink-0 gap-1 p-2 max-md:overflow-x-auto max-md:border-b md:w-48 md:flex-col md:border-r">
+          <nav className="flex shrink-0 gap-0 p-2 max-md:overflow-x-auto max-md:border-b md:w-48 md:flex-col md:border-r">
             <CategoryLink
               href={SETTINGS_ACCOUNT_HASH}
               current={view !== null}
@@ -154,14 +154,18 @@ function CategoryLink({
         if (!disabled) onSelect();
       }}
       className={cn(
-        // 各タブは分類の名称と内側の余白の幅で、伸ばさない(分類が1つでも横いっぱいに広がらない)。
-        "shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors",
+        // 横並びの各タブは分類の名称と内側の余白の幅で、伸ばさない(分類が1つでも横いっぱいに広がらない)。
+        "flex h-11 shrink-0 items-center gap-0 whitespace-nowrap rounded-lg px-3 py-3 text-sm transition-colors md:gap-2",
         current
           ? "bg-foreground/10 font-medium"
           : !disabled && "hover:bg-foreground/5",
         disabled && "opacity-50",
       )}
     >
+      <UserRound
+        className="hidden size-5 shrink-0 md:block"
+        aria-hidden="true"
+      />
       {children}
     </a>
   );
