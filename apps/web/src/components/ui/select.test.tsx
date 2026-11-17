@@ -135,3 +135,29 @@ describe("Select", () => {
     });
   });
 });
+
+describe("Select 開いている間の周りの操作", () => {
+  it("選択肢を開いたまま別の入力欄を押して、入力を続けられる", async () => {
+    // Given
+    const user = userEvent.setup();
+    render(
+      <>
+        <Select label="色" options={COLORS} value="red" onChange={() => {}} />
+        <input aria-label="点数" />
+      </>,
+    );
+    await user.click(screen.getByRole("combobox"));
+    await screen.findAllByRole("option");
+    // jsdomは周りの押下の吸収を再現しないため、modalが付けるスクロールの固定がないことで、周りを妨げないことを確かめる。
+    const scrollLocked = document.body.style.overflowY === "hidden";
+
+    // When
+    const input = screen.getByRole("textbox", { name: "点数" });
+    await user.click(input);
+    await user.keyboard("25");
+
+    // Then
+    expect(scrollLocked).toBe(false);
+    expect(input).toHaveValue("25");
+  });
+});

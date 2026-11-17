@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -1263,5 +1263,36 @@ describe("DistanceEditFields", () => {
       expect(onOpenChange).not.toHaveBeenCalled();
       expect(enqueue).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("DistanceEditFields 初期フォーカス", () => {
+  it("開くと先頭が入力欄でも、入力欄でなくダイアログがフォーカスを持つ", async () => {
+    // Given
+
+    // When
+    setup();
+
+    // Then
+    const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(document.activeElement).toBe(dialog));
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(dialog.querySelector("input")).not.toHaveFocus();
+  });
+});
+
+describe("TargetFacePicker 初期フォーカス", () => {
+  it("的の選択を開くと、最前面のダイアログがフォーカスを持つ", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
+
+    // When
+    await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+    // Then
+    const dialogs = await screen.findAllByRole("dialog");
+    const picker = dialogs[dialogs.length - 1];
+    await waitFor(() => expect(document.activeElement).toBe(picker));
   });
 });

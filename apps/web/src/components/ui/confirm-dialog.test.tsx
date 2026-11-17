@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, type Mock, vi } from "vitest";
@@ -572,5 +572,47 @@ describe("BlockingConfirmDialog", () => {
       expect(childOpenChange).not.toHaveBeenCalled();
       expect(parentOpenChange).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("確認ダイアログの初期フォーカス", () => {
+  it("ConfirmDialogを開くとポップアップがフォーカスを持ち、Tabでキャンセルへ進む", async () => {
+    // Given
+    const user = userEvent.setup();
+
+    // When
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        description="削除しますか？"
+        onConfirm={vi.fn()}
+      />,
+      { wrapper: IntlTestProvider },
+    );
+    // Base UIはフォーカスを開いた後の描画で移す。
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("dialog")),
+    );
+    await user.tab();
+
+    // Then
+    expect(cancelButton()).toHaveFocus();
+  });
+
+  it("BlockingConfirmDialogを開くとポップアップがフォーカスを持ち、Tabでキャンセルへ進む", async () => {
+    // Given
+    const user = userEvent.setup();
+
+    // When
+    renderBlocking({ description: "削除しますか？" });
+    // Base UIはフォーカスを開いた後の描画で移す。
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("dialog")),
+    );
+    await user.tab();
+
+    // Then
+    expect(cancelButton()).toHaveFocus();
   });
 });

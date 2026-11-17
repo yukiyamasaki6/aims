@@ -542,6 +542,249 @@ describe("RoundsHistory", () => {
       },
     );
 
+    it("初期表示(閉)ではフォーカスを動かさない", async () => {
+      // Given
+      fetchResolves(varied);
+
+      // When
+      renderHistory();
+      await screen.findByText("夜練習");
+
+      // Then
+      expect(document.body).toHaveFocus();
+    });
+
+    it("フィルターを開くと入力欄でなくパネルの領域へフォーカスする", async () => {
+      // Given
+      fetchResolves(varied);
+      renderHistory();
+      await screen.findByText("夜練習");
+      const user = userEvent.setup();
+
+      // When
+      await openFilter(user);
+
+      // Then
+      const region = screen.getByRole("region", {
+        name: roundsText("historyFilterTitle"),
+      });
+      expect(region).toHaveAttribute("tabindex", "-1");
+      expect(document.activeElement).toBe(region);
+      expect(rangeInput("scoreMin")).not.toHaveFocus();
+    });
+
+    it("開いた後に入力欄をクリックすると、その入力欄がフォーカスを持つ", async () => {
+      // Given
+      const user = await renderOpenedHistory();
+
+      // When
+      await user.click(rangeInput("scoreMin"));
+
+      // Then
+      expect(rangeInput("scoreMin")).toHaveFocus();
+    });
+
+    it("開いた後にTabを押すと、領域から表示単位の選択中の項目へ進む", async () => {
+      // Given
+      const user = await renderOpenedHistory();
+
+      // When
+      await user.tab();
+
+      // Then
+      expect(unitRadio("round")).toHaveFocus();
+    });
+
+    it("閉じている間は、領域が不活性で支援技術から隠れ、開くと戻る", async () => {
+      // Given
+      fetchResolves(varied);
+      renderHistory();
+      await screen.findByText("夜練習");
+      // 閉じている間は不活性で、役割からは探せないため、領域の属性で探す。
+      const closed = screen
+        .getByTestId("history-controls-toggle")
+        .ownerDocument.querySelector(
+          `section[aria-label="${roundsText("historyFilterTitle")}"]`,
+        ) as HTMLElement;
+      const closedState = {
+        inert: closed.hasAttribute("inert"),
+        hidden: closed.getAttribute("aria-hidden"),
+      };
+
+      // When
+      await openFilter(userEvent.setup());
+
+      // Then
+      expect(closedState).toEqual({ inert: true, hidden: "true" });
+      const opened = screen.getByRole("region", {
+        name: roundsText("historyFilterTitle"),
+      });
+      expect(opened).not.toHaveAttribute("inert");
+      expect(opened).toHaveAttribute("aria-hidden", "false");
+    });
+
+    it("リセットと入力中のEnterは、ブラウザ既定の送信・リセットを止めて、ページ遷移を起こさない", async () => {
+      // Given
+      await renderOpenedHistory();
+      const form = screen.getByTestId("history-controls");
+
+      // When
+      const resetContinues = fireEvent.reset(form);
+      const submitContinues = fireEvent.submit(form);
+      const enterContinues = fireEvent.keyDown(rangeInput("scoreMin"), {
+        key: "Enter",
+      });
+
+      // Then
+      expect(resetContinues).toBe(false);
+      expect(submitContinues).toBe(false);
+      expect(enterContinues).toBe(false);
+    });
+
+    it("種別の選択肢のEscは選択肢だけを閉じて、編集中の値とエラーを保つ", async () => {
+      // Given
+      const user = await renderOpenedHistory();
+      draftRange("scoreMin", "9");
+      draftRange("scoreMax", "1");
+      applyFilter();
+      await user.click(screen.getByTestId("history-filter-format"));
+      await screen.findAllByRole("option");
+
+      // When
+      await user.keyboard("{Escape}");
+
+      // Then
+      await waitFor(() => expect(screen.queryByRole("option")).toBeNull());
+      expect(
+        screen.getByRole("region", { name: roundsText("historyFilterTitle") }),
+      ).toBeInTheDocument();
+      expect(rangeInput("scoreMin")).toHaveValue("9");
+      expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
+    });
+
+    it("一覧メニューのEscはメニューだけを閉じて、フィルターの下書きとエラーを保つ", async () => {
+      // Given
+      const user = await renderOpenedHistory();
+      draftRange("scoreMin", "9");
+      draftRange("scoreMax", "1");
+      applyFilter();
+      const item = screen.getByText("夜練習").closest("li");
+      if (!item) throw new Error("round item not found");
+      await user.click(within(item).getByTestId("round-menu-trigger"));
+      await screen.findByTestId("round-delete");
+
+      // When
+      await user.keyboard("{Escape}");
+
+      // Then
+      await waitFor(() =>
+        expect(screen.queryByTestId("round-delete")).toBeNull(),
+      );
+      expect(
+        screen.getByRole("region", { name: roundsText("historyFilterTitle") }),
+      ).toBeInTheDocument();
+      expect(rangeInput("scoreMin")).toHaveValue("9");
+      expect(screen.getAllByRole("alert").length).toBeGreaterThan(0);
+    });
+
+    it("距離のダイアログを開くと入力欄でなくダイアログがフォーカスを持ち、Escは的の選択肢、ダイアログの順に一段ずつ閉じて「距離を追加」へ戻る", async () => {
+      // Given
+      const user = await renderOpenedHistory();
+      draftRange("scoreMin", "9");
+      draftRange("scoreMax", "1");
+      applyFilter();
+      const add = screen.getByTestId("history-filter-distance-add");
+
+      // When
+      await user.click(add);
+      const dialog = await screen.findByRole("dialog");
+      await waitFor(() => expect(document.activeElement).toBe(dialog));
+      await user.type(dialogInput("distance"), "50");
+      await user.click(screen.getByTestId("history-distance-dialog-target"));
+      const none = await screen.findByTestId(
+        "history-distance-dialog-target-none",
+      );
+      const targetDialog = none.closest('[role="dialog"]');
+      await waitFor(() => expect(document.activeElement).toBe(targetDialog));
+      await user.keyboard("{Escape}");
+
+      // Then
+      await waitFor(() => expect(none).not.toBeInTheDocument());
+      expect(dialogInput("distance")).toHaveValue("50");
+      await user.keyboard("{Escape}");
+      await waitForDistanceDialogClosed();
+      await waitFor(() => expect(add).toHaveFocus());
+      expect(rangeInput("scoreMin")).toHaveValue("9");
+    });
+
+    it.each([
+      ["ラウンド", "history-filter-distance-add", "history-filter-distance-0"],
+      ["距離", "history-filter-distance-select", "history-filter-distance-row"],
+    ])(
+      "%s単位で距離を確定してから削除すると、確定後は要約へ、削除後は残る起点へフォーカスが戻り、外側は適用されない",
+      async (unit, triggerId, summaryId) => {
+        // Given
+        const user = await renderOpenedHistory();
+        if (unit === "距離")
+          await user.click(screen.getByTestId("history-unit-distance"));
+        const trigger = screen.getByTestId(triggerId);
+        const requests = [...fake.store.loadList.mock.calls];
+
+        // When
+        await user.click(trigger);
+        await confirmDistanceDialog(user, "50");
+        const afterConfirm = document.activeElement;
+        const summary = screen.getByTestId(summaryId);
+        await user.click(summary);
+        await user.click(
+          await screen.findByTestId("history-distance-dialog-delete"),
+        );
+        await waitForDistanceDialogClosed();
+
+        // Then
+        expect(afterConfirm).toBe(unit === "ラウンド" ? trigger : summary);
+        expect(screen.queryByTestId(summaryId)).toBeNull();
+        await waitFor(() => expect(trigger).toHaveFocus());
+        expect(fake.store.loadList.mock.calls).toEqual(requests);
+        expect(screen.queryByTestId("history-controls-active")).toBeNull();
+      },
+    );
+
+    it("表示単位の選択中の項目からTabを押すと、先頭の行の閉じるボタンへ進む", async () => {
+      // Given
+      const user = await renderOpenedHistory();
+      unitRadio("round").focus();
+
+      // When
+      await user.tab();
+
+      // Then
+      expect(screen.getByTestId("history-filter-close")).toHaveFocus();
+    });
+
+    it("距離単位では、ラウンド構成の距離は隠れて距離の行に選んだ距離が出て、ラウンドへ戻すと下書きのラウンド構成の距離が出る", async () => {
+      // Given
+      const user = await renderOpenedHistory();
+      await addDistance(user, "18");
+
+      // When
+      await chooseUnit(user, "distance");
+      await selectDistance(user, "30");
+      const shownInDistance = {
+        roundRow: screen.queryByTestId("history-filter-distance-0"),
+        row: screen.getByTestId("history-filter-distance-row").textContent,
+      };
+      await chooseUnit(user, "round");
+
+      // Then
+      expect(shownInDistance.roundRow).toBeNull();
+      expect(shownInDistance.row).toContain("30m");
+      expect(screen.getByTestId("history-filter-distance-0")).toHaveTextContent(
+        "18m",
+      );
+      expect(screen.queryByTestId("history-filter-distance-row")).toBeNull();
+    });
+
     it("パネルには、リセットと検索の下部の行が1組だけあり、リセット、検索の順に並び、入力欄より後ろにある", async () => {
       // Given
       await renderOpenedHistory();
@@ -564,7 +807,7 @@ describe("RoundsHistory", () => {
     });
 
     it.each(["round", "distance"] as const)(
-      "開くと、表示単位の選択中の項目(%s)にフォーカスが移る",
+      "開いてTabを押すと、領域から表示単位の選択中の項目(%s)へ進む",
       async (unit) => {
         // Given
         remember({ condition: { unit } });
@@ -575,6 +818,7 @@ describe("RoundsHistory", () => {
 
         // When
         await openFilter(user);
+        await user.tab();
 
         // Then
         expect(unitRadio(unit)).toHaveFocus();
@@ -4554,6 +4798,40 @@ describe("RoundsHistory", () => {
       );
       expect(screen.queryByRole("listitem")).toBeNull();
     });
+
+    it.each([
+      ["取得の失敗", { status: "error", reason: "failed" }],
+      ["0件", { status: "ok", data: loaded([]) }],
+      ["オフライン", { status: "offline" }],
+    ])(
+      "%sの状態でも、フィルターを開いて条件を編集し、リセットと検索の操作へ届く",
+      async (_state, result) => {
+        // Given
+        fake.store.loadList.mockResolvedValue(result);
+        renderHistory();
+        const user = userEvent.setup();
+        await screen.findByRole("button", {
+          name: roundsText("historyFilterTitle"),
+        });
+
+        // When
+        await openFilter(user);
+        await user.type(rangeInput("scoreMin"), "25");
+        const edited = (rangeInput("scoreMin") as HTMLInputElement).value;
+        await user.click(filterAction("reset"));
+        filterAction("apply").focus();
+
+        // Then
+        expect(edited).toBe("25");
+        expect(rangeInput("scoreMin")).toHaveValue("");
+        expect(filterAction("apply")).toHaveFocus();
+        expect(
+          screen.getByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          }),
+        ).toBeInTheDocument();
+      },
+    );
 
     it("通信できない場合は、ネットワークに接続されていないことを履歴の中に表示し、ラウンドも空の表示も出さない", async () => {
       // Given

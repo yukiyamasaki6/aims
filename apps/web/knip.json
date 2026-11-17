@@ -6,11 +6,6 @@
   },
   "playwright": {
     "config": [],
-    "entry": [
-      "playwright.config.ts",
-      "playwright.history-panel.config.ts",
-      "tests/e2e/helpers/history-panel-server.mjs",
-      "tests/e2e/**/*.{spec,setup}.ts"
-    ]
+    "entry": ["playwright.config.ts", "tests/e2e/**/*.{spec,setup}.ts"]
   }
 }

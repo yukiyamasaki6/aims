@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
@@ -179,12 +179,6 @@ export function HistoryFilterForm({
   onApply: (input: HistoryInput) => void;
   onClose: () => void;
 }) {
-  const formRef = useRef<HTMLFormElement>(null);
-  useLayoutEffect(() => {
-    formRef.current
-      ?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')
-      ?.focus({ preventScroll: true });
-  }, []);
   const { draft, errors, change, apply, reset } = useFilterDraft(
     input,
     onApply,
@@ -192,7 +186,6 @@ export function HistoryFilterForm({
 
   return (
     <form
-      ref={formRef}
       className="flex min-h-0 flex-1 flex-col"
       data-testid="history-controls"
       onSubmit={(event) => {

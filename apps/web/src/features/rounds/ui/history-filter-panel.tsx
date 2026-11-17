@@ -1,7 +1,13 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { type KeyboardEvent, type ReactNode, useEffect } from "react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { cn } from "@/lib/utils";
 
 // パネル内(Portalの子を除く)のEscで閉じる。子ダイアログが処理したEscは対象外。
@@ -39,6 +45,11 @@ export function HistoryFilterPanel({
 }) {
   const t = useTranslations("rounds");
   useFilterCollapse(open, onCollapsed);
+  // 開いたとき入力欄でなく領域自身へフォーカスを移す(app/open-focus)。初期表示(閉)では移さない。
+  const sectionRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (open) sectionRef.current?.focus({ preventScroll: true });
+  }, [open]);
   return (
     <div
       className={cn(
@@ -48,12 +59,14 @@ export function HistoryFilterPanel({
       )}
     >
       <section
+        ref={sectionRef}
+        tabIndex={-1}
         id={panelId}
         aria-label={t("historyFilterTitle")}
         aria-hidden={!open}
         inert={!open}
         onKeyDown={(event) => closeOnEscape(event, onClose)}
-        className="flex min-h-0 min-w-0 flex-col overflow-hidden"
+        className="flex min-h-0 min-w-0 flex-col overflow-hidden outline-none"
       >
         {children}
       </section>
