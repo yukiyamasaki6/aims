@@ -429,3 +429,18 @@ describe("SavePresetDialog", () => {
     });
   });
 });
+
+describe("SavePresetDialog 初期フォーカス", () => {
+  it("開くと先頭が名前の入力欄でも、入力欄でなくダイアログがフォーカスを持つ", async () => {
+    // Given
+    const { user } = setup();
+
+    // When
+    await user.click(screen.getByTestId("save-as-preset-trigger"));
+
+    // Then
+    const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(document.activeElement).toBe(dialog));
+    expect(screen.getByTestId("save-as-preset-name")).not.toHaveFocus();
+  });
+});

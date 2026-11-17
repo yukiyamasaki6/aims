@@ -28,7 +28,7 @@ export type HistoryDistanceRow = {
   targetFaceId: string | null;
 };
 
-// 履歴の条件。単位は`round`か`distance`。並べ替えは、日付の向き(必ず指定)と得点の向き(null は指定なし)。得点の向きがあれば、得点を第1キー、日付を第2キーにする。種別と弓種はそれぞれ1つ(null は指定なし)。期間と得点の範囲、距離の構成、距離の行は反映済みの値(距離の構成は空の配列、距離の行は null が指定なし)。距離の行は、単位が`distance`のときだけ適用する。
+// 履歴の条件(導出されるフィルター)。単位は`round`か`distance`。並べ替えは、日付の向き(必ず指定)と得点の向き(null は指定なし)。得点の向きがあれば、得点を第1キー、日付を第2キーにする。種別と弓種はそれぞれ1つ(null は指定なし)。期間と、表示中の単位の得点の範囲、距離の構成、距離の行は反映済みの値(距離の構成は空の配列、距離の行は null が指定なし)。距離の構成はラウンド単位のとき、距離の行は距離単位のときだけ入る。
 export type HistoryCondition = HistoryRange & {
   unit: HistoryUnit;
   dateDirection: HistorySortDirection;
@@ -39,13 +39,21 @@ export type HistoryCondition = HistoryRange & {
   distanceRow: HistoryDistanceRow | null;
 };
 
-// 期間と得点の範囲の入力途中の文字列(欄の部品が持つ下書き)。
+// 期間と、単位ごとの得点の範囲の入力途中の文字列(編集中の値)。`scoreMin`・`scoreMax`はラウンド単位(合計点)、`distanceScoreMin`・`distanceScoreMax`は距離単位(小計)の範囲である。
 export type HistoryRangeDraft = {
   dateFrom: string;
   dateTo: string;
   scoreMin: string;
   scoreMax: string;
+  distanceScoreMin: string;
+  distanceScoreMax: string;
 };
+
+// 検証の対象の4つの文字列(期間と、表示している単位の得点の範囲)。
+export type HistoryRangeFields = Pick<
+  HistoryRangeDraft,
+  "dateFrom" | "dateTo" | "scoreMin" | "scoreMax"
+>;
 
 const HISTORY_RANGE_ERRORS = [
   "dateInvalid",
@@ -78,8 +86,11 @@ export type HistoryDistanceResult =
   | { ok: true; distances: HistoryDistanceRow[] }
   | { ok: false; errors: { row: number; error: HistoryDistanceError }[] };
 
-// 履歴の入力値。保存・保持する唯一の状態で、HistoryConditionと同じ型である(全て検証済みの値)。条件との違いは、導出(historyConditionOf)で、単位がラウンドのときに距離の行をnullにする点だけである。
-export type HistoryInput = HistoryCondition;
+// 履歴の入力値。保存・保持する唯一の状態で、全て検証済みの値である。形は条件の項目に、距離単位(小計)の得点の範囲を足したもの。`scoreMin`・`scoreMax`はラウンド単位(合計点)の範囲で、条件では表示中の単位の範囲になる(導出はhistoryConditionOf)。
+export type HistoryInput = HistoryCondition & {
+  distanceScoreMin: number | null;
+  distanceScoreMax: number | null;
+};
 
 // 履歴の表示の状態。入力値だけを持つ。導出されるフィルター(HistoryCondition)は保存せず、historyConditionOfで導く。
 export type HistoryViewState = {
@@ -100,8 +111,14 @@ export const DEFAULT_HISTORY_CONDITION: HistoryCondition = {
   distanceRow: null,
 };
 
+export const DEFAULT_HISTORY_INPUT: HistoryInput = {
+  ...DEFAULT_HISTORY_CONDITION,
+  distanceScoreMin: null,
+  distanceScoreMax: null,
+};
+
 export const DEFAULT_HISTORY_VIEW_STATE: HistoryViewState = {
-  input: DEFAULT_HISTORY_CONDITION,
+  input: DEFAULT_HISTORY_INPUT,
 };
 
 function textOf(value: number | null): string {
@@ -185,7 +202,7 @@ function isIntegerIn(value: unknown, min: number, max: number): boolean {
   );
 }
 
-// 距離は必須で1〜上限、1エンドの矢数の空は指定なし(null)。
+// 距離は必須で1〜上限、射数/エンドの空は指定なし(null)。
 function distanceRowOf(
   draft: HistoryDistanceDraftRow,
 ): { row: HistoryDistanceRow } | { errors: HistoryDistanceError[] } {
@@ -234,7 +251,7 @@ function isAfter(from: string | number | null, to: string | number | null) {
 }
 
 // 欄の下書きを検証する。正しければ4つの値、不正なら原因の一覧を返す。両端の大小は、両方が指定され、その値が正しいときだけ比べる。
-export function historyRangeOf(draft: HistoryRangeDraft): HistoryRangeResult {
+export function historyRangeOf(draft: HistoryRangeFields): HistoryRangeResult {
   const dateFrom = dateOfDraft(draft.dateFrom);
   const dateTo = dateOfDraft(draft.dateTo);
   const scoreMin = scoreOfDraft(draft.scoreMin);
@@ -262,26 +279,30 @@ export function historyRangeOf(draft: HistoryRangeDraft): HistoryRangeResult {
   return { ok: true, range: { dateFrom, dateTo, scoreMin, scoreMax } };
 }
 
-// 保存した値の期間と得点の範囲を検証する。実在しない日付と不正な得点は null に、順が逆の組は両方を null にする。
+// 保存した値の得点の範囲を検証する。不正な得点は null に、順が逆の組は両方を null にする。
+function scoreRangeOfStored(
+  min: unknown,
+  max: unknown,
+): { min: number | null; max: number | null } {
+  const range = {
+    min: isScore(min) ? min : null,
+    max: isScore(max) ? max : null,
+  };
+  return isAfter(range.min, range.max) ? { min: null, max: null } : range;
+}
+
+// 保存した値の期間とラウンド単位の得点の範囲を検証する。実在しない日付は null に、順が逆の組は両方を null にする。
 function historyRangeOfStored(raw: Record<string, unknown>): HistoryRange {
   const dateOf = (value: unknown) =>
     typeof value === "string" && isRealDate(value) ? value : null;
-  const scoreOf = (value: unknown) => (isScore(value) ? value : null);
-  let { dateFrom, dateTo, scoreMin, scoreMax } = {
-    dateFrom: dateOf(raw.dateFrom),
-    dateTo: dateOf(raw.dateTo),
-    scoreMin: scoreOf(raw.scoreMin),
-    scoreMax: scoreOf(raw.scoreMax),
-  };
+  let dateFrom = dateOf(raw.dateFrom);
+  let dateTo = dateOf(raw.dateTo);
   if (isAfter(dateFrom, dateTo)) {
     dateFrom = null;
     dateTo = null;
   }
-  if (isAfter(scoreMin, scoreMax)) {
-    scoreMin = null;
-    scoreMax = null;
-  }
-  return { dateFrom, dateTo, scoreMin, scoreMax };
+  const score = scoreRangeOfStored(raw.scoreMin, raw.scoreMax);
+  return { dateFrom, dateTo, scoreMin: score.min, scoreMax: score.max };
 }
 
 const UUID_PATTERN =
@@ -328,21 +349,35 @@ function historySortOfStored(
 }
 
 function storedInputOf(raw: unknown): HistoryInput {
-  if (!isRecord(raw)) return DEFAULT_HISTORY_CONDITION;
+  if (!isRecord(raw)) return DEFAULT_HISTORY_INPUT;
+  const distanceScore = scoreRangeOfStored(
+    raw.distanceScoreMin,
+    raw.distanceScoreMax,
+  );
   return {
-    unit: oneOf(HISTORY_UNITS, raw.unit, DEFAULT_HISTORY_CONDITION.unit),
+    unit: oneOf(HISTORY_UNITS, raw.unit, DEFAULT_HISTORY_INPUT.unit),
     ...historySortOfStored(raw),
     format: nullableOneOf(FORMAT_OPTIONS, raw.format),
     bowType: nullableOneOf(BOW_TYPE_OPTIONS, raw.bowType),
     ...historyRangeOfStored(raw),
+    distanceScoreMin: distanceScore.min,
+    distanceScoreMax: distanceScore.max,
     distances: historyDistancesOfStored(raw.distances),
     distanceRow: storedDistanceRowOf(raw.distanceRow),
   };
 }
 
-// 入力値から導出されるフィルター。単位がラウンドのときだけ距離の行をnullにする。純粋で全域である。
+// 入力値から導出されるフィルター。得点の範囲は表示中の単位のものにし、使わない単位の値(ラウンド単位のときの距離の行、距離単位のときのラウンド構成)は条件に入れない。純粋で全域である。
 export function historyConditionOf(input: HistoryInput): HistoryCondition {
-  return input.unit === "round" ? { ...input, distanceRow: null } : input;
+  const { distanceScoreMin, distanceScoreMax, ...condition } = input;
+  return input.unit === "round"
+    ? { ...condition, distanceRow: null }
+    : {
+        ...condition,
+        scoreMin: distanceScoreMin,
+        scoreMax: distanceScoreMax,
+        distances: [],
+      };
 }
 
 // 保存した値を表示の状態にする。未知の値や形の崩れ(旧い形を含む)は、その項目を既定に直す。

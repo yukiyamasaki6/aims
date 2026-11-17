@@ -36,7 +36,7 @@ function shot(distanceIndex: number, endNumber: number, score = "5") {
   };
 }
 
-// 全てのエンドが矢数に達する記録を作る。
+// 全てのエンドが満杯になる記録を作る。
 function allShots(distanceIndex: number, ends: number, arrows: number) {
   return Array.from({ length: ends * arrows }, (_, i) =>
     shot(distanceIndex, Math.floor(i / arrows) + 1),
@@ -90,10 +90,10 @@ async function status(roundId: string) {
   return (await roundRow(roundId)).status;
 }
 
-test("全てのエンドが矢数に達した入力中のラウンドで入力を完了するボタンを押すと、確認なしでラウンド一覧へ移り、ブラウザの戻るで戻っても、再読み込みしても、入力を完了するボタンは表示されない", async ({
+test("全てのエンドが満杯になった入力中のラウンドで入力を完了するボタンを押すと、確認なしでラウンド一覧へ移り、ブラウザの戻るで戻っても、再読み込みしても、入力を完了するボタンは表示されない", async ({
   page,
 }) => {
-  // 全てのエンドが矢数に達したラウンドで入力を完了するボタンを押し、確認なしでラウンド一覧へ移る。
+  // 全てのエンドが満杯になったラウンドで入力を完了するボタンを押し、確認なしでラウンド一覧へ移る。
   const roundId = await openRound(page, { shots: allShots(0, 12, 3) });
   await expect(completeButton(page)).toHaveText(roundsText("completeRound"));
   await completeButton(page).click();
@@ -122,7 +122,7 @@ test("1画面に収まらない入力中のラウンドを最後までスクロ�
       { distance: 90, totalEnds: 12, arrowsPerEnd: 3 },
       { distance: 70, totalEnds: 12, arrowsPerEnd: 3 },
     ],
-    // 全てのエンドを矢数に達しさせ、矢を指さずテンキーを格納した状態で開く。
+    // 全てのエンドを満杯にし、矢を指さずテンキーを格納した状態で開く。
     shots: [...allShots(0, 12, 3), ...allShots(1, 12, 3)],
   });
 
@@ -159,10 +159,10 @@ test("完了のラウンドでエンドの空白を押して点数を記録す�
   await expect(completeButton(page)).toBeVisible();
 });
 
-test("オフラインで、矢数に達していないエンドがあるラウンドの入力を完了するボタンを押して確認で完了するを選ぶと、ラウンド一覧へ移り、オンラインに戻ると完了として保存される", async ({
+test("オフラインで、満杯でないエンドがあるラウンドの入力を完了するボタンを押して確認で完了するを選ぶと、ラウンド一覧へ移り、オンラインに戻ると完了として保存される", async ({
   page,
 }) => {
-  // 矢数に達していないエンドがあるラウンドを開いてオフラインにし、入力を完了するボタンを押して確認ダイアログを開く。
+  // 満杯でないエンドがあるラウンドを開いてオフラインにし、入力を完了するボタンを押して確認ダイアログを開く。
   const roundId = await openRound(page);
   await waitForServiceWorkerControl(page);
   await goOffline(page.context());

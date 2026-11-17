@@ -203,7 +203,7 @@ select lives_ok(
 );
 
 -- preset_distances: distance/total_ends/arrows_per_endの実用上の上限CHECK制約
--- （distances側と同じ上限: 距離(m)100・総エンド数60・矢数12）。
+-- （distances側と同じ上限: 距離(m)100・総エンド数60・射数/エンド12）。
 -- 値そのものが検証の対象のため上限の境界の値を使い、他の項目は通常の値にして、その項目の制約だけが原因だと特定できるようにする。
 -- UPDATEはpreset_distancesにUPDATE権限がなく、上の直接UPDATEの拒否と同じ理由で検証しない。
 

@@ -1,4 +1,3 @@
-import { NAME_MAX_LENGTH } from "./round-constants";
 import type { RoundChanges, SyncOperation } from "./sync-events";
 
 export type RoundConfig = {
@@ -8,10 +7,9 @@ export type RoundConfig = {
   bowType: string;
 };
 
-// 入力の誤りの種類。tooLong: 上限を超える。required: 未入力。unmarkedDistances: Unmarkedの距離が残っている。
-export type RoundConfigError = "tooLong" | "required" | "unmarkedDistances";
+// 入力の誤りの種類。required: 未入力。unmarkedDistances: Unmarkedの距離が残っている。
+export type RoundConfigError = "required" | "unmarkedDistances";
 export type RoundConfigErrors = {
-  name?: Extract<RoundConfigError, "tooLong">;
   roundDate?: Extract<RoundConfigError, "required">;
   format?: Extract<RoundConfigError, "unmarkedDistances">;
 };
@@ -27,9 +25,6 @@ export function validateRoundConfig(
   hasUnmarkedDistances: boolean,
 ): RoundConfigValidation {
   const errors: RoundConfigErrors = {};
-  if (draft.name.length > NAME_MAX_LENGTH) {
-    errors.name = "tooLong";
-  }
   if (draft.roundDate === "") {
     errors.roundDate = "required";
   }

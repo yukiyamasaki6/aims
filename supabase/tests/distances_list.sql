@@ -1,5 +1,5 @@
 -- 履歴の距離単位の取得の関数distances_listの振る舞いを確認する。
---   - 返す行（完了かつ無効でないラウンドの、無効でない距離）、返す項目、射つ順の番号、小計
+--   - 返す行（完了かつ無効でないラウンドの、無効でない距離）、返す項目、小計
 --   - 並び（基準 × 向き、同値の並び）と絞り込み（種別、弓種、期間、得点の範囲、距離の構成、距離の行）
 --   - ページの切り出し（has_more、起点の距離のID、全ページの連結）と、ページの間の変更
 --   - 権限（自分が属するラウンドだけ）、起点が見えない・引数が未知のとき
@@ -8,7 +8,7 @@
 
 begin;
 
-select plan(95);
+select plan(94);
 
 -- 利用者とラウンドの別名。距離の別名は、ラウンドの別名に番号を付けた形（A1、A2）にする。
 create temp table dl_id (alias text primary key, id uuid not null);
@@ -45,7 +45,7 @@ language sql stable
 as $$ select id from dl_dist where alias = p_alias $$;
 
 -- ラウンドと距離を作る。実施日の9時（p_created_atで変えられる）に作る。
--- p_rows は距離の行の配列で、項目は n=距離の別名、k=position_key、d=距離（nullは距離が判明しない）、e=総エンド数、a=1エンドの矢数、
+-- p_rows は距離の行の配列で、項目は n=距離の別名、k=position_key、d=距離（nullは距離が判明しない）、e=総エンド数、a=射数/エンド、
 -- f=的のID（省略時は屋外122cmの公式の的）、m=距離が判明しているか（省略時は真）、x=無効にした距離か、
 -- i=距離のIDの末尾（省略時は無作為）、t=置く10点の矢の本数（小計は t * 10）、dx=置く無効な10点の矢の本数。
 -- 行は配列の順に挿入する（挿入順とIDの大小が違う入力を作るため）。
@@ -148,14 +148,6 @@ as $$
   join dl_dist i on i.id = (e.r ->> 'id')::uuid
 $$;
 
-create function pg_temp.numbers(p_page jsonb) returns text
-language sql stable
-as $$
-  select coalesce(string_agg(i.alias || ':' || (e.r ->> 'number'), ',' order by i.alias), '')
-  from jsonb_array_elements(p_page -> 'distances') as e(r)
-  join dl_dist i on i.id = (e.r ->> 'id')::uuid
-$$;
-
 -- 件数と続きの有無。
 create function pg_temp.shape(p_page jsonb) returns text
 language sql stable
@@ -210,7 +202,7 @@ insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('N'));
 --   F: 屋外・リカーブ 09-14。F1=50m(120。無効な10点の矢を1本足してある)→無効な30m(矢は10点)→F3=20m(100)
 --   G: 屋外・コンパウンド 09-15。距離なし
 --   H: インドア・ベアボウ 09-16。position_keyが同じ2つの距離。H1(100)は先に挿入されIDが大きく、H2(200)は後に挿入されIDが小さい
---   I: 屋外・リカーブ 09-17。I1=50m 12エンド×3射(200)→I2=50m 6エンド×6射(220)。1エンドの矢数が違う
+--   I: 屋外・リカーブ 09-17。I1=50m 12エンド×3射(200)→I2=50m 6エンド×6射(220)。射数/エンドが違う
 --   J: 屋外・リカーブ 09-18。J1=50m(180)。的が屋外80cm
 --   Z: Nの完了で、Eが閲覧者として属する。インドア・リカーブ 09-11。Z1=18m(220)
 -- 返さない行: P（入力中）、X（削除済み）、Y（Nだけが属する完了）。
@@ -246,7 +238,7 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
 
 -- ============================================================
--- 返す行・項目・番号・小計
+-- 返す行・項目・小計
 -- ============================================================
 
 select is(
@@ -263,20 +255,14 @@ select is(
 
 select is(
   (select array_agg(k order by k) from jsonb_object_keys(pg_temp.list(null, null, null, null, null, 100) -> 'distances' -> 0) as k),
-  array['distance', 'id', 'is_marked', 'name', 'number', 'round_date', 'round_id', 'total'],
-  '1件の項目は距離のID・属するラウンドのID・名前・実施日・番号・距離・無印か・小計だけで、種別・弓種・作成時刻・矢・的・総件数を含まない'
+  array['bow_type', 'distance', 'format', 'id', 'is_marked', 'name', 'round_date', 'round_id', 'total'],
+  '1件の項目は距離のID・属するラウンドのID・名前・実施日・種別・弓種・距離・無印か・小計だけで、作成時刻・矢・的・距離の番号を含まない'
 );
 
 select is(
   pg_temp.item(pg_temp.list(null, null, null, null, null, 100), 'A2'),
-  jsonb_build_object('id', pg_temp.did('A2'), 'round_id', pg_temp.id('A'), 'name', 'A', 'round_date', '2026-09-10', 'number', 2, 'distance', 30, 'is_marked', true, 'total', 320),
-  '1件の項目は、距離の値、属するラウンドの名前と実施日、射つ順の番号、小計を持つ'
-);
-
-select is(
-  pg_temp.numbers(pg_temp.list(null, null, null, null, null, 100)),
-  'A1:1,A2:2,B1:1,B2:2,C1:1,C2:2,D1:1,F1:1,F3:2,H1:2,H2:1,I1:1,I2:2,J1:1,L1:1,L2:2,L3:3,Z1:1',
-  '番号は無効でない距離だけに、position_keyとIDの順で1から詰めて振る（無効な30mを挟むF3は2、position_keyが同じH1とH2はIDの順でH2が1）'
+  jsonb_build_object('id', pg_temp.did('A2'), 'round_id', pg_temp.id('A'), 'name', 'A', 'round_date', '2026-09-10', 'format', 'outdoor', 'bow_type', 'recurve', 'distance', 30, 'is_marked', true, 'total', 320),
+  '1件の項目は、距離の値、属するラウンドの名前・実施日・種別・弓種、小計を持つ'
 );
 
 select is(
@@ -477,13 +463,13 @@ select is(
 select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 50, "arrows_per_end": 6}')),
   'J1,I2,F1,L1,C2,D1,A1',
-  '1エンドの矢数を加えると、矢数も等しい距離だけを返す（6射のとき、12エンド×3射のI1は返らない）'
+  '射数/エンドを加えると、射数/エンドも等しい距離だけを返す（6射のとき、12エンド×3射のI1は返らない）'
 );
 
 select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 50, "arrows_per_end": 3}')),
   'I1',
-  '1エンドの矢数が3の行は、12エンド×3射の距離だけを返す'
+  '射数/エンドが3の行は、12エンド×3射の距離だけを返す'
 );
 
 select is(
@@ -509,7 +495,7 @@ select is(
 select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 18, "arrows_per_end": 3, "target_face_id": "a1000000-0000-0000-0000-000000000004"}')),
   'H2,H1,B1,B2,Z1',
-  '距離・1エンドの矢数・的を全て加えた行は、全てが等しい距離だけを返す'
+  '距離・射数/エンド・的を全て加えた行は、全てが等しい距離だけを返す'
 );
 
 select is(

@@ -4,7 +4,6 @@ process.loadEnvFile(".env.local");
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testIgnore: /\.browser\.spec\.ts$/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

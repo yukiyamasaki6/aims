@@ -82,7 +82,7 @@ describe("firstOpenEnd", () => {
     expect(describePointer(result)).toBe("new:d-a/1");
   });
 
-  it("矢数に達していない最初のエンドを、後ろのエンドに矢があっても指す", () => {
+  it("満杯でない最初のエンドを、後ろのエンドに矢があっても指す", () => {
     // Given
 
     // When

@@ -1,9 +1,9 @@
--- 矢の識別（矢のID）、項目ごとの記録、射順（shot_number）、矢数の上限を確認する。
+-- 矢の識別（矢のID）、項目ごとの記録、射順（shot_number）、射数/エンドの上限を確認する。
 --   - 矢はIDで識別し、エンド内の位置（arrow_number）を持たない
 --   - record_shotsは要素に含まれる項目だけを変え、効いた属性をset_fieldsとapplied_fieldsに残す
---   - 射順は1〜矢数で、同じエンドの生きている矢で重ならない。重なる書き込みは射順だけが効かない
+--   - 射順は1〜射数/エンドで、同じエンドの生きている矢で重ならない。重なる書き込みは射順だけが効かない
 --   - 消した矢を戻すとき、射順が他の生きている矢に使われていれば射順だけが外れる
---   - エンドの生きている矢は矢数を超えない（RPCの判定。書き込みはRPCだけである）
+--   - エンドの生きている矢は射数/エンドを超えない（RPCの判定。書き込みはRPCだけである）
 -- RPC × 観点の網羅（権限、入力検証、冪等性）はrpc_matrix.sqlで固定している。
 
 begin;
@@ -97,7 +97,7 @@ as $$ select count(*) from public.shots where distance_id = pg_temp.id(p_distanc
 
 insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('V'));
 
--- D: 6エンド×6本。DC: 6エンド×3本（矢数の上限）。DS: 6エンド×6本（構成の変更と射順）。
+-- D: 6エンド×6射。DC: 6エンド×3射（射数/エンドの上限）。DS: 6エンド×6射（構成の変更と射順）。
 insert into public.rounds (id, name, round_date, format, bow_type) values
   (pg_temp.id('R'), 'Shot Identity', '2026-01-01', 'outdoor', 'recurve');
 insert into public.round_users (round_id, user_id, role) values
@@ -187,13 +187,13 @@ select is(
 select is(
   pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(11, 2, 'D', 1, 9, '{"shot_number":7}')))),
   'UNFIT',
-  '射順が矢数を超える記録は効かない'
+  '射順が射数/エンドを超える記録は効かない'
 );
 insert into si_r (n, r) values (3, public.record_shots(jsonb_build_array(pg_temp.rec(12, 2, 'D', 1, 9, '{"shot_number":6}'))));
 select is(
   pg_temp.res((select r from si_r where n = 3)) || ' ' || pg_temp.st(2),
   'applied{score,shooter_id,shot_number} 9/E/#6/live',
-  '射順が矢数と同じ記録は効く'
+  '射順が射数/エンドと同じ記録は効く'
 );
 
 -- Given: 矢1が射順3を持つ。When: 同じエンドの矢2に射順3と新しい点数・射手を書く
@@ -264,18 +264,18 @@ select is(
 -- 射順: 構成の変更とDBの制約
 -- ============================================================
 
--- Given: 矢数6の距離に射順6の矢がある。When: 記録を知らない端末から矢数4への変更が届く
+-- Given: 射数/エンド6の距離に射順6の矢がある。When: 記録を知らない端末から射数/エンド4への変更が届く
 select public.record_shots(jsonb_build_array(pg_temp.rec(25, 7, 'DS', 1, 9, '{"shot_number":6}')));
 select is(
   public.update_distance(pg_temp.ev(26), pg_temp.id('DS'), jsonb_build_object('config', jsonb_build_object('total_ends', 6, 'arrows_per_end', 4, 'target_face_id', pg_temp.face())))
     -> 'rejected_fields',
   '[{"field":"config","reason":"UNFIT"}]'::jsonb,
-  '射順が新しい矢数を超える矢があれば、構成の変更は効かない'
+  '射順が新しい射数/エンドを超える矢があれば、構成の変更は効かない'
 );
 select is(
   (select arrows_per_end from public.distances where id = pg_temp.id('DS')) || ' ' || pg_temp.st(7),
   '6 9/E/#6/live',
-  '効かなかった構成の変更の後も、矢数と射順・点数は残る'
+  '効かなかった構成の変更の後も、射数/エンドと射順・点数は残る'
 );
 
 reset role;
@@ -298,13 +298,13 @@ select lives_ok(
 );
 
 -- ============================================================
--- 矢数の上限
+-- 射数/エンドの上限
 -- ============================================================
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
 
--- When: 矢数3のエンドへ、同じ要求で4本を記録する
+-- When: 射数/エンド3のエンドへ、同じ要求で4本を記録する
 insert into si_r (n, r) values (8, public.record_shots(jsonb_build_array(
   pg_temp.rec(30, 30, 'DC', 1, 9), pg_temp.rec(31, 31, 'DC', 1, 9), pg_temp.rec(32, 32, 'DC', 1, 9), pg_temp.rec(33, 33, 'DC', 1, 9)
 )));
@@ -312,31 +312,31 @@ select is(
   (select string_agg(coalesce(e ->> 'reason', 'applied'), ',' order by o)
     from jsonb_array_elements((select r from si_r where n = 8)) with ordinality as t(e, o)) || ' live=' || pg_temp.live('DC', 1),
   'applied,applied,applied,UNFIT live=3',
-  '同じ要求で矢数を超える本目の新しい矢は効かない'
+  '同じ要求で射数/エンドを超える本目の新しい矢は効かない'
 );
 select is(pg_temp.st(33), 'absent', '効かなかった新しい矢は記録されない');
 
--- Given: 他の端末が矢30を消し、別の端末がそのエンドを矢数まで埋めた。When: 矢30の点数を変える記録が届く
+-- Given: 他の端末が矢30を消し、別の端末がそのエンドを満杯にした。When: 矢30の点数を変える記録が届く
 select public.clear_shots(jsonb_build_array(pg_temp.clr(34, 30, 'DC')));
 select public.record_shots(jsonb_build_array(pg_temp.rec(35, 34, 'DC', 1, 7)));
 insert into si_r (n, r) values (7, public.record_shots(jsonb_build_array(pg_temp.rec(36, 30, 'DC', 1, 10))));
 select is(
   pg_temp.res((select r from si_r where n = 7)) || ' ' || pg_temp.st(30) || ' live=' || pg_temp.live('DC', 1),
   'UNFIT 9/E/#-/cleared live=3',
-  '消された矢の復活は、エンドが矢数に達していれば効かない'
+  '消された矢の復活は、エンドが満杯になっていれば効かない'
 );
 select is(
   pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(37, 31, 'DC', 1, 10)))),
   'applied{score}',
-  '矢数に達したエンドでも、生きている矢の点数は変えられる'
+  '射数/エンドに達したエンドでも、生きている矢の点数は変えられる'
 );
 
--- When: 3本のエンドがある距離の矢数を2に変える
+-- When: 3本のエンドがある距離の射数/エンドを2に変える
 select is(
   public.update_distance(pg_temp.ev(38), pg_temp.id('DC'), jsonb_build_object('config', jsonb_build_object('total_ends', 6, 'arrows_per_end', 2, 'target_face_id', pg_temp.face())))
     -> 'rejected_fields',
   '[{"field":"config","reason":"UNFIT"}]'::jsonb,
-  '生きている矢の数が新しい矢数を超えるエンドがあれば、構成の変更は効かない'
+  '生きている矢の数が新しい射数/エンドを超えるエンドがあれば、構成の変更は効かない'
 );
 
 select * from finish();

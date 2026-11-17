@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createFakeHistoryViewMemory } from "../application/fake-history-view-memory-test-helpers";
 import {
   DEFAULT_HISTORY_CONDITION,
+  DEFAULT_HISTORY_INPUT,
   DEFAULT_HISTORY_VIEW_STATE,
   type HistoryInput,
 } from "../domain/history-view-state";
@@ -31,7 +32,7 @@ describe("useHistoryView", () => {
     // When
     act(() =>
       beforeRead.applyInput({
-        ...DEFAULT_HISTORY_CONDITION,
+        ...DEFAULT_HISTORY_INPUT,
         scoreDirection: "asc",
       }),
     );
@@ -39,14 +40,14 @@ describe("useHistoryView", () => {
     // Then
     expect(beforeRead.input).toBeNull();
     expect(beforeRead.condition).toBeNull();
-    expect(result.current.input).toEqual(DEFAULT_HISTORY_CONDITION);
+    expect(result.current.input).toEqual(DEFAULT_HISTORY_INPUT);
     expect(stored()).toEqual(DEFAULT_HISTORY_VIEW_STATE);
   });
 
   it("記憶を読むと、入力値とそこから導出した条件を返す", async () => {
     // Given
     const input: HistoryInput = {
-      ...DEFAULT_HISTORY_CONDITION,
+      ...DEFAULT_HISTORY_INPUT,
       format: "indoor",
       dateDirection: "asc",
     };
@@ -67,7 +68,7 @@ describe("useHistoryView", () => {
     // Given
     const { result, stored } = await setup();
     const next: HistoryInput = {
-      ...DEFAULT_HISTORY_CONDITION,
+      ...DEFAULT_HISTORY_INPUT,
       dateDirection: "asc",
       scoreDirection: "desc",
     };
@@ -97,19 +98,19 @@ describe("useHistoryView", () => {
 
     // When
     act(() =>
-      result.current.applyInput(structuredClone(DEFAULT_HISTORY_CONDITION)),
+      result.current.applyInput(structuredClone(DEFAULT_HISTORY_INPUT)),
     );
 
     // Then
     expect(writes).toEqual([]);
   });
 
-  it("オフの絞り込む距離だけが違う入力値を確定すると、入力値は更新して記憶へ書くが、導出した条件は同じ内容の同じ参照のままである", async () => {
+  it("ラウンド単位の間の絞り込む距離だけが違う入力値を確定すると、入力値は更新して記憶へ書くが、導出した条件は同じ内容の同じ参照のままである", async () => {
     // Given
     const { result, stored } = await setup();
     const before = result.current.condition;
     const next: HistoryInput = {
-      ...DEFAULT_HISTORY_CONDITION,
+      ...DEFAULT_HISTORY_INPUT,
       distanceRow: { distance: 50, arrowsPerEnd: null, targetFaceId: null },
     };
 
@@ -130,7 +131,7 @@ describe("useHistoryView", () => {
     // When
     act(() =>
       result.current.applyInput({
-        ...DEFAULT_HISTORY_CONDITION,
+        ...DEFAULT_HISTORY_INPUT,
         format: "field",
       }),
     );
@@ -139,4 +140,43 @@ describe("useHistoryView", () => {
     expect(result.current.condition).not.toBe(before);
     expect(result.current.condition?.format).toBe("field");
   });
+
+  it.each([
+    [
+      "距離単位のラウンド構成とラウンド単位の得点の範囲",
+      { unit: "distance" },
+      {
+        distances: [{ distance: 50, arrowsPerEnd: null, targetFaceId: null }],
+        scoreMin: 100,
+        scoreMax: 200,
+      },
+    ],
+    [
+      "ラウンド単位の距離単位の得点の範囲",
+      { unit: "round" },
+      { distanceScoreMin: 10, distanceScoreMax: 20 },
+    ],
+  ] as [string, Partial<HistoryInput>, Partial<HistoryInput>][])(
+    "使わない単位の値(%s)だけが違う入力値を確定すると、入力値は更新して記憶へ書くが、導出した条件は同じ参照のままである",
+    async (_name, unit, unused) => {
+      // Given
+      const { result, stored } = await setup({
+        input: { ...DEFAULT_HISTORY_INPUT, ...unit },
+      });
+      const before = result.current.condition;
+      const next: HistoryInput = {
+        ...DEFAULT_HISTORY_INPUT,
+        ...unit,
+        ...unused,
+      };
+
+      // When
+      act(() => result.current.applyInput(next));
+
+      // Then
+      expect(result.current.input).toEqual(next);
+      expect(stored()).toEqual({ input: next });
+      expect(result.current.condition).toBe(before);
+    },
+  );
 });

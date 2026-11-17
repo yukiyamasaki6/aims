@@ -497,7 +497,7 @@ function LogoLink({ className }: { className?: string }) {
 
 function navItemClassName(current: boolean) {
   return cn(
-    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+    "flex items-center gap-2 rounded-lg px-3 py-3 text-sm transition-colors",
     current ? "bg-foreground/10 font-medium" : "hover:bg-foreground/5",
   );
 }
@@ -539,7 +539,7 @@ function StartRoundLink({ onNavigate }: { onNavigate: () => void }) {
   const t = useTranslations("navigation");
   const pathname = usePathname();
   return (
-    <div className="px-4 pt-1 pb-4">
+    <div className="px-2 pt-1 pb-5">
       <Link
         href={NEW_ROUND_PATH}
         onClick={(event) => {
@@ -547,7 +547,7 @@ function StartRoundLink({ onNavigate }: { onNavigate: () => void }) {
           onNavigate();
         }}
         // transition-allだと継承したvisibilityの切替が遅れ、閉じたパネルの中身が閉じた後も届く。色だけに限る。
-        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 font-medium text-sm transition-colors hover:bg-foreground/5"
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-3 font-medium text-sm transition-colors hover:bg-foreground/5"
       >
         <Plus aria-hidden="true" className="size-5 shrink-0" />
         {t("leftPanelStartRound")}
@@ -562,7 +562,7 @@ function PanelBody({ nav }: { nav: PanelNav }) {
     <>
       <StartRoundLink onNavigate={nav.onNavigate} />
 
-      <nav className="flex flex-1 flex-col gap-1 px-4 pt-1">
+      <nav className="flex flex-1 flex-col px-2">
         <NavItem href={ROUNDS_HOME_PATH} onNavigate={nav.onNavigate}>
           <House aria-hidden="true" className="size-5 shrink-0" />
           {t("leftPanelHome")}
@@ -573,7 +573,7 @@ function PanelBody({ nav }: { nav: PanelNav }) {
         </NavItem>
       </nav>
 
-      <div className="flex flex-col p-4">
+      <div className="flex flex-col p-2">
         {/* 画面を移らずに設定パネルを開く。hrefは開いたときのハッシュで、押下は既定の動作を止める。 */}
         <a
           ref={nav.settingsRef}
@@ -609,9 +609,9 @@ function MenuButton({
       type="button"
       onClick={onOpen}
       aria-label={t("leftPanelOpenMenu")}
-      className={cn("flex shrink-0 items-center p-1.5", className)}
+      className={cn("flex shrink-0 items-center p-1", className)}
     >
-      <Menu className="size-5" />
+      <Menu className="size-6" />
     </button>
   );
 }

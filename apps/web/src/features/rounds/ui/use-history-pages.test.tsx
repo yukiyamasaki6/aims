@@ -8,6 +8,7 @@ import {
   type HistoryCondition,
 } from "../domain/history-view-state";
 import type { LoadedRoundsList } from "../domain/round-list";
+import { cardLayout } from "./card-layout";
 import { installFakeIntersectionObserver } from "./intersection-observer-test-helpers";
 import {
   fakeSearchParams,
@@ -22,6 +23,9 @@ import {
   RoundsListStoreProvider,
 } from "./rounds-context";
 import { useHistoryPages } from "./use-history-pages";
+
+// 行の固定の高さ(境界線を含む)。件数は、この値と画面の高さから決まる。
+const ROW_HEIGHT = cardLayout.pitchPx;
 
 vi.mock("next/navigation", async () => {
   const { fakeSearchParams: fake } = await import("./navigation-test-helpers");
@@ -51,7 +55,10 @@ function page(
       id,
       name: id,
       roundDate: "2026-09-15",
+      format: "outdoor",
+      bowType: "recurve",
       total: 0,
+      distances: [],
     })),
     hasMore: false,
     after: ids.at(-1) ?? null,
@@ -66,12 +73,13 @@ function distancePage(
   overrides: Partial<LoadedRoundsList> = {},
 ): LoadedRoundsList {
   return {
-    items: ids.map((id, index) => ({
+    items: ids.map((id) => ({
       id,
       roundId: `round-of-${id}`,
       name: id,
       roundDate: "2026-09-15",
-      number: index + 1,
+      format: "outdoor",
+      bowType: "recurve",
       distance: 50,
       isMarked: true,
       total: 0,
@@ -122,7 +130,8 @@ type Rig = {
   stored?: HistoryPagesSnapshot;
   // 描画の前に設定する、端末の記録の削除済みのID。Errorは、読み直しが拒否されることを表す。
   deleted?: Set<string> | Error;
-  itemHeight?: number;
+  // 画面の高さ(`window.innerHeight`)。省略時は行の高さの8倍。
+  viewportHeight?: number;
   offline?: boolean;
 };
 
@@ -148,10 +157,10 @@ function setup(
   const anchorRef: RefObject<HTMLElement | null> = {
     current: elements.anchor,
   };
-  const measureItemHeight = vi.fn(() => rig.itemHeight ?? 100);
+  vi.stubGlobal("innerHeight", rig.viewportHeight ?? ROW_HEIGHT * 8);
   const hook = renderHook(
     ({ condition, removed = new Set<string>() }: Props) =>
-      useHistoryPages({ condition, removed, measureItemHeight, anchorRef }),
+      useHistoryPages({ condition, removed, anchorRef }),
     {
       initialProps: initial,
       wrapper: ({ children }: { children: ReactNode }) => (
@@ -188,7 +197,6 @@ const settledFirst = (result: { current: { view: { status: string } } }) =>
 
 beforeEach(() => {
   followReplaceState();
-  vi.stubGlobal("innerHeight", 800);
 });
 
 afterEach(() => {
@@ -220,7 +228,7 @@ describe("useHistoryPages", () => {
       await waitFor(() =>
         expect(result.current.view).toEqual({ status: "ok", data: first }),
       );
-      // 画面の高さ800を1件分100で割った2画面分。
+      // 画面の高さ(行の高さの8倍)を行の高さで割った2画面分。
       expect(loadList).toHaveBeenCalledExactlyOnceWith(
         DEFAULT_HISTORY_CONDITION,
         null,
@@ -230,13 +238,14 @@ describe("useHistoryPages", () => {
 
     it.each([
       ["測れない(0)", 0, 10],
-      ["1画面に数件しか入らない大きさ", 400, 10],
-      ["1画面に何十件も入る小ささ", 4, 50],
+      ["行の4件分しかない", ROW_HEIGHT * 4, 10],
+      ["行の20件分", ROW_HEIGHT * 20, 40],
+      ["行の何百件分もある", ROW_HEIGHT * 500, 50],
     ])(
-      "1件分の高さが%sときも、件数は10から50の範囲で渡す",
-      (_name, itemHeight, expected) => {
+      "画面の高さが%sときも、件数は行の固定の高さから10から50の範囲で渡す",
+      (_name, viewportHeight, expected) => {
         // Given
-        const { loadList } = setup(undefined, { itemHeight });
+        const { loadList } = setup(undefined, { viewportHeight });
 
         // When
         const size = loadList.mock.calls[0]?.[2];

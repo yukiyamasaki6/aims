@@ -17,11 +17,11 @@ export function BackLink({
     <Link
       href={originPathOf(origin)}
       className={cn(
-        "inline-flex w-fit items-center gap-1 p-1.5 text-muted-foreground text-sm hover:text-foreground",
+        "inline-flex w-fit items-center gap-0.5 py-1 pl-0 pr-0 text-muted-foreground text-sm hover:text-foreground",
         className,
       )}
     >
-      <ChevronLeft className="size-4" />
+      <ChevronLeft className="h-6 w-4" preserveAspectRatio="xMidYMid slice" />
       {t("back")}
     </Link>
   );

@@ -506,7 +506,7 @@ describe("update_distance(distance.updated)", () => {
       });
     });
 
-    it("生きている矢の数が新しい矢数を超えるエンドがあれば、反映しない。ちょうどなら反映する", () => {
+    it("生きている矢の数が新しい射数/エンドを超えるエンドがあれば、反映しない。ちょうどなら反映する", () => {
       // Given
       const three = withShotsInEnd1(3);
       const four = withShotsInEnd1(4);
@@ -520,7 +520,7 @@ describe("update_distance(distance.updated)", () => {
       expect(exceeding.distances[0].arrows_per_end).toBe(6);
     });
 
-    it("射順が新しい矢数を超える矢があれば、反映しない", () => {
+    it("射順が新しい射数/エンドを超える矢があれば、反映しない", () => {
       // Given
       const ordered = withShotRow(base, { shot_number: 6 });
 
@@ -733,7 +733,7 @@ describe("record_shots(shot.recorded)", () => {
   it("未確定の矢は、現在の構成で無効なら先の矢も置き換えない", () => {
     // Given
     const first = apply(base, shotRecorded({ scoreStr: "9", scoreInt: 9 }));
-    // 射順は構成の変更が拒むため矢数の範囲外にならない。判定の境界として行の射順を範囲外にする。
+    // 射順は構成の変更が拒むため射数/エンドの範囲外にならない。判定の境界として行の射順を範囲外にする。
     const outOfArrowsRow = withShotRow(base, { shot_number: 7 });
 
     // When
@@ -775,13 +775,13 @@ describe("record_shots(shot.recorded)", () => {
     expect(shotOf(revivedAlone, "A")?.shot_number).toBe(3);
   });
 
-  describe("矢数の上限", () => {
+  describe("射数/エンドの上限", () => {
     const full = ["a", "b", "c"].reduce(
       (tables, shotId) => apply(tables, shotRecorded({ shotId })),
       threeArrows,
     );
 
-    it("未確定の新しい矢は、エンドが矢数に達していれば重ねない。別のエンドには重ねる", () => {
+    it("未確定の新しい矢は、エンドが満杯になっていれば重ねない。別のエンドには重ねる", () => {
       // Given
       // When
       const sameEnd = apply(full, shotRecorded({ shotId: "d" }));

@@ -16,7 +16,7 @@ const ITEMS = [
   textKey: string;
 }[];
 
-// 分類「アカウント」の本文。項目のリンクと、入口が渡すサインアウトの行を、1つの枠に見えるように並べる。本文に分類の見出しは置かない。
+// 分類「アカウント」の本文。項目のリンクと、入口が渡すサインアウトの行を、項目間だけを線で区切って並べる。本文に分類の見出しは置かない。
 // onMove: 項目の画面へ移る操作。signOut: サインアウトの行(認証の部品)。
 export function SettingsAccount({
   onMove,
@@ -29,7 +29,7 @@ export function SettingsAccount({
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-xl p-8">
-        <div className="flex flex-col [&>*:first-child]:rounded-t-lg [&>*:first-child]:border-t [&>*:last-child]:rounded-b-lg">
+        <div className="flex flex-col [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-foreground/40">
           {ITEMS.map(({ view, textKey }) => (
             <a
               key={view}

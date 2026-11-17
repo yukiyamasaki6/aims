@@ -67,8 +67,8 @@ export function distanceNumber(
   );
 }
 
-// 矢が、距離の構成(エンド数・矢数・的)で有効か。サーバーの`shot_fits`と同じ判定にする。
-// 射順はnull(射順不明)か1〜矢数。Mは的によらず有効。的のリングが手元に無い場合は、点数を判定せず有効とする(サーバーに委ねる)。
+// 矢が、距離の構成(エンド数・射数/エンド・的)で有効か。サーバーの`shot_fits`と同じ判定にする。
+// 射順はnull(射順不明)か1〜射数/エンド。Mは的によらず有効。的のリングが手元に無い場合は、点数を判定せず有効とする(サーバーに委ねる)。
 export function shotFitsDistance(
   distance: Pick<Distance, "total_ends" | "arrows_per_end" | "target_face_id">,
   shot: { endNumber: number; shotNumber: number | null },
@@ -91,7 +91,7 @@ export function shotFitsDistance(
   );
 }
 
-// 距離の生きている矢が全て、距離の構成(エンド数・矢数・的)に収まるか。サーバーの`update_distance`が構成の変更を拒否する条件(`shot_fits`を満たさない矢がある、またはエンドの生きている矢の数が矢数を超える)の否定である。
+// 距離の生きている矢が全て、距離の構成(エンド数・射数/エンド・的)に収まるか。サーバーの`update_distance`が構成の変更を拒否する条件(`shot_fits`を満たさない矢がある、またはエンドの生きている矢の数が射数/エンドを超える)の否定である。
 // 渡す矢は生きている矢だけとし、他の距離の矢は無視する。
 export function shotsFitDistance(
   distance: Pick<

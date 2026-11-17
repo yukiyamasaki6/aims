@@ -302,7 +302,7 @@ function shotRow(
   };
 }
 
-// 距離の全てのエンドを矢数まで満たす、取得した矢の行。
+// 距離の全てのエンドを射数/エンドまで満たす、取得した矢の行。
 function fullEndShots(distance: Distance): Shot[] {
   return Array.from(
     { length: distance.total_ends * distance.arrows_per_end },
@@ -515,7 +515,7 @@ describe("ScorecardClient 初期表示・集計", () => {
   describe("的の表示", () => {
     const shotOnA = shotRow("s-a", distanceA.id, 1, "9", 9);
 
-    it("的の一覧が空で取得が完了している場合は、「的データを取得できません」を表示し、距離・本数・エンド数と記録済みの点数は維持する", async () => {
+    it("的の一覧が空で取得が完了している場合は、「的データを取得できません」を表示し、距離・射数/エンド・エンド数と記録済みの点数は維持する", async () => {
       // Given
 
       // When
@@ -556,7 +556,7 @@ describe("ScorecardClient 初期表示・集計", () => {
     expect(screen.getByTestId("add-distance-button")).toBeInTheDocument();
   });
 
-  it("全てのエンドが矢数に達している場合、マウント時に何も指さず、テンキーも空白も出さない", async () => {
+  it("全てのエンドが満杯になっている場合、マウント時に何も指さず、テンキーも空白も出さない", async () => {
     // Given
 
     // When
@@ -569,7 +569,7 @@ describe("ScorecardClient 初期表示・集計", () => {
     expect(screen.queryByTestId("end-blank-1-12")).not.toBeInTheDocument();
   });
 
-  it("エンドの矢数を超える矢が記録されていても、全ての矢を表示し、空白のボタンとスロットを出さない", async () => {
+  it("エンドの射数/エンドを超える矢が記録されていても、全ての矢を表示し、空白のボタンとスロットを出さない", async () => {
     // Given
     const overflowing = [
       shotRow("s1", distanceA.id, 1, "10", 10),
@@ -668,7 +668,22 @@ describe("ScorecardClient 初期表示・集計", () => {
     await setup({ distances: [] });
 
     // Then
-    expect(screen.getByTestId("round-config-name")).toBeInTheDocument();
+    expect(screen.getByTestId("round-config-date")).toBeInTheDocument();
+  });
+
+  it("ヘッダーの見出しの中に、ラウンド名のボタンを出し、概要には名前を含めない", async () => {
+    // Given
+    // When
+    await setup();
+
+    // Then
+    const name = screen.getByRole("button", {
+      name: roundsText("roundNameEditNamed", { name: "テストラウンド" }),
+    });
+    expect(name.closest("h1")).not.toBeNull();
+    expect(screen.getByTestId("round-config-summary")).not.toHaveTextContent(
+      "テストラウンド",
+    );
   });
 
   it("距離があるラウンド（プリセット開始など）は、ラウンド構成が折りたたまれた状態で表示する", async () => {
@@ -677,7 +692,7 @@ describe("ScorecardClient 初期表示・集計", () => {
     await setup();
 
     // Then
-    expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("round-config-date")).not.toBeInTheDocument();
   });
 });
 
@@ -689,9 +704,9 @@ function sentShots(rpcName: "record_shots" | "clear_shots") {
 }
 
 describe("ScorecardClient 矢を指す・点数を書く", () => {
-  // 入力中で矢数に達していないエンドがあるラウンドは、マウント時点で最初のエンドの新しい矢を指し、テンキーが開いている。
+  // 入力中で満杯でないエンドがあるラウンドは、マウント時点で最初のエンドの新しい矢を指し、テンキーが開いている。
 
-  it("開いた直後は、矢数に達していない最初のエンドに仮の矢を出す", async () => {
+  it("開いた直後は、満杯でない最初のエンドに仮の矢を出す", async () => {
     // Given
 
     // When
@@ -751,7 +766,7 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
     expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("38");
   });
 
-  it("距離の最後のエンドが矢数に達すると、次の距離へまたがず、何も指さずテンキーを格納する", async () => {
+  it("距離の最後のエンドが満杯になると、次の距離へまたがず、何も指さずテンキーを格納する", async () => {
     // Given
     const user = userEvent.setup();
     await setup({
@@ -769,7 +784,7 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
     expect(screen.getByTestId("bottom-frame").style.minHeight).toBe("0px");
   });
 
-  it("画面へ反映される前に続けて押しても、エンドの矢数を超えて書かない", async () => {
+  it("画面へ反映される前に続けて押しても、エンドの射数/エンドを超えて書かない", async () => {
     // Given
     await setup();
 
@@ -1533,7 +1548,7 @@ describe("ScorecardClient 並び直りの動き", () => {
       expect(HTMLElement.prototype.animate).toHaveBeenCalledTimes(calls);
     });
 
-    // 矢数6のエンドに10があり、9を書いて仮の矢だけが動いている途中にする。
+    // 射数/エンド6のエンドに10があり、9を書いて仮の矢だけが動いている途中にする。
     async function writeNineWithProvisionalMoving() {
       const user = userEvent.setup();
       await setup({
@@ -1591,7 +1606,7 @@ describe("ScorecardClient 並び直りの動き", () => {
 });
 
 describe("ScorecardClient 玉の折り返し", () => {
-  it("玉の領域に矢数分の玉が収まらないときは、矢数から決めた段の数の高さを確保する", async () => {
+  it("玉の領域に射数/エンド分の玉が収まらないときは、射数/エンドから決めた段の数の高さを確保する", async () => {
     // Given
     vi.stubGlobal(
       "ResizeObserver",
@@ -1616,7 +1631,7 @@ describe("ScorecardClient 玉の折り返し", () => {
     expect(area).toHaveStyle({ minHeight: "80px" });
   });
 
-  it("矢数分の場所を、段の数で割った同じ数の列に並べ、記録済みの玉を左から入れる", async () => {
+  it("射数/エンド分の場所を、段の数で割った同じ数の列に並べ、記録済みの玉を左から入れる", async () => {
     // Given
     vi.stubGlobal(
       "ResizeObserver",
@@ -1832,7 +1847,7 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     vi.mocked(Element.prototype.scrollBy).mockClear();
 
     // When
-    // 矢数3で、幅72pxには2つまで収まるため、段数が1から2になる。
+    // 射数/エンド3で、幅72pxには2つまで収まるため、段数が1から2になる。
     resizeBalls("end-row-1-1", 72);
 
     // Then
@@ -1855,7 +1870,7 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     vi.mocked(Element.prototype.scrollBy).mockClear();
 
     // When
-    // 矢数3は、幅108px(3つ収まる)でも幅144px(4つ収まる)でも1段のまま。
+    // 射数/エンド3は、幅108px(3つ収まる)でも幅144px(4つ収まる)でも1段のまま。
     resizeBalls("end-row-1-1", 108);
     resizeBalls("end-row-1-1", 144);
 
@@ -2059,7 +2074,7 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
       vi.mocked(Element.prototype.scrollBy).mockClear();
 
       // When
-      // 別経路の追記でエンド1が矢数に達し、指す新しい矢が次のエンドへ進む。
+      // 別経路の追記でエンド1が射数/エンドに達し、指す新しい矢が次のエンドへ進む。
       for (const n of [1, 2, 3]) {
         await act(() =>
           appendFromOtherPath({
@@ -2480,7 +2495,7 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
     expect(provisionalEnd()).toBe("end-row-1-1");
   });
 
-  it("戻すと矢が復活するが、そのエンドが別経路の矢で矢数に達しているときは、何も積まずに列だけを進める", async () => {
+  it("戻すと矢が復活するが、そのエンドが別経路の矢で満杯になっているときは、何も積まずに列だけを進める", async () => {
     // Given
     const user = userEvent.setup();
     await setup({
@@ -3176,7 +3191,7 @@ describe("ScorecardClient ラウンドの完了", () => {
   const recorded = shotRow("s-1", "distance-b", 1, "10", 10);
   const allRecorded = fullEndShots(distanceB);
 
-  it("全てのエンドが矢数に達した入力中のラウンドで完了ボタンを押すと、確認なしで完了にし、ボタンを消して状態を送る", async () => {
+  it("全てのエンドが満杯になった入力中のラウンドで完了ボタンを押すと、確認なしで完了にし、ボタンを消して状態を送る", async () => {
     // Given
     const user = userEvent.setup();
     await setup({ distances: [distanceB], initialShots: allRecorded });
@@ -3190,7 +3205,7 @@ describe("ScorecardClient ラウンドの完了", () => {
     expect(screen.queryByTestId("confirm-dialog-confirm")).toBeNull();
   });
 
-  it("矢数に達していないエンドがあるときは、確認でキャンセルすると入力中のままで何も送らない", async () => {
+  it("満杯でないエンドがあるときは、確認でキャンセルすると入力中のままで何も送らない", async () => {
     // Given
     const user = userEvent.setup();
     await setup();
@@ -3283,10 +3298,10 @@ describe("ScorecardClient ラウンドの完了", () => {
     await setup({ status: "completed", distances: [] });
 
     // Then
-    expect(screen.queryByTestId("round-config-name")).toBeNull();
+    expect(screen.queryByTestId("round-config-date")).toBeNull();
   });
 
-  it("入力中のラウンドは、矢数に達していない最初のエンドの新しい矢を指してテンキーを展開する", async () => {
+  it("入力中のラウンドは、満杯でない最初のエンドの新しい矢を指してテンキーを展開する", async () => {
     // Given
 
     // When

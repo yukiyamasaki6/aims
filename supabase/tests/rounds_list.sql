@@ -7,7 +7,7 @@
 
 begin;
 
-select plan(111);
+select plan(119);
 
 create temp table rl_id (alias text primary key, id uuid not null);
 insert into rl_id (alias, id) values
@@ -129,6 +129,15 @@ as $$
   join rl_id i on i.id = (e.r ->> 'id')::uuid
 $$;
 
+-- 1件の距離ごとの小計の一覧（返した順）。ラウンドの別名で選ぶ。
+create function pg_temp.ds(p_page jsonb, p_alias text) returns jsonb
+language sql stable
+as $$
+  select e.r -> 'distances'
+  from jsonb_array_elements(p_page -> 'rounds') as e(r)
+  where (e.r ->> 'id')::uuid = pg_temp.id(p_alias)
+$$;
+
 -- 行数と続きの有無。
 create function pg_temp.shape(p_page jsonb) returns text
 language sql stable
@@ -163,7 +172,7 @@ end;
 $$;
 
 -- 距離の行を指定してラウンドを作る（距離の構成の検証用）。完了のラウンドは、実施日の9時に作る。
--- p_rows は距離の行の配列で、項目は k=position_key、d=距離、e=総エンド数、a=1エンドの矢数、
+-- p_rows は距離の行の配列で、項目は k=position_key、d=距離、e=総エンド数、a=射数/エンド、
 -- f=的のID（省略時は屋外122cmの公式の的）、m=距離が判明しているか（省略時は真）、x=無効にした行か、i=行のID（省略時は無作為）。
 -- 行は配列の順に挿入する（挿入順と position_key の順が違う入力を作るため）。
 -- p_tens は、最初の行に置く10点の矢の本数（合計点は p_tens * 10）。
@@ -285,8 +294,30 @@ select is(
 
 select is(
   (select array_agg(k order by k) from jsonb_object_keys(pg_temp.list(null, null, null, null, null, 100) -> 'rounds' -> 0) as k),
-  array['id', 'name', 'round_date', 'total'],
-  '1件の項目は id・name・round_date・total だけで、種別・弓種・作成時刻・距離・矢を含まない'
+  array['bow_type', 'distances', 'format', 'id', 'name', 'round_date', 'total'],
+  '1件の項目は id・name・round_date・format・bow_type・total・distances だけで、作成時刻・各射の点を含まない'
+);
+
+select is(
+  (select jsonb_build_array(e.r -> 'format', e.r -> 'bow_type', e.r -> 'distances')
+   from jsonb_array_elements(pg_temp.list(null, null, null, null, null, 100) -> 'rounds') as e(r)
+   where (e.r ->> 'id')::uuid = pg_temp.id('B')),
+  '["indoor", "compound", [{"distance": 30, "is_marked": true, "total": 300}, {"distance": 60, "is_marked": true, "total": 280}]]'::jsonb,
+  '1件は、ラウンドの種別・弓種と、距離ごとの小計（距離、無印か、小計。屋内10エンド×3射の2距離で、最初の距離から順に矢を置いた値）を持つ'
+);
+
+select is(
+  (select string_agg(r.alias, ',' order by r.alias)
+   from (
+     select i.alias,
+       (select sum((d ->> 'total')::bigint) from jsonb_array_elements(e.r -> 'distances') as d) as sum_total,
+       (e.r ->> 'total')::bigint as total
+     from jsonb_array_elements(pg_temp.list(null, null, null, null, null, 100) -> 'rounds') as e(r)
+     join rl_id i on i.id = (e.r ->> 'id')::uuid
+   ) as r
+   where r.sum_total is distinct from r.total),
+  null,
+  '全ラウンドで、距離ごとの小計の和が合計点と一致する'
 );
 
 select is(
@@ -303,6 +334,21 @@ select is(
   pg_temp.totals(pg_temp.list(null, null, null, null, null, 100)),
   'Q:0,R:0,S:300',
   '距離が0件・矢が0件のラウンドの合計点は0で、無効な距離の矢と無効な矢を合計に含めない'
+);
+
+select is(
+  jsonb_build_array(
+    pg_temp.ds(pg_temp.list(null, null, null, null, null, 100), 'Q'),
+    pg_temp.ds(pg_temp.list(null, null, null, null, null, 100), 'R')
+  ),
+  '[[], [{"distance": 70, "is_marked": true, "total": 0}]]'::jsonb,
+  '距離が0件のラウンドの distances は空配列で、矢のない距離の小計は0である'
+);
+
+select is(
+  pg_temp.ds(pg_temp.list(null, null, null, null, null, 100), 'S'),
+  '[{"distance": 30, "is_marked": true, "total": 300}, {"distance": 60, "is_marked": true, "total": 0}]'::jsonb,
+  '無効な距離を distances に含めず、無効な矢を小計に含めない'
 );
 
 select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
@@ -688,6 +734,36 @@ language sql stable
 as $$ select pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, p_distances::jsonb)) $$;
 
 select is(
+  jsonb_build_array(
+    pg_temp.ds(pg_temp.list(null, null, null, null, null, 100), 'M11'),
+    pg_temp.ds(pg_temp.list(null, null, null, null, null, 100), 'M15')
+  ),
+  '[[{"distance": 30, "is_marked": true, "total": 0}, {"distance": 50, "is_marked": true, "total": 0}], [{"distance": 30, "is_marked": true, "total": 0}, {"distance": 50, "is_marked": true, "total": 0}]]'::jsonb,
+  'distances は射つ順（position_key、同じならID）に並び、挿入順に依らない（M11は挿入が逆、M15はposition_keyが同じでIDの順）'
+);
+
+select is(
+  jsonb_build_array(
+    pg_temp.ds(pg_temp.list(null, null, null, null, null, 100), 'M7'),
+    pg_temp.ds(pg_temp.list(null, null, null, null, null, 100), 'M8')
+  ),
+  '[[{"distance": 50, "is_marked": true, "total": 0}], []]'::jsonb,
+  '無効な距離を distances に含めず（M7）、距離が0件のラウンドは空配列である（M8）'
+);
+
+select is(
+  pg_temp.ds(pg_temp.list(null, null, null, null, null, 100), 'M9'),
+  '[{"distance": 50, "is_marked": true, "total": 0}, {"distance": null, "is_marked": false, "total": 0}]'::jsonb,
+  '距離が判明しない距離は、距離がnullで無印の小計として distances に含める'
+);
+
+select is(
+  pg_temp.ds(pg_temp.list(null, null, null, null, null, 100), 'K5'),
+  '[{"distance": 18, "is_marked": true, "total": 300}, {"distance": 30, "is_marked": true, "total": 0}]'::jsonb,
+  '矢を置いた距離の小計はその矢の点の和で、置かない距離の小計は0である'
+);
+
+select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100)),
   'K5,K4,K3,K2,K1,M15,M11,M10,M9,M8,M7,M6,M5,M4,M3,M2,M1',
   '距離の構成を指定しないときは、Vが見える完了のラウンドをすべて返す（Wのラウンド、入力中、削除済みは返さない）'
@@ -720,7 +796,7 @@ select is(
 select is(
   pg_temp.byd('[{"distance": 50, "arrows_per_end": 6}]') || '|' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 3}]'),
   'M7,M5|M6',
-  '1エンドの矢数を指定すると、その矢数の行だけが一致する（6はM7とM5、3はM6）'
+  '射数/エンドを指定すると、その射数/エンドの行だけが一致する（6はM7とM5、3はM6）'
 );
 
 select is(
@@ -738,7 +814,7 @@ select is(
     'dist=' || pg_temp.byd('[{"distance": 30, "arrows_per_end": 6, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]')
   ),
   'all=M5|face=|ape=|dist=',
-  '距離・1エンドの矢数・的のすべてを指定した行は、すべてが一致するラウンドだけを返し、1項目でも違えば除外する'
+  '距離・射数/エンド・的のすべてを指定した行は、すべてが一致するラウンドだけを返し、1項目でも違えば除外する'
 );
 
 select is(

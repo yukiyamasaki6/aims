@@ -16,6 +16,8 @@ const EMPTY_DRAFT: HistoryRangeDraft = {
   dateTo: "",
   scoreMin: "",
   scoreMax: "",
+  distanceScoreMin: "",
+  distanceScoreMax: "",
 };
 
 const NO_RANGE = {
@@ -26,6 +28,9 @@ const NO_RANGE = {
 };
 
 const TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001";
+
+// 既定の入力値(ラウンド単位・距離単位の得点の範囲を持つ)。
+const DEFAULT_INPUT: HistoryInput = DEFAULT_HISTORY_VIEW_STATE.input;
 
 function rangeOf(draft: Partial<HistoryRangeDraft>) {
   return historyRangeOf({ ...EMPTY_DRAFT, ...draft });
@@ -331,7 +336,7 @@ describe("historyDistancesOf", () => {
     });
   });
 
-  it("距離だけが入った行は、1エンドの矢数と的を指定なし(null)にする", () => {
+  it("距離だけが入った行は、射数/エンドと的を指定なし(null)にする", () => {
     // Given
     const draft = [distanceDraftOf({ distance: "30", arrowsPerEnd: "  " })];
 
@@ -386,7 +391,7 @@ describe("historyDistancesOf", () => {
   it.each([
     ["先頭に0のある数", "007", 7],
     ["前後に空白のある数", "  12 ", 12],
-  ])("1エンドの矢数が%sでも、正しい整数にして返す", (_name, text, expected) => {
+  ])("射数/エンドが%sでも、正しい整数にして返す", (_name, text, expected) => {
     // Given
     const draft = [distanceDraftOf({ arrowsPerEnd: text })];
 
@@ -449,7 +454,7 @@ describe("historyDistancesOf", () => {
   );
 
   it.each(["1", "12", ""])(
-    "1エンドの矢数が「%s」なら、正しい",
+    "射数/エンドが「%s」なら、正しい",
     (arrowsPerEnd) => {
       // Given
       const draft = [distanceDraftOf({ arrowsPerEnd })];
@@ -463,7 +468,7 @@ describe("historyDistancesOf", () => {
   );
 
   it.each(["0", "13", "+1", "1.5"])(
-    "1エンドの矢数が「%s」なら、1エンドの矢数の不正にする(範囲は1から12)",
+    "射数/エンドが「%s」なら、射数/エンドの不正にする(範囲は1から12)",
     (arrowsPerEnd) => {
       // Given
       const draft = [distanceDraftOf({ arrowsPerEnd })];
@@ -517,7 +522,7 @@ describe("historyDistancesOf", () => {
 
 describe("historyConditionOf", () => {
   const input: HistoryInput = {
-    ...DEFAULT_HISTORY_CONDITION,
+    ...DEFAULT_INPUT,
     dateDirection: "asc",
     scoreDirection: "desc",
     format: "indoor",
@@ -526,6 +531,8 @@ describe("historyConditionOf", () => {
     dateTo: "2026-05-31",
     scoreMin: 300,
     scoreMax: 600,
+    distanceScoreMin: 50,
+    distanceScoreMax: 100,
     distances: [distanceRowOf(30)],
   };
 
@@ -533,13 +540,13 @@ describe("historyConditionOf", () => {
     // Given
 
     // When
-    const condition = historyConditionOf(DEFAULT_HISTORY_CONDITION);
+    const condition = historyConditionOf(DEFAULT_INPUT);
 
     // Then
     expect(condition).toEqual(DEFAULT_HISTORY_CONDITION);
   });
 
-  it("単位がラウンドなら、向き、種別、弓種、範囲、ラウンド構成は入力値のまま写し、距離の行だけを指定なしにする", () => {
+  it("単位がラウンドなら、得点の範囲はラウンド単位の値を取り、ラウンド構成は入力値のまま写し、距離の行を指定なしにする", () => {
     // Given
     const roundInput: HistoryInput = {
       ...input,
@@ -550,10 +557,22 @@ describe("historyConditionOf", () => {
     const condition = historyConditionOf(roundInput);
 
     // Then
-    expect(condition).toEqual({ ...input, distanceRow: null });
+    expect(condition).toEqual({
+      unit: "round",
+      dateDirection: "asc",
+      scoreDirection: "desc",
+      format: "indoor",
+      bowType: "compound",
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+      scoreMin: 300,
+      scoreMax: 600,
+      distances: [distanceRowOf(30)],
+      distanceRow: null,
+    });
   });
 
-  it("単位が距離なら、入力値の距離の行をそのまま条件の距離の行にする", () => {
+  it("単位が距離なら、得点の範囲は距離単位の値を取り、ラウンド構成を空にし、距離の行は入力値のままにする", () => {
     // Given
     const row = { distance: 50, arrowsPerEnd: 6, targetFaceId: TARGET_FACE_ID };
     const distanceInput: HistoryInput = {
@@ -566,7 +585,19 @@ describe("historyConditionOf", () => {
     const condition = historyConditionOf(distanceInput);
 
     // Then
-    expect(condition.distanceRow).toEqual(row);
+    expect(condition).toEqual({
+      unit: "distance",
+      dateDirection: "asc",
+      scoreDirection: "desc",
+      format: "indoor",
+      bowType: "compound",
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+      scoreMin: 50,
+      scoreMax: 100,
+      distances: [],
+      distanceRow: row,
+    });
   });
 
   it("単位が距離で距離の行が指定なしなら、距離の行は指定なしである", () => {
@@ -578,6 +609,48 @@ describe("historyConditionOf", () => {
 
     // Then
     expect(condition.distanceRow).toBeNull();
+  });
+
+  it.each([
+    [
+      "ラウンド",
+      { unit: "round" },
+      {
+        distanceScoreMin: 1,
+        distanceScoreMax: 2,
+        distanceRow: distanceRowOf(70),
+      },
+    ],
+    [
+      "距離",
+      { unit: "distance" },
+      { scoreMin: 1, scoreMax: 2, distances: [distanceRowOf(70)] },
+    ],
+  ] as [string, Partial<HistoryInput>, Partial<HistoryInput>][])(
+    "単位が%sのとき、使わない単位の値だけが違う入力値は、同じ条件を導く",
+    (_name, unit, unused) => {
+      // Given
+      const base: HistoryInput = { ...input, ...unit };
+      const changed: HistoryInput = { ...base, ...unused };
+
+      // When
+      const first = historyConditionOf(base);
+      const second = historyConditionOf(changed);
+
+      // Then
+      expect(second).toEqual(first);
+    },
+  );
+
+  it("条件は距離単位の範囲の項目を持たない", () => {
+    // Given
+
+    // When
+    const condition = historyConditionOf(input);
+
+    // Then
+    expect(condition).not.toHaveProperty("distanceScoreMin");
+    expect(condition).not.toHaveProperty("distanceScoreMax");
   });
 
   it("同じ入力値からは、常に同じ条件を導く", () => {
@@ -604,6 +677,8 @@ describe("historyViewStateOf", () => {
     dateTo: "2026-05-31",
     scoreMin: 300,
     scoreMax: 600,
+    distanceScoreMin: 50,
+    distanceScoreMax: 100,
     distances: [
       {
         distance: 50,
@@ -661,9 +736,11 @@ describe("historyViewStateOf", () => {
     const state = DEFAULT_HISTORY_VIEW_STATE;
 
     // Then
-    expect(state).toEqual({ input: DEFAULT_HISTORY_CONDITION });
-    expect(DEFAULT_HISTORY_CONDITION.dateDirection).toBe("desc");
-    expect(DEFAULT_HISTORY_CONDITION.scoreDirection).toBeNull();
+    expect(state).toEqual({ input: DEFAULT_INPUT });
+    expect(DEFAULT_INPUT.dateDirection).toBe("desc");
+    expect(DEFAULT_INPUT.scoreDirection).toBeNull();
+    expect(DEFAULT_INPUT.distanceScoreMin).toBeNull();
+    expect(DEFAULT_INPUT.distanceScoreMax).toBeNull();
   });
 
   it.each([
@@ -676,7 +753,7 @@ describe("historyViewStateOf", () => {
     (dateDirection, scoreDirection) => {
       // Given
       const raw = {
-        input: { ...DEFAULT_HISTORY_CONDITION, dateDirection, scoreDirection },
+        input: { ...DEFAULT_INPUT, dateDirection, scoreDirection },
       };
 
       // When
@@ -751,9 +828,9 @@ describe("historyViewStateOf", () => {
     ["距離が101", { distance: 101 }],
     ["距離が整数でない", { distance: 50.5 }],
     ["距離が文字列", { distance: "50" }],
-    ["矢数が13", { arrowsPerEnd: 13 }],
-    ["矢数が0", { arrowsPerEnd: 0 }],
-    ["矢数が整数でない", { arrowsPerEnd: 1.5 }],
+    ["射数/エンドが13", { arrowsPerEnd: 13 }],
+    ["射数/エンドが0", { arrowsPerEnd: 0 }],
+    ["射数/エンドが整数でない", { arrowsPerEnd: 1.5 }],
     ["的がUUIDの形でない", { targetFaceId: "not-a-uuid" }],
     ["行がオブジェクトでない(文字)", "50"],
     ["行が配列", [{ distance: 50 }]],
@@ -775,7 +852,7 @@ describe("historyViewStateOf", () => {
     },
   );
 
-  it("距離の行の境界(距離1と100、矢数1と12)は、正しい値として保つ", () => {
+  it("距離の行の境界(距離1と100、射数/エンド1と12)は、正しい値として保つ", () => {
     // Given
     const rows = [
       { distance: 1, arrowsPerEnd: 1, targetFaceId: null },
@@ -832,7 +909,7 @@ describe("historyViewStateOf", () => {
       [{ distance: 101, arrowsPerEnd: null, targetFaceId: null }],
     ],
     [
-      "矢数が範囲外(13)",
+      "射数/エンドが範囲外(13)",
       [{ distance: 50, arrowsPerEnd: 13, targetFaceId: null }],
     ],
   ])(
@@ -846,6 +923,78 @@ describe("historyViewStateOf", () => {
 
       // Then
       expect(input).toEqual({ ...stored, distances: [] });
+    },
+  );
+
+  it("距離単位の得点の範囲を保存した値は、単位ごとに復元する", () => {
+    // Given
+    const raw = {
+      input: {
+        ...stored,
+        scoreMin: 300,
+        scoreMax: 600,
+        distanceScoreMin: 20,
+        distanceScoreMax: 80,
+      },
+    };
+
+    // When
+    const input = inputOf(raw);
+
+    // Then
+    expect([input.scoreMin, input.scoreMax]).toEqual([300, 600]);
+    expect([input.distanceScoreMin, input.distanceScoreMax]).toEqual([20, 80]);
+  });
+
+  it.each(["round", "distance"])(
+    "距離単位の範囲の項目が無い旧い保存値(保存されていた単位が%s)は、scoreMin・scoreMaxをラウンド単位の範囲として読み、距離単位の範囲を指定なしにする",
+    (unit) => {
+      // Given
+      const { distanceScoreMin: _min, distanceScoreMax: _max, ...old } = stored;
+      const raw = { input: { ...old, unit, scoreMin: 300, scoreMax: 600 } };
+
+      // When
+      const input = inputOf(raw);
+
+      // Then
+      expect(input.unit).toBe(unit);
+      expect([input.scoreMin, input.scoreMax]).toEqual([300, 600]);
+      expect([input.distanceScoreMin, input.distanceScoreMax]).toEqual([
+        null,
+        null,
+      ]);
+    },
+  );
+
+  it("距離単位の下限が上限より大きければ距離単位の2項目だけを指定なしにし、ラウンド単位の範囲は保存値のままにする", () => {
+    // Given
+    const raw = {
+      input: { ...stored, distanceScoreMin: 90, distanceScoreMax: 10 },
+    };
+
+    // When
+    const input = inputOf(raw);
+
+    // Then
+    expect([input.distanceScoreMin, input.distanceScoreMax]).toEqual([
+      null,
+      null,
+    ]);
+    expect([input.scoreMin, input.scoreMax]).toEqual([300, 600]);
+  });
+
+  it.each([-1, 1.5, "10", Number.MAX_SAFE_INTEGER + 2])(
+    "距離単位の得点の不正な値(%s)は、その項目だけを指定なしにする",
+    (broken) => {
+      // Given
+      const raw = { input: { ...stored, distanceScoreMin: broken } };
+
+      // When
+      const input = inputOf(raw);
+
+      // Then
+      expect(input.distanceScoreMin).toBeNull();
+      expect(input.distanceScoreMax).toBe(100);
     },
   );
 

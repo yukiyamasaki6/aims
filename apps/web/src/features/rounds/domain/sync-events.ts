@@ -10,7 +10,7 @@ export type RoundChanges = Partial<{
   status: RoundStatus;
 }>;
 
-// 構成は的・エンド数・矢数の1組で、どれかが変われば3項目全てを持つ。
+// 構成は的・エンド数・射数/エンドの1組で、どれかが変われば3項目全てを持つ。
 type DistanceConfigChange = {
   totalEnds: number;
   arrowsPerEnd: number;

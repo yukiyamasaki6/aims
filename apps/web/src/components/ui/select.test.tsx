@@ -35,6 +35,24 @@ describe("Select", () => {
       expect(screen.getByRole("combobox", { name: "色" })).toBeInTheDocument();
     });
 
+    it("項目名に要素(必須の印つき)を渡せ、印も項目名として表示され、トリガーの名前に含まれる", () => {
+      // Given
+      const label = (
+        <>
+          色 <span>必須</span>
+        </>
+      );
+
+      // When
+      renderSelect({ label });
+
+      // Then
+      expect(screen.getByText("必須")).toBeVisible();
+      expect(screen.getByRole("combobox", { name: /色/ })).toHaveAccessibleName(
+        /必須/,
+      );
+    });
+
     it("トリガーに現在値の表示名を表示する", () => {
       // Given
       const value = "blue";
@@ -133,5 +151,31 @@ describe("Select", () => {
       // Then
       expect(screen.getByRole("combobox")).toHaveTextContent("青");
     });
+  });
+});
+
+describe("Select 開いている間の周りの操作", () => {
+  it("選択肢を開いたまま別の入力欄を押して、入力を続けられる", async () => {
+    // Given
+    const user = userEvent.setup();
+    render(
+      <>
+        <Select label="色" options={COLORS} value="red" onChange={() => {}} />
+        <input aria-label="点数" />
+      </>,
+    );
+    await user.click(screen.getByRole("combobox"));
+    await screen.findAllByRole("option");
+    // jsdomは周りの押下の吸収を再現しないため、modalが付けるスクロールの固定がないことで、周りを妨げないことを確かめる。
+    const scrollLocked = document.body.style.overflowY === "hidden";
+
+    // When
+    const input = screen.getByRole("textbox", { name: "点数" });
+    await user.click(input);
+    await user.keyboard("25");
+
+    // Then
+    expect(scrollLocked).toBe(false);
+    expect(input).toHaveValue("25");
   });
 });

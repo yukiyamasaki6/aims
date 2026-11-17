@@ -59,7 +59,7 @@ export function SavePresetDialog({
         data-testid="save-as-preset-trigger"
         className={cn(
           buttonVariants({ variant: "default", size: "sm" }),
-          "m-1.5",
+          "mx-1",
         )}
       >
         {t("presetSaveTrigger")}

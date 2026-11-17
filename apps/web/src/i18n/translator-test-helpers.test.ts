@@ -12,11 +12,11 @@ describe("translatorFor", () => {
 
     // When
     const plain = t("save");
-    const interpolated = t("roundTotalPoints", { total: "123" });
+    const interpolated = t("historyDistanceMarked", { distance: "70" });
 
     // Then
     expect(plain).toBe("保存");
-    expect(interpolated).toBe("123点");
+    expect(interpolated).toBe("70m");
   });
 
   it("IntlTestProviderで描いた本文と同じ本文を返す(同じ設定を使う)", () => {

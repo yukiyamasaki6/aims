@@ -16,7 +16,7 @@ import { followRowKey } from "./scroll-to-pointer";
 const BALL_SLOT_WIDTH = 36;
 const BALL_LINE_HEIGHT = 40;
 
-// 玉の領域の幅から、矢数分の場所が収まる段の数と、1段の場所の数(列の数)を求める。幅を測れるまでは1段とする。
+// 玉の領域の幅から、射数/エンド分の場所が収まる段の数と、1段の場所の数(列の数)を求める。幅を測れるまでは1段とする。
 // 同じ距離の行は同じ幅のため、段の数は距離の中で揃う。
 function useBallLines(arrows: number) {
   const [width, setWidth] = useState(0);
@@ -34,7 +34,7 @@ function useBallLines(arrows: number) {
   return { ref, lines, columns: Math.ceil(arrows / lines) };
 }
 
-// エンド1行。左に番号、右に小計、中に矢数分の場所を等間隔で置く。
+// エンド1行。左に番号、右に小計、中に射数/エンド分の場所を等間隔で置く。
 // エンドは枠で囲まない。上下の線は親が引き、左右は距離の枠と共通にする。
 // 記録済みの玉(点数の高い順)を左の場所から入れ、残りは空白にする。新しい矢を指しているときは最初の空白に仮の矢を出す。
 // 番号・小計は1段分の高さのまま、行全体の上下中央に置く。

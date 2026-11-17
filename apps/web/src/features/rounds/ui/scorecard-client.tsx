@@ -16,6 +16,7 @@ import { KeypadPanel } from "./keypad-panel";
 import { RoundConfigPanel } from "./round-config-panel";
 import { RoundDetailFrame } from "./round-detail-frame";
 import { RoundMenu } from "./round-menu";
+import { RoundNameEditor } from "./round-name-editor";
 import { RoundSummaryBar } from "./round-summary-bar";
 import { SavePresetDialog } from "./save-preset-dialog";
 import { type ScorecardModel, useScorecard } from "./use-scorecard";
@@ -53,6 +54,13 @@ export function ScorecardClient({
     // スクロール領域（<main>）の外に置き、<main>がその間の高さで内部スクロール
     // する。<main>の矩形が、行が見える範囲そのものになる。
     <RoundDetailFrame
+      title={
+        <RoundNameEditor
+          roundId={roundId}
+          config={roundConfig}
+          enqueue={sync.append}
+        />
+      }
       actions={
         <>
           <SavePresetDialog

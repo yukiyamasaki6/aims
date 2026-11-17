@@ -90,7 +90,7 @@ describe("validateDistanceDraft", () => {
   });
 
   describe.each([
-    ["エンドあたりの本数", "arrows_per_end", "arrowsPerEnd"],
+    ["射数/エンド", "arrows_per_end", "arrowsPerEnd"],
     ["総エンド数", "total_ends", "totalEnds"],
   ] as const)("%s", (_label, field, errorField) => {
     it("1から有効で、0以下はエラーになる", () => {
@@ -124,7 +124,7 @@ describe("validateDistanceDraft", () => {
     it.each([
       ["距離(m)", "distance", "distance", DISTANCE_LIMITS.distance],
       [
-        "エンドあたりの本数",
+        "射数/エンド",
         "arrows_per_end",
         "arrowsPerEnd",
         DISTANCE_LIMITS.arrowsPerEnd,
@@ -164,7 +164,7 @@ describe("validateDistanceDraft", () => {
       },
     );
 
-    it("上限は項目ごとに違い、距離(m)は100、総エンド数は60、エンドあたりの本数は12まで有効になる", () => {
+    it("上限は項目ごとに違い、距離(m)は100、総エンド数は60、射数/エンドは12まで有効になる", () => {
       // Given
       // 値そのものが検証の対象のため、実際にない大きさの値を使う。
       const atLimit = { distance: 100, total_ends: 60, arrows_per_end: 12 };
@@ -207,7 +207,7 @@ describe("validateDistanceDraft", () => {
 
     it.each([
       ["距離(m)", "distance", "distance"],
-      ["エンドあたりの本数", "arrows_per_end", "arrowsPerEnd"],
+      ["射数/エンド", "arrows_per_end", "arrowsPerEnd"],
       ["総エンド数", "total_ends", "totalEnds"],
     ] as const)(
       "%sに桁あふれする大きさの値を入れても、tooLargeになる",
@@ -326,7 +326,7 @@ describe("validateDistanceDraft", () => {
       expect(results[2]).toEqual(unfit);
     });
 
-    it("本数は、1エンドの記録済みの矢の数と同じ値までは保存でき、それより小さいと収まらない", () => {
+    it("射数/エンドは、1エンドの記録済みの矢の数と同じ値までは保存でき、それより小さいと収まらない", () => {
       // Given
       // When
       const results = [6, 3, 2].map((arrowsPerEnd) =>
@@ -338,7 +338,7 @@ describe("validateDistanceDraft", () => {
       expect(results[2]).toEqual(unfit);
     });
 
-    it("射順が新しい本数を超える矢があると、矢の数が収まっていても収まらない", () => {
+    it("射順が新しい射数/エンドを超える矢があると、矢の数が収まっていても収まらない", () => {
       // Given
       const numbered = [shot("s-1", 3, "10", 10, 3)];
 
@@ -374,7 +374,7 @@ describe("validateDistanceDraft", () => {
       expect(result.type).toBe("valid");
     });
 
-    it("総エンド数も本数も変わらない保存は、矢が収まらない状態でも判定しない", () => {
+    it("総エンド数も射数/エンドも変わらない保存は、矢が収まらない状態でも判定しない", () => {
       // Given
       // 他の端末の操作で、総エンド数を超えるエンドの矢が届いた状態。
       const beyond = [shot("s-9", 14, "10", 10)];

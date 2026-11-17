@@ -35,33 +35,28 @@ describe("validateRoundConfig", () => {
   });
 
   describe("ラウンド名", () => {
-    it("50文字までは有効で、51文字からエラーになる", () => {
+    it("名前はダイアログで編集しないため検証せず、51文字の名前でも他の項目が有効なら有効で、名前の誤りを返さない", () => {
       // Given
+      const draft = { ...validDraft, name: "あ".repeat(51) };
+
       // When
-      const results = [49, 50, 51].map(
-        (length) =>
-          validateRoundConfig(
-            { ...validDraft, name: "あ".repeat(length) },
-            false,
-          ).type,
-      );
+      const result = validateRoundConfig(draft, false);
 
       // Then
-      expect(results).toEqual(["valid", "valid", "invalid"]);
+      expect(result).toEqual({ type: "valid", config: draft });
     });
 
-    it("上限を超えるとラウンド名のエラーを返す", () => {
+    it("51文字の名前があっても、他の項目の誤りだけを返し、名前の誤りを含めない", () => {
       // Given
+      const draft = { ...validDraft, name: "あ".repeat(51), roundDate: "" };
+
       // When
-      const result = validateRoundConfig(
-        { ...validDraft, name: "あ".repeat(51) },
-        false,
-      );
+      const result = validateRoundConfig(draft, false);
 
       // Then
       expect(result).toEqual({
         type: "invalid",
-        errors: { name: "tooLong" },
+        errors: { roundDate: "required" },
       });
     });
   });
@@ -134,7 +129,6 @@ describe("validateRoundConfig", () => {
       const result = validateRoundConfig(
         {
           ...validDraft,
-          name: "あ".repeat(51),
           roundDate: "",
           format: "indoor",
         },
@@ -145,7 +139,6 @@ describe("validateRoundConfig", () => {
       expect(result).toEqual({
         type: "invalid",
         errors: {
-          name: "tooLong",
           roundDate: "required",
           format: UNMARKED_ERROR,
         },

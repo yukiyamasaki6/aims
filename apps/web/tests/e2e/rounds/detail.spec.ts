@@ -25,6 +25,7 @@ import {
   startRoundOffline,
   TARGET_FACES_REST,
 } from "../helpers/reference-data";
+import { roundName } from "../helpers/round-name";
 import { createRound } from "../helpers/rounds";
 import {
   comeBackOnline,
@@ -146,12 +147,12 @@ test("履歴を2つ戻って詳細から別の詳細へ移ると、前のラウ�
   // 詳細Aからホームへ戻り、ホームのカードから詳細Bを開く。
   await page.getByRole("link", { name: roundsText("back") }).click();
   await page.getByRole("link", { name: new RegExp(nameB) }).click();
-  await expect(page.getByTestId("round-config-summary")).toContainText(nameB);
+  await expect(roundName(page)).toContainText(nameB);
 
   // 履歴を2つ戻り、詳細Aへ移る。
   await page.evaluate(() => window.history.go(-2));
 
-  await expect(page.getByTestId("round-config-summary")).toContainText(nameA);
+  await expect(roundName(page)).toContainText(nameA);
 });
 
 // 完了のラウンドにする(他端末が完了にした状態)。
@@ -529,9 +530,7 @@ test("端末の内容で表示しているラウンドが、他の端末で削�
     await route.continue();
   });
   await page.goto(`/rounds/${roundId}`);
-  await expect(page.getByTestId("round-config-summary")).toContainText(
-    "他の端末で削除",
-  );
+  await expect(roundName(page)).toContainText("他の端末で削除");
 
   // 保留を解き、取得でラウンドが無いと分かると、詳細のURLのまま見つからない表示と戻るリンクが出ることを確かめる。
   release();

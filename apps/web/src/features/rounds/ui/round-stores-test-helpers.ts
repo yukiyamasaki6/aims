@@ -4,9 +4,14 @@ import { createHistoryPagesMemory } from "../application/history-pages-memory";
 import type { RoundScreen, RoundWindow } from "../application/round-window";
 import type { RoundsListStore } from "../application/rounds-list-store";
 import type { FetchView } from "../domain/fetch-status";
-import type { LocalRoundsList } from "../domain/round-list";
+import type {
+  DistanceListItem,
+  LocalRoundsList,
+  RoundListItem,
+} from "../domain/round-list";
 import type { RoundState } from "../domain/round-tables";
 import type { RoundProcedures } from "./rounds-context";
+import type { CardMetrics } from "./use-card-fit";
 
 // 通信の復帰の合図を、テストが起こす。
 // 契約(whenOnline: 今オンラインなら直ちに1回、オフラインなら次の復帰で1回。返す関数で取り消せる)は、実物と同じにする。
@@ -153,3 +158,47 @@ export function createFakeRoundProcedures() {
     ...waiting,
   } satisfies RoundProcedures;
 }
+
+// 一覧のラウンド単位の1件。既定は屋外・リカーブで、距離が1つ(合計点と同じ小計)。
+export function roundListItem(
+  overrides: Partial<RoundListItem> = {},
+): RoundListItem {
+  const total = overrides.total ?? 0;
+  return {
+    id: "round-1",
+    name: "午前練習",
+    roundDate: "2026-09-15",
+    format: "outdoor",
+    bowType: "recurve",
+    total,
+    distances: [{ distance: 70, isMarked: true, total }],
+    ...overrides,
+  };
+}
+
+// 一覧の距離単位の1件。既定は屋外・リカーブの1/1番目の距離。
+export function distanceListItem(
+  overrides: Partial<DistanceListItem> = {},
+): DistanceListItem {
+  return {
+    id: "d-1",
+    roundId: "round-1",
+    name: "午前練習",
+    roundDate: "2026-09-15",
+    format: "outdoor",
+    bowType: "recurve",
+    distance: 50,
+    isMarked: true,
+    total: 300,
+    ...overrides,
+  };
+}
+
+// 全ての要素が入る測定値。jsdomは幅を測れないため、一覧の画面のテストは`CardMetricsOverride`でこの値を渡して、全要素が出る状態で内容を確かめる。
+export const WIDE_CARD_METRICS: CardMetrics = {
+  available: 2000,
+  date: 70,
+  nameMin: 56,
+  format: 40,
+  bow: 50,
+};

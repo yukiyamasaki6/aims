@@ -18,6 +18,7 @@ import type {
 import {
   type HistoryListItem,
   isDistanceListItem,
+  isRoundListItem,
   type RoundListItem,
 } from "../domain/round-list";
 import { historyView } from "../domain/rounds-list-view";
@@ -27,23 +28,15 @@ import { HistoryFilterForm } from "./history-filter-form";
 import { HistoryFilterPanel } from "./history-filter-panel";
 import {
   DistanceCards,
-  HistoryNotice,
   RoundCards,
   RoundCardsSkeleton,
+  RowNotice,
 } from "./round-cards";
 import { RoundDeleteDialog, useRoundDelete } from "./round-delete";
 import { useRoundProcedures } from "./rounds-context";
 import { type MoreStatus, useHistoryPages } from "./use-history-pages";
 import { useHistoryView } from "./use-history-view";
 import { useLocalRoundsList } from "./use-local-rounds-list";
-
-// 取得中のスケルトンの1件の高さと列の間隔の和。スケルトンが描かれていない、または寸法が測れないときは0。
-function measureSkeletonPitch(root: HTMLElement | null): number {
-  const item = root?.querySelector<HTMLElement>("[data-round-skeleton]");
-  if (!item?.parentElement) return 0;
-  const gap = Number.parseFloat(getComputedStyle(item.parentElement).rowGap);
-  return item.getBoundingClientRect().height + (Number.isNaN(gap) ? 0 : gap);
-}
 
 // 履歴。サーバーで完了と記録されたラウンドを、ページごとに取得して表示する。取得の成功時だけラウンドを出す。
 export function RoundsHistory() {
@@ -60,7 +53,7 @@ export function RoundsHistory() {
   );
 }
 
-type FilterSession = { id: number; input: HistoryInput; open: boolean };
+type FilterSession = { id: number; open: boolean };
 
 // 閉じたセッションから遅れて届く検索・格納通知を無視する。
 function useHistoryFilterSession(input: HistoryInput | null) {
@@ -79,7 +72,7 @@ function useHistoryFilterSession(input: HistoryInput | null) {
     if (!input) return;
     const id = ++sequence.current;
     activeId.current = id;
-    setSession({ id, input, open: true });
+    setSession({ id, open: true });
   };
   const collapse = (id: number | undefined) => {
     setSession((current) =>
@@ -102,7 +95,6 @@ function HistoryFrame({
   children: ReactNode;
 }) {
   const t = useTranslations("rounds");
-  const formId = useId();
   const panelId = useId();
   const filter = useHistoryFilterSession(input);
   const { session, activeId, buttonRef, close, toggle, collapse } = filter;
@@ -126,15 +118,14 @@ function HistoryFrame({
         <HistoryFilterPanel
           open={session?.open ?? false}
           panelId={panelId}
-          formId={formId}
           onClose={close}
           onCollapsed={() => collapse(session?.id)}
         >
-          {session && (
+          {session && input && (
             <HistoryFilterForm
               key={session.id}
-              input={session.input}
-              formId={formId}
+              input={input}
+              onClose={close}
               onApply={(next) => {
                 if (activeId.current !== session.id) return;
                 onApply?.(next);
@@ -170,11 +161,9 @@ function HistoryTail({
   const t = useTranslations("rounds");
   if (!hasMore) {
     return (
-      <div className="mt-3">
-        <HistoryNotice>
-          {t(unit === "distance" ? "historyEndDistance" : "historyEnd")}
-        </HistoryNotice>
-      </div>
+      <RowNotice>
+        {t(unit === "distance" ? "historyEndDistance" : "historyEnd")}
+      </RowNotice>
     );
   }
   return (
@@ -208,7 +197,13 @@ function HistoryCards({
       />
     );
   }
-  return <RoundCards rounds={items} origin="history" onDelete={onDelete} />;
+  return (
+    <RoundCards
+      rounds={items.filter(isRoundListItem)}
+      origin="history"
+      onDelete={onDelete}
+    />
+  );
 }
 
 // 一覧の本体。取得の状態、0件、カードと末尾。
@@ -241,7 +236,7 @@ function HistoryBody({
     );
   }
   if (rounds.length === 0 && !hasMore) {
-    return <HistoryNotice>{t("historyEmpty")}</HistoryNotice>;
+    return <RowNotice>{t("historyEmpty")}</RowNotice>;
   }
   return (
     <>
@@ -268,7 +263,6 @@ function RoundsHistoryScreen() {
     useHistoryPages({
       condition,
       removed,
-      measureItemHeight: () => measureSkeletonPitch(anchorRef.current),
       anchorRef,
     });
   const content = historyView(view, local, removed, condition);

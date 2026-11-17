@@ -16,11 +16,18 @@ import { NullableSelect } from "./history-nullable-select";
 const RANGE_SEPARATOR = "~";
 
 type FieldKey = keyof HistoryRangeDraft;
-type FieldSpec = { field: FieldKey; label: string; numeric: boolean };
+// field: 編集中の値の項目。id: 欄の識別(表示する単位によらず同じ)。
+type FieldSpec = {
+  field: FieldKey;
+  id: string;
+  label: string;
+  numeric: boolean;
+};
 type Change = (change: Partial<HistoryFilterDraft>) => void;
 
 function RangeInput({
   field,
+  id,
   label,
   value,
   invalid,
@@ -34,16 +41,16 @@ function RangeInput({
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       <label
-        htmlFor={`history-filter-${field}`}
+        htmlFor={`history-filter-${id}`}
         className="text-muted-foreground text-xs"
       >
         {label}
       </label>
       <Input
-        id={`history-filter-${field}`}
+        id={`history-filter-${id}`}
         type={numeric ? "text" : "date"}
         inputMode={numeric ? "numeric" : undefined}
-        data-testid={`history-filter-${field}`}
+        data-testid={`history-filter-${id}`}
         value={value}
         aria-invalid={invalid}
         onChange={(e) => onChange(field, e.target.value)}
@@ -125,7 +132,7 @@ function RangeGroup({
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex min-w-48 flex-1 items-end gap-2">
           {fields.map((input, index) => (
-            <Fragment key={input.field}>
+            <Fragment key={input.id}>
               {index > 0 && (
                 <span
                   aria-hidden="true"
@@ -170,11 +177,33 @@ export function HistoryRangeFields({
   onChange: Change;
 }) {
   const t = useTranslations("rounds");
+  const distance = draft.unit === "distance";
   const inputs: FieldSpec[] = [
-    { field: "dateFrom", label: t("historyFilterDateFrom"), numeric: false },
-    { field: "dateTo", label: t("historyFilterDateTo"), numeric: false },
-    { field: "scoreMin", label: t("historyFilterScoreMin"), numeric: true },
-    { field: "scoreMax", label: t("historyFilterScoreMax"), numeric: true },
+    {
+      field: "dateFrom",
+      id: "dateFrom",
+      label: t("historyFilterDateFrom"),
+      numeric: false,
+    },
+    {
+      field: "dateTo",
+      id: "dateTo",
+      label: t("historyFilterDateTo"),
+      numeric: false,
+    },
+    // 得点は、表示している単位の範囲を編集する(項目名は単位によらず同じ)。
+    {
+      field: distance ? "distanceScoreMin" : "scoreMin",
+      id: "scoreMin",
+      label: t("historyFilterScoreMin"),
+      numeric: true,
+    },
+    {
+      field: distance ? "distanceScoreMax" : "scoreMax",
+      id: "scoreMax",
+      label: t("historyFilterScoreMax"),
+      numeric: true,
+    },
   ];
   const setField = (field: FieldKey, value: string) =>
     onChange({ range: { ...draft.range, [field]: value } });

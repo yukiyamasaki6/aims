@@ -23,6 +23,7 @@ import {
   type LoadedRoundsList,
 } from "../domain/round-list";
 import { isHistoryReturn } from "../domain/round-routes";
+import { cardLayout } from "./card-layout";
 import { useRoundProcedures, useRoundsListStore } from "./rounds-context";
 
 // 続きの取得の状態。idle: 取得していない(続きの取得を始められる)。offline・error: 失敗。再試行ボタンだけが取り直す。
@@ -44,8 +45,6 @@ type Options = {
   condition: HistoryCondition | null;
   // この画面で削除したラウンドのID。離れるときの記憶の除外するIDに含める。
   removed: ReadonlySet<string>;
-  // 取得中のスケルトンの1件の高さと列の間隔の和。測れないときは0以下。
-  measureItemHeight: () => number;
   // 履歴の画面の要素。スクロールの入れ物をたどる起点。
   anchorRef: RefObject<HTMLElement | null>;
 };
@@ -89,14 +88,13 @@ type Latest = {
   condition: HistoryCondition | null;
   pages: Pages;
   removed: ReadonlySet<string>;
-  measureItemHeight: () => number;
 };
 
 // 履歴のページの取得、連結、再試行、続きの自動の取得、戻ったときの表示の記憶を扱う。
-// 先頭のページは、条件の変更、再試行、履歴の項目で開いたとき(URLに戻りの印が無いとき)に取得する。取得中のスケルトンを描いた後に、画面の高さと測った1件分の高さから件数を決める。
+// 先頭のページは、条件の変更、再試行、履歴の項目で開いたとき(URLに戻りの印が無いとき)に取得する。取得の直前に、画面の高さと行の固定の高さから件数を決める。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 状態と、取得・記憶・監視の各効果を1つの組にする hook で、内側の関数は個々に上限内である。
 export function useHistoryPages(options: Options) {
-  const { condition, removed, measureItemHeight, anchorRef } = options;
+  const { condition, removed, anchorRef } = options;
   const store = useRoundsListStore();
   const { whenOnline, historyPagesMemory } = useRoundProcedures();
   const marked = isHistoryReturn(useSearchParams().toString());
@@ -112,9 +110,8 @@ export function useHistoryPages(options: Options) {
     condition,
     pages,
     removed,
-    measureItemHeight,
   });
-  latest.current = { condition, pages, removed, measureItemHeight };
+  latest.current = { condition, pages, removed };
   // 古い取得の結果を捨てるための世代。取得の組が替わる・離れるたびに進める。
   const generation = useRef(0);
   const restorable = useRef(marked);
@@ -151,10 +148,7 @@ export function useHistoryPages(options: Options) {
       setState({ key, view: result, more: { status: "idle" } });
     };
     const load = () =>
-      settled(
-        store.loadList(condition, null, pageSizeOf(latest.current)),
-        apply,
-      );
+      settled(store.loadList(condition, null, pageSizeOf()), apply);
     const snapshot = restorable.current ? historyPagesMemory.read() : null;
     restorable.current = false;
     if (!snapshot) return load();
@@ -196,27 +190,24 @@ export function useHistoryPages(options: Options) {
     }
     const gen = generation.current;
     const base = at.view.data;
-    settled(
-      store.loadList(current, base.after, pageSizeOf(latest.current)),
-      (result) => {
-        if (generation.current !== gen) return;
-        setState((prev) =>
-          prev.key === at.key && prev.view.status === "ok"
-            ? {
-                ...prev,
-                view:
-                  result.status === "ok"
-                    ? {
-                        status: "ok",
-                        data: appendRoundsList(prev.view.data, result.data),
-                      }
-                    : prev.view,
-                more: moreStatusOf(result),
-              }
-            : prev,
-        );
-      },
-    );
+    settled(store.loadList(current, base.after, pageSizeOf()), (result) => {
+      if (generation.current !== gen) return;
+      setState((prev) =>
+        prev.key === at.key && prev.view.status === "ok"
+          ? {
+              ...prev,
+              view:
+                result.status === "ok"
+                  ? {
+                      status: "ok",
+                      data: appendRoundsList(prev.view.data, result.data),
+                    }
+                  : prev.view,
+              more: moreStatusOf(result),
+            }
+          : prev,
+      );
+    });
   }, [moreRequest]);
 
   const canLoadMore =
@@ -280,9 +271,9 @@ export function useHistoryPages(options: Options) {
   };
 }
 
-// 1ページの件数。取得の直前に、画面の高さと、描いた取得中のスケルトンから測った1件分の高さで決める。
-function pageSizeOf(latest: Latest): number {
-  return historyPageSizeOf(window.innerHeight, latest.measureItemHeight());
+// 1ページの件数。取得の直前に、画面の高さと、行の固定の高さ(間隔は0)で決める。
+function pageSizeOf(): number {
+  return historyPageSizeOf(window.innerHeight, cardLayout.pitchPx);
 }
 
 function rememberPages(

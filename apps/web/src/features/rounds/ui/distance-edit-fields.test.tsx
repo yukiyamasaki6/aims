@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -61,7 +61,7 @@ const baseDistance: Distance = {
   is_marked: true,
 };
 
-// 6エンド×6射の距離の、エンド3に3本が記録されている(記録済みの最大のエンドは3、1エンドの最大の矢数は3)。
+// 6エンド×6射の距離の、エンド3に3本が記録されている(記録済みの最大のエンドは3、1エンドの最大の射数/エンドは3)。
 const recordedShots: Shot[] = [1, 2, 3].map((n) => ({
   id: `shot-${n}`,
   distance_id: "distance-1",
@@ -124,7 +124,7 @@ describe("DistanceEditFields", () => {
 
   describe("表示", () => {
     describe("roundFormatがfield以外の場合", () => {
-      it("Marked/Unmarkedの切り替えを表示しない", () => {
+      it("Marked/Unmarkedのドロップダウンを表示しない", () => {
         // Given
         // When
         setup({ roundFormat: "outdoor" });
@@ -134,29 +134,39 @@ describe("DistanceEditFields", () => {
           screen.queryByTestId("distance-config-marked-1"),
         ).not.toBeInTheDocument();
         expect(
-          screen.queryByTestId("distance-config-unmarked-1"),
+          screen.queryByRole("combobox", {
+            name: roundsText("distanceMarkedToggle"),
+          }),
         ).not.toBeInTheDocument();
       });
     });
 
     describe("roundFormatがfieldの場合", () => {
-      it("Marked/Unmarkedの切り替えを表示する", () => {
+      it("名前「Marked / Unmarked」のドロップダウンを表示し、選択肢はMarkedとUnmarkedである", async () => {
         // Given
-        // When
+        const user = userEvent.setup();
         setup({ roundFormat: "field" });
 
+        // When
+        await user.click(
+          screen.getByRole("combobox", {
+            name: roundsText("distanceMarkedToggle"),
+          }),
+        );
+
         // Then
-        expect(
-          screen.getByTestId("distance-config-marked-1"),
-        ).toBeInTheDocument();
-        expect(
-          screen.getByTestId("distance-config-unmarked-1"),
-        ).toBeInTheDocument();
+        const names = (await screen.findAllByRole("option")).map(
+          (option) => option.textContent,
+        );
+        expect(names).toEqual([
+          roundsText("distanceMarked"),
+          roundsText("distanceUnmarked"),
+        ]);
       });
     });
 
     describe("スコアが記録済みの場合", () => {
-      it("的が編集不可になり、本数・エンド数・距離は編集できる", () => {
+      it("的が編集不可になり、射数/エンド・エンド数・距離は編集できる", () => {
         // Given
         // When
         setup({ shots: recordedShots });
@@ -195,7 +205,7 @@ describe("DistanceEditFields", () => {
         expect(onSaved).not.toHaveBeenCalled();
       });
 
-      it("距離・本数・エンド数・Marked/Unmarkedを押してもメッセージは表示されない", async () => {
+      it("距離・射数/エンド・エンド数・Marked/Unmarkedを押してもメッセージは表示されない", async () => {
         // Given
         const user = userEvent.setup();
         setup({ shots: recordedShots, roundFormat: "field" });
@@ -439,6 +449,32 @@ describe("DistanceEditFields", () => {
       });
     });
 
+    describe("Marked/Unmarkedを変える場合", () => {
+      it("フィールドの距離でUnmarkedを選んで保存すると、is_markedだけを変える操作を積む", async () => {
+        // Given
+        const user = userEvent.setup();
+        const { enqueue, procedures } = setup({ roundFormat: "field" });
+        procedures.ids.next.mockReturnValue(EVENT_ID);
+        await user.click(screen.getByTestId("distance-config-marked-1"));
+        await user.click(
+          await screen.findByRole("option", {
+            name: roundsText("distanceUnmarked"),
+          }),
+        );
+
+        // When
+        await user.click(screen.getByTestId("distance-config-save-1"));
+
+        // Then
+        expect(enqueue).toHaveBeenCalledWith({
+          type: "distance.updated",
+          eventId: EVENT_ID,
+          distanceId: "distance-1",
+          changes: { isMarked: false },
+        });
+      });
+    });
+
     describe("入力内容が無効な場合", () => {
       it("各項目のエラーを表示し、onSavedもenqueueも呼ばない", async () => {
         // Given
@@ -468,7 +504,12 @@ describe("DistanceEditFields", () => {
   describe("範囲外の値", () => {
     it.each([
       ["距離(m)", "distance-config-distance-1", "0", DISTANCE_LIMITS.distance],
-      ["本数", "distance-config-arrows-1", "-1", DISTANCE_LIMITS.arrowsPerEnd],
+      [
+        "射数/エンド",
+        "distance-config-arrows-1",
+        "-1",
+        DISTANCE_LIMITS.arrowsPerEnd,
+      ],
       [
         "総エンド数",
         "distance-config-total-ends-1",
@@ -507,7 +548,7 @@ describe("DistanceEditFields", () => {
   describe("上限", () => {
     it.each([
       ["距離(m)", "distance-config-distance-1", DISTANCE_LIMITS.distance],
-      ["本数", "distance-config-arrows-1", DISTANCE_LIMITS.arrowsPerEnd],
+      ["射数/エンド", "distance-config-arrows-1", DISTANCE_LIMITS.arrowsPerEnd],
       ["総エンド数", "distance-config-total-ends-1", DISTANCE_LIMITS.totalEnds],
     ])(
       "%sが上限を超えると、その項目の上限を示す理由を出し、保存せず入力も残す",
@@ -542,7 +583,7 @@ describe("DistanceEditFields", () => {
         DISTANCE_LIMITS.distance,
       ],
       [
-        "本数",
+        "射数/エンド",
         "distance-config-arrows-1",
         "arrows_per_end",
         DISTANCE_LIMITS.arrowsPerEnd,
@@ -644,7 +685,7 @@ describe("DistanceEditFields", () => {
     });
   });
 
-  describe("スコア記録済みの距離の総エンド数・本数", () => {
+  describe("スコア記録済みの距離の総エンド数・射数/エンド", () => {
     async function save(
       user: ReturnType<typeof userEvent.setup>,
       totalEnds: string,
@@ -660,7 +701,7 @@ describe("DistanceEditFields", () => {
       await user.click(screen.getByTestId("distance-config-save-1"));
     }
 
-    it("記録済みの最大のエンド・矢数と同じ値まで減らす保存はできる", async () => {
+    it("記録済みの最大のエンド・射数/エンドと同じ値まで減らす保存はできる", async () => {
       // Given
       const user = userEvent.setup();
       const { onSaved, enqueue, procedures } = setup({ shots: recordedShots });
@@ -687,7 +728,7 @@ describe("DistanceEditFields", () => {
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
 
-    it("記録済みの矢が収まらない値は、総エンド数の下に理由を出し、保存せず入力も残す。本数からも理由を参照する", async () => {
+    it("記録済みの矢が収まらない値は、総エンド数の下に理由を出し、保存せず入力も残す。射数/エンドからも理由を参照する", async () => {
       // Given
       const user = userEvent.setup();
       const { onSaved, enqueue } = setup({ shots: recordedShots });
@@ -1263,5 +1304,36 @@ describe("DistanceEditFields", () => {
       expect(onOpenChange).not.toHaveBeenCalled();
       expect(enqueue).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("DistanceEditFields 初期フォーカス", () => {
+  it("開くと先頭が入力欄でも、入力欄でなくダイアログがフォーカスを持つ", async () => {
+    // Given
+
+    // When
+    setup();
+
+    // Then
+    const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(document.activeElement).toBe(dialog));
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(dialog.querySelector("input")).not.toHaveFocus();
+  });
+});
+
+describe("TargetFacePicker 初期フォーカス", () => {
+  it("的の選択を開くと、最前面のダイアログがフォーカスを持つ", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
+
+    // When
+    await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+    // Then
+    const dialogs = await screen.findAllByRole("dialog");
+    const picker = dialogs[dialogs.length - 1];
+    await waitFor(() => expect(document.activeElement).toBe(picker));
   });
 });
