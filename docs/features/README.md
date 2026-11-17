@@ -74,7 +74,8 @@
 | rounds | completion | ラウンドの入力を完了にする | 点数一覧・ラウンド詳細 |
 | rounds | delete | ラウンドを削除する | 点数一覧・ラウンド詳細 |
 | rounds | sync | 記録を失わず同期する | RDBMS・データ基盤 |
-| app | navigation | 迷わず移動する | 最小限の紹介画面、基本テーマ |
+| app | introduction | やりたいことが実現できるかを知り、記録を始める | 最小限の紹介画面、機能紹介 |
+| app | navigation | 迷わず移動する | 基本テーマ |
 | app | offline-pwa | アプリとして入れて、オフラインでも使う | PWA・オフライン点数記録 |
 | app | settings | 今の画面を離れずに、アカウント設定などを一か所で確認・変更する | ユーザー設定・ログ収集 |
 
@@ -114,8 +115,9 @@ flowchart TD
 
     %% ユーザー操作による遷移
     Logo -->|クリック| Landing
-    Landing -->|紹介画面の開始ボタン（未認証）| SignUp
-    Landing -->|紹介画面の開始ボタン（認証済み）| Rounds
+    Landing -->|「記録を始める」・ヘッダーのサインアップ（未認証）| SignUp
+    Landing -->|ヘッダーのサインイン（未認証）| SignIn
+    Landing -->|「記録を始める」・ヘッダーのサインイン・サインアップ（認証済み）| Rounds
     SignIn -->|「パスワードをお忘れですか」| ResetPass
     SignIn -->|「サインアップ」リンク| SignUp
     SignIn -->|サインイン成功| Rounds

@@ -159,6 +159,26 @@ describe("proxy", () => {
       );
     });
 
+    it.each([SIGN_IN_PATH, SIGN_UP_PATH])(
+      "認証済みで遷移元のない%sを開くと、ホームへリダイレクトする",
+      async (path) => {
+        // Given
+        db.getClaims.mockResolvedValue({
+          data: { claims: { sub: "user-1" } },
+          error: null,
+        });
+
+        // When
+        const request = new NextRequest(`https://app.example.com${path}`);
+        const response = await proxy(request);
+
+        // Then
+        expect(response.headers.get("location")).toBe(
+          `https://app.example.com${ROUNDS_PATH}`,
+        );
+      },
+    );
+
     it("認証済みで一覧の経路を開くと、リダイレクトせず、セッションの更新の応答を返す", async () => {
       // Given
       db.getClaims.mockResolvedValue({
