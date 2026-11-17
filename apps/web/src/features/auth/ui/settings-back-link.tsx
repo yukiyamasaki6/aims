@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { SETTINGS_ACCOUNT_HASH } from "@/routes";
 
 const CLASS_NAME =
-  "inline-flex w-fit items-center gap-1 p-1.5 text-muted-foreground text-sm";
+  "inline-flex w-fit items-center gap-0.5 py-1 pl-2 pr-1.5 text-muted-foreground text-sm";
 
 // 設定パネルの分類「アカウント」へ戻るリンク。押下は既定の動作を止めて、onBack(設定パネルの移る操作)を呼ぶ。
 // disabledの間は、リンクではない要素にして、押下もフォーカスも受けない。
@@ -18,7 +18,7 @@ export function SettingsBackLink({
   const t = useTranslations("auth");
   const content = (
     <>
-      <ChevronLeft className="size-4" />
+      <ChevronLeft className="h-6 w-4" preserveAspectRatio="xMidYMid slice" />
       {t("back")}
     </>
   );

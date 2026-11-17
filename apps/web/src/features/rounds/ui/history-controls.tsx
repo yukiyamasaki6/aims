@@ -40,7 +40,7 @@ export function HistoryControls({
       <svg
         aria-hidden="true"
         viewBox="0 0 24 24"
-        className="size-5"
+        className="size-6"
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
@@ -51,7 +51,7 @@ export function HistoryControls({
       </svg>
       {!isDefaultHistoryCondition(condition) && (
         <span
-          className="absolute top-1 right-1 size-2.5 rounded-full bg-primary ring-2 ring-card"
+          className="absolute top-0.5 right-0.5 size-2.5 rounded-full bg-primary ring-2 ring-card"
           data-testid="history-controls-active"
         >
           <span className="sr-only">{t("historyFilterActive")}</span>
