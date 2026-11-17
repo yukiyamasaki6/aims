@@ -2,7 +2,13 @@
 
 import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { type MouseEvent, type ReactNode, useCallback, useState } from "react";
+import {
+  type MouseEvent,
+  type ReactNode,
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { SETTINGS_ACCOUNT_HASH } from "@/routes";
@@ -58,6 +64,7 @@ export function SettingsPanel({
   const move = (next: SettingsView) => {
     if (!busy) onMove(next);
   };
+  const closeRef = useRef<HTMLButtonElement>(null);
   const close = () => {
     if (!busy) onClose();
   };
@@ -73,7 +80,9 @@ export function SettingsPanel({
         if (!open) close();
       }}
     >
+      {/* 例外: 入力欄でなく、閉じる操作へフォーカスを移す(app/open-focus) */}
       <DialogContent
+        focusTarget={closeRef}
         finalFocus={false}
         className="flex flex-col gap-0 overflow-hidden p-0 max-md:inset-0 max-md:h-full max-md:max-h-none max-md:w-full max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none max-md:border-0 md:h-[85vh] md:max-w-3xl"
       >
@@ -82,6 +91,7 @@ export function SettingsPanel({
             {t("title")}
           </DialogTitle>
           <button
+            ref={closeRef}
             type="button"
             onClick={close}
             disabled={busy}

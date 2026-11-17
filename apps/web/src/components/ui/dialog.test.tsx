@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it } from "vitest";
 import { Dialog, DialogContent, DialogTitle } from "./dialog";
 
@@ -102,6 +103,105 @@ describe("DialogContent", () => {
         },
       );
     });
+  });
+});
+
+describe("DialogContent 初期フォーカス", () => {
+  it("先頭が入力欄でも、入力欄でなくポップアップへフォーカスする", async () => {
+    // Given
+
+    // When
+    render(
+      <Dialog open>
+        <DialogContent>
+          <input aria-label="名前" />
+        </DialogContent>
+      </Dialog>,
+    );
+
+    // Then
+    const dialog = screen.getByRole("dialog");
+    // Base UIはフォーカスを開いた後の描画で移す。
+    await waitFor(() => expect(document.activeElement).toBe(dialog));
+    expect(dialog).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByLabelText("名前")).not.toHaveFocus();
+  });
+
+  it("initialFocusを指定した場合、指定先へフォーカスする", async () => {
+    // Given
+    const target = createRef<HTMLButtonElement>();
+
+    // When
+    render(
+      <Dialog open>
+        <DialogContent initialFocus={target}>
+          <input aria-label="名前" />
+          <button type="button" ref={target}>
+            閉じる
+          </button>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    // Then
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "閉じる" })).toHaveFocus(),
+    );
+  });
+
+  it("focusTargetを指定した場合、ポップアップでなく指定先へフォーカスする", async () => {
+    // Given
+    const target = createRef<HTMLButtonElement>();
+
+    // When
+    render(
+      <Dialog open>
+        <DialogContent focusTarget={target}>
+          <input aria-label="名前" />
+          <button type="button" ref={target}>
+            閉じる
+          </button>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    // Then
+    expect(screen.getByRole("button", { name: "閉じる" })).toHaveFocus();
+    expect(screen.getByLabelText("名前")).not.toHaveFocus();
+  });
+
+  it("開いた直後に、遅れて奪われず、同期でポップアップがフォーカスを持つ", () => {
+    // Given
+
+    // When
+    render(
+      <Dialog open>
+        <DialogContent>
+          <input aria-label="名前" />
+        </DialogContent>
+      </Dialog>,
+    );
+
+    // Then
+    expect(document.activeElement).toBe(screen.getByRole("dialog"));
+  });
+
+  it("呼び出し側がrefを渡しても、ポップアップへのフォーカスが外れない", async () => {
+    // Given
+    const ref = createRef<HTMLDivElement>();
+
+    // When
+    render(
+      <Dialog open>
+        <DialogContent ref={ref}>
+          <input aria-label="名前" />
+        </DialogContent>
+      </Dialog>,
+    );
+
+    // Then
+    expect(ref.current).toBe(screen.getByRole("dialog"));
+    await waitFor(() => expect(document.activeElement).toBe(ref.current));
   });
 });
 

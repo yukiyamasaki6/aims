@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -332,5 +332,21 @@ describe("RoundConfigPanel", () => {
         expect(enqueue).not.toHaveBeenCalled();
       },
     );
+  });
+});
+
+describe("RoundConfigPanel 初期フォーカス", () => {
+  it("開くと名前の入力欄でなく、Triggerなしのダイアログがフォーカスを持つ", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
+
+    // When
+    await user.click(screen.getByTestId("round-config-summary"));
+
+    // Then
+    const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(document.activeElement).toBe(dialog));
+    expect(screen.getByTestId("round-config-name")).not.toHaveFocus();
   });
 });
