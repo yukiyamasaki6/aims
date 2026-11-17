@@ -53,7 +53,7 @@ export function RoundsHistory() {
   );
 }
 
-type FilterSession = { id: number; input: HistoryInput; open: boolean };
+type FilterSession = { id: number; open: boolean };
 
 // 閉じたセッションから遅れて届く検索・格納通知を無視する。
 function useHistoryFilterSession(input: HistoryInput | null) {
@@ -72,7 +72,7 @@ function useHistoryFilterSession(input: HistoryInput | null) {
     if (!input) return;
     const id = ++sequence.current;
     activeId.current = id;
-    setSession({ id, input, open: true });
+    setSession({ id, open: true });
   };
   const collapse = (id: number | undefined) => {
     setSession((current) =>
@@ -95,7 +95,6 @@ function HistoryFrame({
   children: ReactNode;
 }) {
   const t = useTranslations("rounds");
-  const formId = useId();
   const panelId = useId();
   const filter = useHistoryFilterSession(input);
   const { session, activeId, buttonRef, close, toggle, collapse } = filter;
@@ -119,15 +118,14 @@ function HistoryFrame({
         <HistoryFilterPanel
           open={session?.open ?? false}
           panelId={panelId}
-          formId={formId}
           onClose={close}
           onCollapsed={() => collapse(session?.id)}
         >
-          {session && (
+          {session && input && (
             <HistoryFilterForm
               key={session.id}
-              input={session.input}
-              formId={formId}
+              input={input}
+              onClose={close}
               onApply={(next) => {
                 if (activeId.current !== session.id) return;
                 onApply?.(next);

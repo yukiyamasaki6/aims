@@ -16,10 +16,12 @@ import { installFakeViewport } from "@/lib/viewport/fake-viewport-test-helpers";
 import { createFakeHistoryViewMemory } from "../application/fake-history-view-memory-test-helpers";
 import {
   DEFAULT_HISTORY_CONDITION,
+  DEFAULT_HISTORY_INPUT,
   DEFAULT_HISTORY_VIEW_STATE,
   type HistoryCondition,
   type HistoryDistanceError,
   type HistoryDistanceRow,
+  type HistoryInput,
   type HistoryRangeError,
   historyViewStateOf,
 } from "../domain/history-view-state";
@@ -162,8 +164,10 @@ function shownNames(): (string | undefined)[] {
     );
 }
 
-function remember(state: { condition: HistoryCondition }) {
-  memory = createFakeHistoryViewMemory({ input: state.condition });
+function remember(state: { condition: Partial<HistoryInput> }) {
+  memory = createFakeHistoryViewMemory({
+    input: { ...DEFAULT_HISTORY_INPUT, ...state.condition },
+  });
   procedures.historyViewMemory = memory.memory;
 }
 
@@ -191,6 +195,23 @@ function rangeInput(name: string) {
 // 下書きを入れるだけで、欄は離れない。
 function draftRange(name: string, value: string) {
   fireEvent.change(rangeInput(name), { target: { value } });
+}
+
+// 表示単位の選択肢。
+function unitRadio(unit: "round" | "distance") {
+  return screen.getByRole("radio", {
+    name: roundsText(
+      unit === "round" ? "historyUnitRound" : "historyUnitDistance",
+    ),
+  });
+}
+
+// 表示単位の選択肢を1回押す。
+async function chooseUnit(
+  user: ReturnType<typeof userEvent.setup>,
+  unit: "round" | "distance",
+) {
+  await user.click(unitRadio(unit));
 }
 
 // 適用を押して、編集中の値の検証と確定を起こす。
@@ -521,7 +542,7 @@ describe("RoundsHistory", () => {
       },
     );
 
-    it("パネルには、リセットと検索の操作行が1組だけあり、先頭の条件より前に並ぶ", async () => {
+    it("パネルには、リセットと検索の下部の行が1組だけあり、リセット、検索の順に並び、入力欄より後ろにある", async () => {
       // Given
       await renderOpenedHistory();
 
@@ -537,12 +558,30 @@ describe("RoundsHistory", () => {
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       expect(
-        applies[0].compareDocumentPosition(rangeInput("dateFrom")) &
+        rangeInput("dateFrom").compareDocumentPosition(resets[0]) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     });
 
-    it("操作行の表示は、指定された日本語「リセット」と「検索」である", async () => {
+    it.each(["round", "distance"] as const)(
+      "開くと、表示単位の選択中の項目(%s)にフォーカスが移る",
+      async (unit) => {
+        // Given
+        remember({ condition: { unit } });
+        fetchResolves(unit === "round" ? varied : distances);
+        renderHistory();
+        await screen.findAllByText(unit === "round" ? "夜練習" : "午前練習");
+        const user = userEvent.setup();
+
+        // When
+        await openFilter(user);
+
+        // Then
+        expect(unitRadio(unit)).toHaveFocus();
+      },
+    );
+
+    it("下部の行の表示は、指定された日本語「リセット」と「検索」である", async () => {
       // Given
       await renderOpenedHistory();
 
@@ -1370,7 +1409,7 @@ describe("RoundsHistory", () => {
       const funnelLook = () => toggle().className;
 
       it.each(orientations)(
-        "%sで開くと、操作行にフォーム外の通常のボタン「閉じる」が1つだけあり、リセット・検索の後ろに並ぶ",
+        "%sで開くと、先頭の行に通常のボタン「閉じる」が1つだけあり、下部の行はリセット、検索の順に並ぶ",
         async (_orientation, landscape) => {
           // Given
           viewport.setLandscape(landscape);
@@ -1389,12 +1428,10 @@ describe("RoundsHistory", () => {
           ).toHaveLength(1);
           const close = closeButton();
           expect(close).toHaveAttribute("type", "button");
-          expect(close.closest("form")).toBeNull();
-          expect(close).not.toHaveAttribute("form");
           expect(isBefore(filterAction("reset"), filterAction("apply"))).toBe(
             true,
           );
-          expect(isBefore(filterAction("apply"), close)).toBe(true);
+          expect(isBefore(close, filterAction("reset"))).toBe(true);
         },
       );
 
@@ -1609,7 +1646,7 @@ describe("RoundsHistory", () => {
     });
 
     describe("中身と順序", () => {
-      it("開いた中に、種別、弓種、ラウンド構成、期間、得点、距離単位で表示、リセット、適用が出る", async () => {
+      it("開いた中に、表示単位、種別、弓種、ラウンド構成、期間、得点、リセット、適用が出る", async () => {
         // Given
         fetchResolves(varied);
         const user = userEvent.setup();
@@ -1626,7 +1663,9 @@ describe("RoundsHistory", () => {
           screen.getByTestId("history-filter-distance-add"),
           rangeInput("dateFrom"),
           rangeInput("scoreMin"),
-          screen.getByTestId("history-unit-toggle"),
+          screen.getByRole("radiogroup", {
+            name: roundsText("historyUnitLabel"),
+          }),
           filterAction("reset"),
           filterAction("apply"),
         ];
@@ -1635,7 +1674,7 @@ describe("RoundsHistory", () => {
         }
       });
 
-      it("初期値は、種別・弓種が指定なし、日付順が新しい順、得点順が指定なし、距離単位で表示がオフで、各欄が項目名を持つ", async () => {
+      it("初期値は、種別・弓種が指定なし、日付順が新しい順、得点順が指定なし、表示単位が「ラウンド」で、各欄が項目名を持つ", async () => {
         // Given
         fetchResolves(varied);
         const user = userEvent.setup();
@@ -1659,8 +1698,11 @@ describe("RoundsHistory", () => {
           roundsText("historyFilterNone"),
         );
         expect(
-          screen.getByRole("switch", {
-            name: roundsText("historyShowDistances"),
+          screen.getByRole("radio", { name: roundsText("historyUnitRound") }),
+        ).toHaveAttribute("aria-checked", "true");
+        expect(
+          screen.getByRole("radio", {
+            name: roundsText("historyUnitDistance"),
           }),
         ).toHaveAttribute("aria-checked", "false");
         for (const name of [
@@ -1781,7 +1823,6 @@ describe("RoundsHistory", () => {
         ]) {
           expect(text).not.toContain(word);
         }
-        expect(screen.queryByTestId("history-unit-round")).toBeNull();
         expect(screen.queryByTestId("history-sort-key-score")).toBeNull();
       });
     });
@@ -2119,21 +2160,23 @@ describe("RoundsHistory", () => {
         expect(rangeInput("scoreMin")).toHaveValue("");
       });
 
-      it("リセットすると、編集中の値(エラー、ラウンド構成と選んだ距離を含む)が既定に戻り、要約が消えて「距離を追加」だけになり、パネルは閉じず、入力値も取得も変わらない", async () => {
+      it("リセットすると、編集中の値(エラー、両単位の得点の範囲、ラウンド構成と選んだ距離を含む)が既定に戻り、要約が消えて「距離を追加」だけになり、パネルは閉じず、入力値も取得も変わらない", async () => {
         // Given
         remember({
           condition: {
             ...DEFAULT_HISTORY_CONDITION,
             format: "indoor",
             scoreMin: 100,
+            distanceScoreMin: 20,
             distances: [distanceRow(50)],
           },
         });
         const user = await renderOpenedHistory();
         const fetches = fake.store.loadList.mock.calls.length;
         const before = memory.stored();
-        await user.click(screen.getByTestId("history-unit-toggle"));
+        await chooseUnit(user, "distance");
         await selectDistance(user, "30");
+        draftRange("scoreMin", "9");
         draftRange("scoreMax", "1");
         applyFilter();
 
@@ -2145,19 +2188,21 @@ describe("RoundsHistory", () => {
         expect(selectedOf(FORMAT_TEST_ID)).toBe(
           roundsText("historyFilterNone"),
         );
+        expect(unitRadio("round")).toHaveAttribute("aria-checked", "true");
         for (const field of ["dateFrom", "dateTo", "scoreMin", "scoreMax"]) {
           expect(rangeInput(field)).toHaveValue("");
         }
+        await chooseUnit(user, "distance");
+        for (const field of ["scoreMin", "scoreMax"]) {
+          expect(rangeInput(field)).toHaveValue("");
+        }
+        await chooseUnit(user, "round");
         expect(screen.queryByTestId("history-filter-distance-0")).toBeNull();
         expect(screen.getByTestId("history-filter-distance-add")).toBeVisible();
         expect(
           screen.queryByTestId("history-filter-distance-select"),
         ).toBeNull();
         expect(screen.queryByTestId("history-filter-distance-row")).toBeNull();
-        expect(screen.getByTestId("history-unit-toggle")).toHaveAttribute(
-          "aria-checked",
-          "false",
-        );
         expect(screen.queryByRole("alert")).toBeNull();
         expect(memory.stored()).toEqual(before);
         expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
@@ -2186,13 +2231,13 @@ describe("RoundsHistory", () => {
       });
     });
 
-    describe("距離単位で表示と絞り込む距離", () => {
-      const unitToggle = () => screen.getByTestId("history-unit-toggle");
+    describe("表示単位と絞り込む距離", () => {
       const selectButton = () =>
         screen.queryByTestId("history-filter-distance-select");
       const summary = () => screen.queryByTestId("history-filter-distance-row");
+      const lastCondition = () => fake.store.loadList.mock.calls.at(-1)?.[0];
 
-      it("「距離単位で表示」のスイッチは、見出しを名前に持ち、状態をaria-checkedで伝え、「一覧の単位」のボタン群は無い", async () => {
+      it("表示単位は「ラウンド」「距離」を並べて常に見せ、選択中の単位をaria-checkedで伝え、「一覧の単位」のボタン群は無い", async () => {
         // Given
 
         // When
@@ -2200,48 +2245,351 @@ describe("RoundsHistory", () => {
 
         // Then
         expect(
-          screen.getByRole("switch", {
-            name: roundsText("historyShowDistances"),
+          screen.getByRole("radiogroup", {
+            name: roundsText("historyUnitLabel"),
           }),
-        ).toBe(unitToggle());
-        expect(unitToggle()).toHaveAttribute("aria-checked", "false");
-        expect(screen.queryByTestId("history-unit-distance")).toBeNull();
+        ).toBeVisible();
+        expect(screen.getAllByRole("radio")).toHaveLength(2);
+        expect(unitRadio("round")).toHaveAttribute("aria-checked", "true");
+        expect(unitRadio("distance")).toHaveAttribute("aria-checked", "false");
       });
 
-      it("距離単位をオフへ戻すと距離の選択を隠し適用前の取得を起こさない", async () => {
+      it("「距離」を1回押すと単位が切り替わり、ラウンド構成の欄が距離の指定の欄に入れ替わる", async () => {
+        // Given
+        const user = await renderOpenedHistory();
+        const before = {
+          add: screen.queryByTestId("history-filter-distance-add"),
+          select: selectButton(),
+        };
+
+        // When
+        await chooseUnit(user, "distance");
+
+        // Then
+        expect(before.add).not.toBeNull();
+        expect(before.select).toBeNull();
+        expect(unitRadio("distance")).toHaveAttribute("aria-checked", "true");
+        expect(screen.queryByTestId("history-filter-distance-add")).toBeNull();
+        expect(selectButton()?.textContent).toBe(
+          roundsText("historyFilterDistanceSelect"),
+        );
+      });
+
+      it("距離単位の得点の欄は項目名が「最低点」「最高点」のままで、「小計」の語を付けない", async () => {
+        // Given
+        const user = await renderOpenedHistory();
+
+        // When
+        await chooseUnit(user, "distance");
+
+        // Then
+        expect(
+          screen.getByLabelText(roundsText("historyFilterScoreMin")),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByLabelText(roundsText("historyFilterScoreMax")),
+        ).toBeInTheDocument();
+        expect(document.body.textContent).not.toContain("小計");
+      });
+
+      it("得点の範囲は単位ごとに保たれ、切り替えても他方の値は変わらない", async () => {
+        // Given
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "300");
+
+        // When
+        await chooseUnit(user, "distance");
+        const distanceInitial = (rangeInput("scoreMin") as HTMLInputElement)
+          .value;
+        draftRange("scoreMin", "50");
+        await chooseUnit(user, "round");
+
+        // Then
+        expect(distanceInitial).toBe("");
+        expect(rangeInput("scoreMin")).toHaveValue("300");
+        await chooseUnit(user, "distance");
+        expect(rangeInput("scoreMin")).toHaveValue("50");
+      });
+
+      it("検索で表示中の単位の得点の範囲だけを確定し、もう一方は入力値のままにし、その単位を表示して検索すると反映する", async () => {
+        // Given
+        viewport.setLandscape(true);
+        remember({ condition: { scoreMin: 1, distanceScoreMin: 2 } });
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "300");
+        await chooseUnit(user, "distance");
+        draftRange("scoreMin", "50");
+
+        // When
+        await user.click(filterAction("apply"));
+        const afterDistance = memory.stored().input;
+        await chooseUnit(user, "round");
+        await user.click(filterAction("apply"));
+        const afterRound = memory.stored().input;
+
+        // Then
+        expect([
+          afterDistance.scoreMin,
+          afterDistance.distanceScoreMin,
+        ]).toEqual([1, 50]);
+        expect([afterRound.scoreMin, afterRound.distanceScoreMin]).toEqual([
+          300, 50,
+        ]);
+      });
+
+      it("検索で範囲のエラーが出た後に単位を切り替えるとエラーが消え、入力した文字は残り、元の単位に戻して検索するとまたエラーが出る", async () => {
+        // Given
+        viewport.setLandscape(true);
+        const user = await renderOpenedHistory();
+        draftRange("scoreMin", "9");
+        draftRange("scoreMax", "1");
+        await user.click(filterAction("apply"));
+        const errorBefore = screen.queryByRole("alert");
+
+        // When
+        await chooseUnit(user, "distance");
+        const errorOnOtherUnit = screen.queryByRole("alert");
+        await chooseUnit(user, "round");
+        const errorAfterReturn = screen.queryByRole("alert");
+        const kept = [
+          (rangeInput("scoreMin") as HTMLInputElement).value,
+          (rangeInput("scoreMax") as HTMLInputElement).value,
+        ];
+        await user.click(filterAction("apply"));
+
+        // Then
+        expect(errorBefore).not.toBeNull();
+        expect(errorOnOtherUnit).toBeNull();
+        expect(errorAfterReturn).toBeNull();
+        expect(kept).toEqual(["9", "1"]);
+        expect(screen.queryByRole("alert")).not.toBeNull();
+      });
+
+      it("検索で期間と得点のエラーが出た後に単位を切り替えると、得点のエラーだけが消え、期間のエラーは残る", async () => {
+        // Given
+        viewport.setLandscape(true);
+        const user = await renderOpenedHistory();
+        draftRange("dateFrom", "2026-06-01");
+        draftRange("dateTo", "2026-05-01");
+        draftRange("scoreMin", "9");
+        draftRange("scoreMax", "1");
+        await user.click(filterAction("apply"));
+        const before = {
+          date: screen.queryByTestId("history-filter-error-dateOrder"),
+          score: screen.queryByTestId("history-filter-error-scoreOrder"),
+        };
+
+        // When
+        await chooseUnit(user, "distance");
+
+        // Then
+        expect(before.date).not.toBeNull();
+        expect(before.score).not.toBeNull();
+        expect(
+          screen.queryByTestId("history-filter-error-dateOrder"),
+        ).not.toBeNull();
+        expect(
+          screen.queryByTestId("history-filter-error-scoreOrder"),
+        ).toBeNull();
+      });
+
+      it("表示していない単位の得点の入力が不正でも、検索は成功し、その単位の入力値は変わらない", async () => {
+        // Given
+        viewport.setLandscape(true);
+        remember({ condition: { distanceScoreMin: 2 } });
+        const user = await renderOpenedHistory();
+        await chooseUnit(user, "distance");
+        draftRange("scoreMin", "9");
+        draftRange("scoreMax", "1");
+        await chooseUnit(user, "round");
+        draftRange("scoreMin", "300");
+
+        // When
+        await user.click(filterAction("apply"));
+
+        // Then
+        expect(screen.queryByRole("alert")).toBeNull();
+        expect(memory.stored().input.scoreMin).toBe(300);
+        expect(memory.stored().input.distanceScoreMin).toBe(2);
+      });
+
+      it("距離単位で検索すると、取得の条件は距離単位の得点の範囲だけを持ち、ラウンド構成を渡さない", async () => {
+        // Given
+        remember({
+          condition: {
+            scoreMin: 300,
+            scoreMax: 600,
+            distanceScoreMin: 20,
+            distanceScoreMax: 90,
+            distances: [distanceRow(50)],
+          },
+        });
+        const user = await renderOpenedHistory();
+        await chooseUnit(user, "distance");
+
+        // When
+        applyFilter();
+
+        // Then
+        expect(lastCondition()).toEqual({
+          ...DEFAULT_HISTORY_CONDITION,
+          unit: "distance",
+          scoreMin: 20,
+          scoreMax: 90,
+          distances: [],
+        });
+      });
+
+      it("ラウンド単位で検索すると、取得の条件はラウンド単位の得点の範囲だけを持ち、距離の指定を渡さない", async () => {
+        // Given
+        remember({
+          condition: {
+            unit: "distance",
+            scoreMin: 300,
+            scoreMax: 600,
+            distanceScoreMin: 20,
+            distanceScoreMax: 90,
+            distanceRow: distanceRow(50),
+          },
+        });
+        fetchResolves(distances);
+        renderHistory();
+        await screen.findAllByText("午前練習");
+        const user = userEvent.setup();
+        await openFilter(user);
+        await chooseUnit(user, "round");
+
+        // When
+        applyFilter();
+
+        // Then
+        expect(lastCondition()).toEqual({
+          ...DEFAULT_HISTORY_CONDITION,
+          unit: "round",
+          scoreMin: 300,
+          scoreMax: 600,
+          distanceRow: null,
+        });
+      });
+
+      it("距離単位で、ラウンド単位の得点の範囲だけを変えて検索しても、取得し直さず、印も変わらない", async () => {
+        // Given
+        viewport.setLandscape(true);
+        remember({ condition: { unit: "distance" } });
+        fetchResolves(distances);
+        renderHistory();
+        await screen.findAllByText("午前練習");
+        const user = userEvent.setup();
+        await openFilter(user);
+        const fetches = fake.store.loadList.mock.calls.length;
+        const markBefore = mark();
+        await chooseUnit(user, "round");
+        draftRange("scoreMin", "300");
+        await chooseUnit(user, "distance");
+
+        // When
+        await user.click(filterAction("apply"));
+
+        // Then
+        expect(memory.stored().input.scoreMin).toBeNull();
+        expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
+        expect(mark()).toBe(markBefore);
+      });
+
+      it("距離単位で、ラウンド構成だけを変えて検索しても、入力値は更新して記憶へ書くが、取得し直さず、印も変わらない", async () => {
+        // Given
+        viewport.setLandscape(true);
+        remember({ condition: { unit: "distance" } });
+        fetchResolves(distances);
+        renderHistory();
+        await screen.findAllByText("午前練習");
+        const user = userEvent.setup();
+        await openFilter(user);
+        const fetches = fake.store.loadList.mock.calls.length;
+        const markBefore = mark();
+        await chooseUnit(user, "round");
+        await addDistance(user, "50");
+        await chooseUnit(user, "distance");
+
+        // When
+        await user.click(filterAction("apply"));
+
+        // Then
+        expect(memory.stored().input.distances).toEqual([distanceRow(50)]);
+        expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
+        expect(mark()).toBe(markBefore);
+      });
+
+      it("ラウンド単位で、距離の指定と距離単位の得点の範囲だけを指定して適用した状態は、印が出ない", async () => {
+        // Given
+        remember({
+          condition: {
+            unit: "round",
+            distanceScoreMin: 20,
+            distanceRow: distanceRow(50),
+          },
+        });
+
+        // When
+        fetchResolves(varied);
+        renderHistory();
+        await screen.findByText("夜練習");
+
+        // Then
+        expect(mark()).toBeNull();
+      });
+
+      it("保存した単位ごとの得点の範囲が、開いたときに表示中の単位の欄へ入り、切り替えると他方の値が出る", async () => {
+        // Given
+        remember({
+          condition: { scoreMin: 300, scoreMax: 600, distanceScoreMin: 20 },
+        });
+        const user = await renderOpenedHistory();
+
+        // When
+        const roundValues = [
+          (rangeInput("scoreMin") as HTMLInputElement).value,
+          (rangeInput("scoreMax") as HTMLInputElement).value,
+        ];
+        await chooseUnit(user, "distance");
+
+        // Then
+        expect(roundValues).toEqual(["300", "600"]);
+        expect(rangeInput("scoreMin")).toHaveValue("20");
+        expect(rangeInput("scoreMax")).toHaveValue("");
+      });
+
+      it("距離単位をラウンドへ戻すと距離の選択を隠し、適用前の取得を起こさない", async () => {
         // Given
         const user = await renderOpenedHistory();
         const fetches = fake.store.loadList.mock.calls.length;
-        const off = selectButton();
 
-        await user.click(unitToggle());
-        const checkedOn = unitToggle().getAttribute("aria-checked");
+        await chooseUnit(user, "distance");
         const selectLabelOn = selectButton()?.textContent;
         const fetchesOn = fake.store.loadList.mock.calls.length;
 
         // When
-        await user.click(unitToggle());
+        await chooseUnit(user, "round");
 
         // Then
-        expect(off).toBeNull();
-        expect(checkedOn).toBe("true");
         expect(selectLabelOn).toBe(roundsText("historyFilterDistanceSelect"));
         expect(fetchesOn).toBe(fetches);
         expect(selectButton()).toBeNull();
       });
 
-      it("距離単位からラウンド単位に戻して適用するとラウンド条件を取得する", async () => {
+      it("距離単位で検索した後、ラウンドへ戻して検索するとラウンド条件を取得する", async () => {
         // Given
         const user = await renderOpenedHistory();
-        await user.click(unitToggle());
+        await chooseUnit(user, "distance");
 
         applyFilter();
 
-        const distanceCondition = fake.store.loadList.mock.calls.at(-1)?.[0];
+        const distanceCondition = lastCondition();
         await waitFor(() => expect(panel()).toBeNull());
         await openFilter(user);
-        const checkedAfterReopen = unitToggle().getAttribute("aria-checked");
-        await user.click(unitToggle());
+        const distanceChecked =
+          unitRadio("distance").getAttribute("aria-checked");
+        await chooseUnit(user, "round");
 
         // When
         applyFilter();
@@ -2251,7 +2599,7 @@ describe("RoundsHistory", () => {
           ...DEFAULT_HISTORY_CONDITION,
           unit: "distance",
         });
-        expect(checkedAfterReopen).toBe("true");
+        expect(distanceChecked).toBe("true");
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
           DEFAULT_HISTORY_CONDITION,
           null,
@@ -2259,29 +2607,29 @@ describe("RoundsHistory", () => {
         );
       });
 
-      it("オフにすると、選んだ距離の要約は隠れるが距離の行は編集中の値に保たれ、オンに戻すと要約が復元される", async () => {
+      it("ラウンドを選ぶと、選んだ距離の要約は隠れるが距離の行は編集中の値に保たれ、距離へ戻すと要約が復元される", async () => {
         // Given
         const user = await renderOpenedHistory();
-        await user.click(unitToggle());
+        await chooseUnit(user, "distance");
         await selectDistance(user, "50");
 
         // When
-        await user.click(unitToggle());
+        await chooseUnit(user, "round");
         const hidden = summary();
-        await user.click(unitToggle());
+        await chooseUnit(user, "distance");
 
         // Then
         expect(hidden).toBeNull();
         expect(summary()).toHaveTextContent("50m");
       });
 
-      it("ラウンド単位で保持した距離は開き直して距離単位へ戻すと要約に復元する", async () => {
+      it("ラウンド単位で保持した距離は、開き直して距離単位へ戻すと要約に復元する", async () => {
         // Given
         const user = await renderOpenedHistory();
         const fetches = fake.store.loadList.mock.calls.length;
-        await user.click(unitToggle());
+        await chooseUnit(user, "distance");
         await selectDistance(user, "50");
-        await user.click(unitToggle());
+        await chooseUnit(user, "round");
 
         applyFilter();
 
@@ -2292,7 +2640,7 @@ describe("RoundsHistory", () => {
         await openFilter(user);
 
         // When
-        await user.click(unitToggle());
+        await chooseUnit(user, "distance");
 
         // Then
         expect(fetchesAfterApply).toBe(fetches);
@@ -2304,26 +2652,22 @@ describe("RoundsHistory", () => {
       it("保持した距離で距離単位を再適用すると取得条件へ戻る", async () => {
         // Given
         remember({
-          condition: {
-            ...DEFAULT_HISTORY_CONDITION,
-            unit: "distance",
-            distanceRow: distanceRow(50),
-          },
+          condition: { unit: "distance", distanceRow: distanceRow(50) },
         });
         fetchResolves(distances);
         renderHistory();
         await screen.findAllByText("午前練習");
         const user = userEvent.setup();
         await openFilter(user);
-        await user.click(unitToggle());
+        await chooseUnit(user, "round");
 
         applyFilter();
 
-        const roundCondition = fake.store.loadList.mock.calls.at(-1)?.[0];
+        const roundCondition = lastCondition();
         const storedRow = memory.stored().input.distanceRow;
         await waitFor(() => expect(panel()).toBeNull());
         await openFilter(user);
-        await user.click(unitToggle());
+        await chooseUnit(user, "distance");
         const restoredSummary = summary()?.textContent;
 
         // When
@@ -2400,7 +2744,7 @@ describe("RoundsHistory", () => {
         expect(rangeInput("scoreMin")).toHaveValue("100");
       });
 
-      it("旧い形の保存値(sortKey=score、unit=distance、filterOpen)は、読み替えられず、既定の入力値で復元され、距離単位で表示はオフである", async () => {
+      it("旧い形の保存値(sortKey=score、unit=distance、filterOpen)は、読み替えられず、既定の入力値で復元され、表示単位は「ラウンド」である", async () => {
         // Given
         // 旧い形を読み替えない規則はdomainで確かめる。ここでは、画面までの接続だけを確かめる。
         memory = createFakeHistoryViewMemory({
@@ -2428,10 +2772,7 @@ describe("RoundsHistory", () => {
           null,
           expect.any(Number),
         );
-        expect(screen.getByTestId("history-unit-toggle")).toHaveAttribute(
-          "aria-checked",
-          "false",
-        );
+        expect(unitRadio("round")).toHaveAttribute("aria-checked", "true");
         expect(selectedOf(SCORE_DIRECTION_TEST_ID)).toBe(
           roundsText("historyFilterNone"),
         );
@@ -2807,7 +3148,7 @@ describe("RoundsHistory", () => {
       // Then
       expect(memory.stored()).toEqual({
         input: {
-          ...DEFAULT_HISTORY_CONDITION,
+          ...DEFAULT_HISTORY_INPUT,
           dateFrom: "2026-05-01",
           scoreMax: 600,
         },
@@ -3593,7 +3934,10 @@ describe("RoundsHistory", () => {
         // Then
         expect(beforeApply).toEqual(DEFAULT_HISTORY_VIEW_STATE);
         expect(memory.stored()).toEqual({
-          input: conditionWith([distanceRow(50, { arrowsPerEnd: 6 })]),
+          input: {
+            ...DEFAULT_HISTORY_INPUT,
+            distances: [distanceRow(50, { arrowsPerEnd: 6 })],
+          },
         });
       });
 
@@ -3762,7 +4106,7 @@ describe("RoundsHistory", () => {
         screen.queryByTestId("history-filter-distance-select");
       const summary = () => screen.queryByTestId("history-filter-distance-row");
 
-      it("単位が距離のときは、距離の行が未指定なら「距離を選択」のボタンだけが出て、追加の入り口は出ない", async () => {
+      it("単位が距離のときは、距離の行が未指定なら「距離を選択」のボタンだけが出て、追加の入り口とラウンド構成の欄は出ない", async () => {
         // Given
 
         // When
@@ -3773,9 +4117,10 @@ describe("RoundsHistory", () => {
           roundsText("historyFilterDistanceSelect"),
         );
         expect(summary()).toBeNull();
+        expect(screen.queryByTestId("history-filter-distance-add")).toBeNull();
         expect(
-          screen.getByText(roundsText("historyFilterDistances")),
-        ).toBeInTheDocument();
+          screen.queryByText(roundsText("historyFilterDistances")),
+        ).toBeNull();
       });
 
       it("単位がラウンドのときは、「距離を選択」も距離の行の要約も出ない", async () => {
@@ -3815,7 +4160,10 @@ describe("RoundsHistory", () => {
           expect.any(Number),
         );
         expect(memory.stored()).toEqual({
-          input: distanceCondition({ distanceRow: distanceRow(50) }),
+          input: {
+            ...DEFAULT_HISTORY_INPUT,
+            ...distanceCondition({ distanceRow: distanceRow(50) }),
+          },
         });
       });
 
@@ -3867,7 +4215,7 @@ describe("RoundsHistory", () => {
         expect(summary()).toBeNull();
       });
 
-      it("距離の構成と距離の行を同時に指定すると、取得の条件に両方が入り、互いの値を混ぜない", async () => {
+      it("距離単位では、ラウンド構成が入力値にあっても取得の条件に入れず、距離の行だけが入り、入力値のラウンド構成は保たれる", async () => {
         // Given
         const user = await renderDistanceUnit({
           distances: [distanceRow(30)],
@@ -3884,13 +4232,11 @@ describe("RoundsHistory", () => {
 
         // Then
         expect(fake.store.loadList).toHaveBeenLastCalledWith(
-          distanceCondition({
-            distances: [distanceRow(30)],
-            distanceRow: distanceRow(70),
-          }),
+          distanceCondition({ distances: [], distanceRow: distanceRow(70) }),
           null,
           expect.any(Number),
         );
+        expect(memory.stored().input.distances).toEqual([distanceRow(30)]);
       });
     });
 

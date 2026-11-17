@@ -48,7 +48,10 @@ test.beforeEach(async ({ page, context }) => {
             id: "22222222-2222-4222-8222-222222222222",
             name: "ブラウザ結合の完了ラウンド",
             round_date: "2026-09-15",
+            format: "outdoor",
+            bow_type: "recurve",
             total: 300,
+            distances: [{ distance: 70, is_marked: true, total: 300 }],
           },
         ]
       : [];
@@ -82,11 +85,11 @@ for (const viewport of [
   test.describe(`${viewport.width}×${viewport.height}`, () => {
     test.use({ viewport });
 
-    test("開くと入力へ移り、Tabで一覧へ移動でき、一覧のEscとクリックで編集を失わない", async ({
+    test("開くと表示単位の選択中の項目へ移り、Tabで一覧へ移動でき、一覧のEscとクリックで編集を失わない", async ({
       page,
     }) => {
       await openFilter(page);
-      await expect(page.getByTestId("history-filter-dateFrom")).toBeFocused();
+      await expect(page.getByTestId("history-unit-round")).toBeFocused();
       await makeError(page);
       const link = page.getByRole("main").getByRole("link").first();
       await link.focus();
@@ -192,7 +195,7 @@ for (const viewport of [
       await expect(score(page)).toHaveValue("");
     });
 
-    test("開閉の状態がヘッダーのボタンと名前付きregionで対応し、操作行は1組だけである", async ({
+    test("開閉の状態がヘッダーのボタンと名前付きregionで対応し、下部の行のリセット・検索は1組だけである", async ({
       page,
     }) => {
       await expect(toggle(page)).toHaveAttribute("aria-expanded", "false");
@@ -208,7 +211,7 @@ for (const viewport of [
       ).toBeVisible();
     });
 
-    test("開くと閉じるボタンがフィルターの操作の1つとしてキーボードで届き、Enterで閉じて未適用値を破棄しフォーカスがフィルターへ戻る", async ({
+    test("開くと閉じるボタンが先頭の行の操作として表示単位の次にキーボードで届き、Enterで閉じて未適用値を破棄しフォーカスがフィルターへ戻る", async ({
       page,
     }) => {
       await openFilter(page);
@@ -216,7 +219,7 @@ for (const viewport of [
         panel(page).getByRole("button", { name: t("historyFilterClose") }),
       ).toHaveCount(1);
       await score(page).fill("123");
-      await action(page, "apply").focus();
+      await page.getByTestId("history-unit-round").focus();
       await page.keyboard.press("Tab");
       await expect(closeButton(page)).toBeFocused();
 
@@ -235,8 +238,10 @@ for (const viewport of [
         for (let i = 0; i < 6; i++) {
           await page.keyboard.press("Tab");
           if (
-            await closeButton(page).evaluate(
-              (e) => e === document.activeElement,
+            await page.evaluate(
+              () =>
+                document.activeElement?.getAttribute("data-testid") ===
+                "history-filter-close",
             )
           )
             return true;
@@ -562,7 +567,7 @@ for (const [start, end] of [
 
 for (const target of [
   "history-filter-bow-type",
-  "history-unit-toggle",
+  "history-unit-distance",
   "history-filter-scoreMin",
 ] as const) {
   test(`Selectを開いたまま${target}を押して編集を続けられる`, async ({
@@ -585,8 +590,11 @@ for (const target of [
       await expect(page.getByTestId(target)).toHaveText(
         t("bowTypeOption.recurve"),
       );
-    } else if (target === "history-unit-toggle") {
-      await expect(page.getByTestId(target)).toBeChecked();
+    } else if (target === "history-unit-distance") {
+      await expect(page.getByTestId(target)).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
     } else {
       await score(page).fill("25");
       await expect(score(page)).toHaveValue("25");
@@ -651,7 +659,10 @@ test("開閉・回転後も一覧をスクロールして続きを重複なく�
             id: `22222222-2222-4222-8222-${String(index).padStart(12, "0")}`,
             name: `継続取得-${index}`,
             round_date: "2026-09-15",
+            format: "outdoor",
+            bow_type: "recurve",
             total: 300,
+            distances: [{ distance: 70, is_marked: true, total: 300 }],
           };
         }),
         has_more: end < 60,
@@ -701,7 +712,10 @@ for (const viewport of [PORTRAIT, LANDSCAPE]) {
               id: `22222222-2222-4222-8222-${String(offset + 1).padStart(12, "0")}`,
               name: `スクロール確認-${offset + 1}`,
               round_date: "2026-09-15",
+              format: "outdoor",
+              bow_type: "recurve",
               total: 300,
+              distances: [{ distance: 70, is_marked: true, total: 300 }],
             })),
             has_more: false,
           },
@@ -714,7 +728,9 @@ for (const viewport of [PORTRAIT, LANDSCAPE]) {
 
     // 余白のクリックと一覧のスクロールでは編集を失わない。
     await page.getByRole("heading", { level: 1 }).click();
-    const last = page.getByText("スクロール確認-12", { exact: true });
+    // 幅によってラウンド名は表示されないため、最後の行を位置でなく並びの末尾で指す。
+    await expect(page.getByRole("listitem")).toHaveCount(12);
+    const last = page.getByRole("listitem").last();
     await last.scrollIntoViewIfNeeded();
     await expect(last).toBeInViewport();
     await expect(panel(page)).toBeVisible();
@@ -752,7 +768,7 @@ for (const viewport of [
   }) => {
     await page.setViewportSize(viewport);
     await openFilter(page);
-    await page.getByTestId("history-unit-toggle").click();
+    await page.getByTestId("history-unit-distance").click();
     await page
       .getByTestId("history-filter-distance-select")
       .scrollIntoViewIfNeeded();
@@ -775,7 +791,10 @@ for (const viewport of [
         .toBe(true);
     }
     await action(page, "reset").click();
-    await expect(page.getByTestId("history-unit-toggle")).not.toBeChecked();
+    await expect(page.getByTestId("history-unit-round")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     await expect(panel(page)).toBeVisible();
     await closeButton(page).click();
     await expect(panel(page)).toBeHidden();
@@ -815,7 +834,7 @@ for (const [start, end] of [
     await expect(
       page.getByTestId("history-distance-dialog-confirm"),
     ).toBeHidden();
-    await page.getByTestId("history-unit-toggle").click();
+    await page.getByTestId("history-unit-distance").click();
     await page.getByTestId("history-filter-distance-select").click();
     await page.getByTestId("history-distance-dialog-distance").fill("30");
     await page.getByTestId("history-distance-dialog-confirm").click();
@@ -851,19 +870,25 @@ for (const [start, end] of [
       ["history-filter-bow-type", t("bowTypeOption.compound")],
     ])
       await expect(page.getByTestId(id)).toHaveText(name);
-    await expect(page.getByTestId("history-filter-distance-0")).toContainText(
-      "18m",
-    );
     await expect(page.getByTestId("history-filter-distance-row")).toContainText(
       "30m",
     );
-    await expect(page.getByTestId("history-unit-toggle")).toBeChecked();
+    await expect(page.getByTestId("history-unit-distance")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     await expect(
       page.getByTestId("history-filter-error-dateOrder"),
     ).toBeVisible();
     await expect(
       page.getByTestId("history-filter-error-scoreInvalid"),
     ).toBeVisible();
+
+    // 「ラウンド」へ切り替えると、距離単位の間は隠れていたラウンド構成が、下書きのまま出る。
+    await page.getByTestId("history-unit-round").click();
+    await expect(page.getByTestId("history-filter-distance-0")).toContainText(
+      "18m",
+    );
     expect(requests).toEqual([]);
   });
 }
@@ -892,7 +917,7 @@ for (const unit of ["round", "distance"] as const) {
   }) => {
     await openFilter(page);
     if (unit === "distance")
-      await page.getByTestId("history-unit-toggle").click();
+      await page.getByTestId("history-unit-distance").click();
     const trigger = page.getByTestId(
       unit === "round"
         ? "history-filter-distance-add"

@@ -668,7 +668,7 @@ test.describe("履歴", () => {
       /五十から三十/,
     ]);
     await openFilter(page);
-    await page.getByTestId("history-unit-toggle").click();
+    await page.getByTestId("history-unit-distance").click();
     await applyFilter(page);
     await expect(cards).toHaveText([
       distanceCard("五十だけ", "2026-05-03", 50, 2),
@@ -742,13 +742,13 @@ test.describe("履歴", () => {
     });
     const requests = trackHistoryRpcRequests(page);
     const cards = page.getByRole("listitem");
-    const unitDistance = page.getByTestId("history-unit-toggle");
+    const unitDistance = page.getByTestId("history-unit-distance");
     const expectedCards = [
       distanceCard("七十から五十", "2026-05-02", 50, 0),
       distanceCard("五十から三十", "2026-05-01", 50, 0),
     ];
 
-    // 距離単位で表示をオンにして、絞り込む距離を50mにして適用する。
+    // 距離単位を選んで、絞り込む距離を50mにして適用する。
     await page.goto("/rounds/history");
     await openFilter(page);
     await unitDistance.click();
@@ -795,7 +795,10 @@ test.describe("履歴", () => {
       .getByTestId("history-controls-reset")
       .filter({ visible: true })
       .click();
-    await expect(unitDistance).toHaveAttribute("aria-checked", "false");
+    await expect(page.getByTestId("history-unit-round")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     await expect(
       page.getByTestId("history-filter-distance-select"),
     ).toHaveCount(0);
@@ -829,11 +832,11 @@ test.describe("履歴", () => {
       roundsText("bowTypeOption.compound"),
     );
 
-    // 選択を開いたまま距離単位で表示を押すと、距離単位で表示がオンになる。
+    // 選択を開いたまま「距離」を押すと、表示単位が「距離」になる。
     await page.getByTestId("history-filter-format").click();
     await expect(indoor).toBeVisible();
-    await page.getByTestId("history-unit-toggle").click();
-    await expect(page.getByTestId("history-unit-toggle")).toHaveAttribute(
+    await page.getByTestId("history-unit-distance").click();
+    await expect(page.getByTestId("history-unit-distance")).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -849,7 +852,7 @@ test.describe("履歴", () => {
     });
     await page.goto("/rounds/history");
     await openFilter(page);
-    await page.getByTestId("history-unit-toggle").click();
+    await page.getByTestId("history-unit-distance").click();
     await applyFilter(page);
     const secondDistance = page.getByRole("link").filter({
       hasText: distanceCard("七十から五十", "2026-05-02", 50, 0),
@@ -962,7 +965,7 @@ test.describe("履歴", () => {
       // 距離単位で履歴を開くと、最初は全件でなく一部だけが表示される。
       await page.goto("/rounds/history");
       await openFilter(page);
-      await page.getByTestId("history-unit-toggle").click();
+      await page.getByTestId("history-unit-distance").click();
       await applyFilter(page);
       await expect(cards.first()).toBeVisible();
       expect(await cards.count()).toBeLessThan(24);
