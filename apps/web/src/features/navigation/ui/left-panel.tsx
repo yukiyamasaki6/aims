@@ -609,9 +609,9 @@ function MenuButton({
       type="button"
       onClick={onOpen}
       aria-label={t("leftPanelOpenMenu")}
-      className={cn("flex shrink-0 items-center p-1.5", className)}
+      className={cn("flex shrink-0 items-center p-1", className)}
     >
-      <Menu className="size-5" />
+      <Menu className="size-6" />
     </button>
   );
 }

@@ -33,9 +33,9 @@ export function RoundMenu({ roundId }: { roundId: string }) {
         <DropdownMenuTrigger
           aria-label={t("roundMenuLabel")}
           data-testid="round-menu-trigger"
-          className="p-1.5"
+          className="p-1"
         >
-          <MoreHorizontal className="size-5" />
+          <MoreHorizontal className="size-6" />
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuItem
