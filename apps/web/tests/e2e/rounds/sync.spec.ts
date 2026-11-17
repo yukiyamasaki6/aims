@@ -29,6 +29,7 @@ import {
   updateRound,
 } from "../helpers/other-device";
 import { expectRoundBasesFetched } from "../helpers/reference-data";
+import { chooseOption, editRoundName, roundName } from "../helpers/round-name";
 import {
   createRound,
   expectNoSyncStatus,
@@ -82,9 +83,7 @@ function endBalls(page: Page, distance: number, end: number) {
 
 // ラウンド名を変更して保存する。保存は操作の列に積まれ、update_round RPCで送信される。
 async function saveRoundName(page: Page, name: string) {
-  await page.getByTestId("round-config-summary").click();
-  await page.getByTestId("round-config-name").fill(name);
-  await page.getByTestId("round-config-save").click();
+  await editRoundName(page, name);
 }
 
 async function reloadRound(page: Page) {
@@ -249,9 +248,7 @@ test("オフラインで点数を記録してその矢を消し、別の点数�
   await page.getByTestId("score-button-9").click();
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
   await saveRoundName(page, "オンライン復帰テスト");
-  await expect(page.getByTestId("round-config-summary")).toContainText(
-    "オンライン復帰テスト",
-  );
+  await expect(roundName(page)).toContainText("オンライン復帰テスト");
 
   // オンラインに戻り、操作なしで名前と最後の点数だけが保存されることを確かめる。
   // ページの再読み込みや再訪問をせず、オンライン復帰のイベントだけで送らせる。
@@ -895,7 +892,7 @@ test("別の利用者の未送信の点数が残る端末でサインインし�
   await expectSavedShots(roundA.supabase, roundA.distanceId, ["1:10"]);
 });
 
-test("他の端末の矢がある距離で、オフラインで距離(m)とエンド数・矢数を同じ保存で変えると、オンラインに戻った後、その矢が収まらないエンド数・矢数は元のままで、距離(m)は変わり、他の端末の矢が残る", async ({
+test("他の端末の矢がある距離で、オフラインで距離(m)とエンド数・射数/エンドを同じ保存で変えると、オンラインに戻った後、その矢が収まらないエンド数・射数/エンドは元のままで、距離(m)は変わり、他の端末の矢が残る", async ({
   page,
 }) => {
   // 6エンド×6射の距離を、オフラインで40m・12エンド×3射へ変えて保存する。
@@ -938,7 +935,7 @@ test("他の端末の矢がある距離で、オフラインで距離(m)とエ�
     )
     .toEqual({ distance: 40, total_ends: 6, arrows_per_end: 6 });
 
-  // 再読み込みし、元のエンド数・矢数と変えた距離(m)で、他の端末の5本が表示されることを確かめる。
+  // 再読み込みし、元のエンド数・射数/エンドと変えた距離(m)で、他の端末の5本が表示されることを確かめる。
   await reloadRound(page);
   await expect(page.getByTestId("distance-summary-1")).toContainText(
     roundsText("distanceEnds", { arrowsPerEnd: "6", totalEnds: "6" }),
@@ -1007,9 +1004,13 @@ test("他の端末がラウンドの名前と日付を、この端末がオフ�
   const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
   await openRound(page);
   await page.context().setOffline(true);
+  await editRoundName(page, "ページ側の名前");
   await page.getByTestId("round-config-summary").click();
-  await page.getByTestId("round-config-name").fill("ページ側の名前");
-  await page.getByTestId("round-config-bow-type-compound").click();
+  await chooseOption(
+    page,
+    "round-config-bow-type",
+    roundsText("bowTypeOption.compound"),
+  );
   await page.getByTestId("round-config-save").click();
   await expect(page.getByTestId("round-config-save")).toBeHidden();
 
@@ -1039,15 +1040,13 @@ test("他の端末がラウンドの名前と日付を、この端末がオフ�
 
   // 再読み込みし、保存された名前・日付・弓種が表示されることを確かめる。
   await reloadRound(page);
+  await expect(roundName(page)).toContainText("ページ側の名前");
   await expect(page.getByTestId("round-config-summary")).toHaveText(
-    roundsText("formatBowType", {
-      format: "ページ側の名前",
-      bowType: "2026-08-25 / アウトドア / コンパウンド",
-    }),
+    "2026-08-25 / アウトドア / コンパウンド",
   );
 });
 
-test("2つの端末がオフラインで、同じ矢数6のエンドへ4本ずつ記録すると、オンラインに戻った後、先に保存された6本が別々の矢として残り、両方の端末で再読み込みしても6本で、知らせる表示は出ない", async ({
+test("2つの端末がオフラインで、同じ射数/エンド6のエンドへ4本ずつ記録すると、オンラインに戻った後、先に保存された6本が別々の矢として残り、両方の端末で再読み込みしても6本で、知らせる表示は出ない", async ({
   page,
   browser,
 }) => {
@@ -1171,9 +1170,7 @@ test("他の端末がラウンドを削除した後に、この端末がオフ�
   await page.context().setOffline(true);
   await page.getByTestId("score-button-8").click();
   await saveRoundName(page, "削除後の名前");
-  await expect(page.getByTestId("round-config-summary")).toContainText(
-    "削除後の名前",
-  );
+  await expect(roundName(page)).toContainText("削除後の名前");
 
   // 他の端末が点数を記録してラウンドを削除した後でオンラインに戻り、この端末の操作が送られた後に再読み込みして、ラウンドが見つからない表示になることを確かめる。
   await recordShot(supabase, {
@@ -1322,8 +1319,6 @@ test("入力中のラウンドを開いた状態で、他の端末がラウン�
     });
   });
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await expect(page.getByTestId("round-config-summary")).toContainText(
-    "再試行後の名前",
-  );
+  await expect(roundName(page)).toContainText("再試行後の名前");
   expect(roundRequests).toBeGreaterThanOrEqual(2);
 });

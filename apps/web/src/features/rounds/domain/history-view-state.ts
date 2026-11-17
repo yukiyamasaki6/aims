@@ -202,7 +202,7 @@ function isIntegerIn(value: unknown, min: number, max: number): boolean {
   );
 }
 
-// 距離は必須で1〜上限、1エンドの矢数の空は指定なし(null)。
+// 距離は必須で1〜上限、射数/エンドの空は指定なし(null)。
 function distanceRowOf(
   draft: HistoryDistanceDraftRow,
 ): { row: HistoryDistanceRow } | { errors: HistoryDistanceError[] } {

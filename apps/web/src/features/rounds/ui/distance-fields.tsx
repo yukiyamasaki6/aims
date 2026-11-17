@@ -7,8 +7,8 @@ import {
   type SetStateAction,
   useState,
 } from "react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import type {
   DistanceConfigErrors,
   DistanceDraft,
@@ -32,21 +32,15 @@ function LockedMessage({ id, testId }: { id: string; testId: string }) {
   );
 }
 
-const MARKED_OPTIONS = [
-  { value: true, key: "marked" },
-  { value: false, key: "unmarked" },
-] as const;
-
-// 距離1件分の編集フォームの数値入力欄。空欄はnullとして扱う。
+// 距離1件分の編集フォームの数値入力欄。空欄はnullとして扱う。誤りの文言は、欄を含む行の下に、行が出す。
 function NumberField({
   label,
   slug,
   distanceNumber,
   value,
   max,
-  error,
+  invalid,
   unfitId,
-  children,
   onChange,
 }: {
   label: string;
@@ -54,16 +48,14 @@ function NumberField({
   distanceNumber: number;
   value: number | null;
   max: number;
-  error: "required" | "notPositiveInteger" | "tooLarge" | undefined;
+  invalid: boolean;
   // 項目の値そのものの誤りでなく、他の項目との組で起きる誤りの説明の要素のid。あるとき、項目を誤りとして示し、説明に結ぶ。
   unfitId?: string;
-  children?: ReactNode;
   onChange: (value: number | null) => void;
 }) {
   const id = `distance-config-${slug}-${distanceNumber}`;
-  const errorText = useErrorText()(error, max);
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-1">
       <label htmlFor={id} className="text-muted-foreground text-xs">
         {label}
       </label>
@@ -77,10 +69,35 @@ function NumberField({
         onChange={(e) =>
           onChange(e.target.value === "" ? null : Number(e.target.value))
         }
-        aria-invalid={Boolean(errorText) || unfitId !== undefined}
+        aria-invalid={invalid || unfitId !== undefined}
       />
-      {errorText && <p className="text-destructive text-sm">{errorText}</p>}
-      {children}
+    </div>
+  );
+}
+
+// 横に並べる欄の行。誤りの文言は、行の下に幅いっぱいで出す。
+function FieldRow({
+  columns,
+  errors,
+  children,
+}: {
+  columns: 1 | 2;
+  errors: readonly (string | undefined)[];
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className={columns === 2 ? "grid grid-cols-2 gap-2" : "grid gap-2"}>
+        {children}
+      </div>
+      {errors.map(
+        (error) =>
+          error && (
+            <p key={error} className="text-destructive text-sm">
+              {error}
+            </p>
+          ),
+      )}
     </div>
   );
 }
@@ -147,7 +164,7 @@ function useErrorText() {
   };
 }
 
-// 総エンド数・本数が記録済みの矢に収まらないときの理由。
+// 総エンド数・射数/エンドが記録済みの矢に収まらないときの理由。
 function ShotsUnfitMessage({ id }: { id: string }) {
   const t = useTranslations("rounds");
   return (
@@ -162,82 +179,114 @@ function ShotsUnfitMessage({ id }: { id: string }) {
   );
 }
 
-export function DistanceFields({
-  distanceNumber,
-  draft,
-  setDraft,
-  fieldErrors,
-  targetFaces,
-  roundFormat,
-  roundBowType,
-  hasShots,
-}: {
+type RowProps = {
   distanceNumber: number;
   draft: DistanceDraft;
   setDraft: Dispatch<SetStateAction<DistanceDraft>>;
   fieldErrors: DistanceConfigErrors;
-  targetFaces: TargetFaceOption[];
-  roundFormat: string;
-  roundBowType: string;
-  hasShots: boolean;
-}) {
+};
+
+// 1行目。フィールドはMarked/Unmarkedと距離の2列、フィールド以外は距離が幅いっぱい。
+function DistanceRow({
+  distanceNumber,
+  draft,
+  setDraft,
+  fieldErrors,
+  isField,
+}: RowProps & { isField: boolean }) {
   const t = useTranslations("rounds");
-  // 編集不可の的を押したときだけ、的の直下に理由を出す。
-  const [targetFaceLockedPressed, setTargetFaceLockedPressed] = useState(false);
-  // 総エンド数・本数が記録済みの矢に収まらないときの理由は、総エンド数の直下に1つ出し、本数からも参照する。
-  const unfitId = `distance-config-shots-unfit-${distanceNumber}`;
-  const unfitShown = fieldErrors.shotsUnfit !== undefined;
+  const errorText = useErrorText();
   return (
-    <>
-      {roundFormat === "field" && (
-        <MarkedToggle
+    <FieldRow
+      columns={isField ? 2 : 1}
+      errors={[errorText(fieldErrors.distance, DISTANCE_LIMITS.distance)]}
+    >
+      {isField && (
+        <MarkedSelect
           isMarked={draft.is_marked}
           distanceNumber={distanceNumber}
           onChange={(marked) => setDraft((d) => ({ ...d, is_marked: marked }))}
         />
       )}
-
       <NumberField
         label={t("distanceFieldDistance")}
         slug="distance"
         distanceNumber={distanceNumber}
         value={draft.distance}
         max={DISTANCE_LIMITS.distance}
-        error={fieldErrors.distance}
+        invalid={fieldErrors.distance !== undefined}
         onChange={(v) => setDraft((d) => ({ ...d, distance: v }))}
       />
+    </FieldRow>
+  );
+}
 
-      <NumberField
-        label={t("distanceFieldArrows")}
-        slug="arrows"
-        distanceNumber={distanceNumber}
-        value={draft.arrows_per_end}
-        max={DISTANCE_LIMITS.arrowsPerEnd}
-        error={fieldErrors.arrowsPerEnd}
-        unfitId={unfitShown ? unfitId : undefined}
-        onChange={(v) => setDraft((d) => ({ ...d, arrows_per_end: v }))}
-      />
-
-      <NumberField
-        label={t("distanceFieldTotalEnds")}
-        slug="total-ends"
-        distanceNumber={distanceNumber}
-        value={draft.total_ends}
-        max={DISTANCE_LIMITS.totalEnds}
-        error={fieldErrors.totalEnds}
-        unfitId={unfitShown ? unfitId : undefined}
-        onChange={(v) => setDraft((d) => ({ ...d, total_ends: v }))}
+// 2行目。射数/エンドと総エンド数の2列。記録済みの矢に収まらない理由は、行の下に幅いっぱいで1つ出し、2つの欄から参照する。
+function CountsRow({ distanceNumber, draft, setDraft, fieldErrors }: RowProps) {
+  const t = useTranslations("rounds");
+  const errorText = useErrorText();
+  const unfitId = `distance-config-shots-unfit-${distanceNumber}`;
+  const unfitShown = fieldErrors.shotsUnfit !== undefined;
+  return (
+    <>
+      <FieldRow
+        columns={2}
+        errors={[
+          errorText(fieldErrors.arrowsPerEnd, DISTANCE_LIMITS.arrowsPerEnd),
+          errorText(fieldErrors.totalEnds, DISTANCE_LIMITS.totalEnds),
+        ]}
       >
-        {unfitShown && <ShotsUnfitMessage id={unfitId} />}
-      </NumberField>
+        <NumberField
+          label={t("distanceFieldArrows")}
+          slug="arrows"
+          distanceNumber={distanceNumber}
+          value={draft.arrows_per_end}
+          max={DISTANCE_LIMITS.arrowsPerEnd}
+          invalid={fieldErrors.arrowsPerEnd !== undefined}
+          unfitId={unfitShown ? unfitId : undefined}
+          onChange={(v) => setDraft((d) => ({ ...d, arrows_per_end: v }))}
+        />
+        <NumberField
+          label={t("distanceFieldTotalEnds")}
+          slug="total-ends"
+          distanceNumber={distanceNumber}
+          value={draft.total_ends}
+          max={DISTANCE_LIMITS.totalEnds}
+          invalid={fieldErrors.totalEnds !== undefined}
+          unfitId={unfitShown ? unfitId : undefined}
+          onChange={(v) => setDraft((d) => ({ ...d, total_ends: v }))}
+        />
+      </FieldRow>
+      {unfitShown && <ShotsUnfitMessage id={unfitId} />}
+    </>
+  );
+}
 
+export function DistanceFields({
+  roundFormat,
+  roundBowType,
+  targetFaces,
+  hasShots,
+  ...row
+}: RowProps & {
+  targetFaces: TargetFaceOption[];
+  roundFormat: string;
+  roundBowType: string;
+  hasShots: boolean;
+}) {
+  // 編集不可の的を押したときだけ、的の直下に理由を出す。
+  const [targetFaceLockedPressed, setTargetFaceLockedPressed] = useState(false);
+  return (
+    <>
+      <DistanceRow {...row} isField={roundFormat === "field"} />
+      <CountsRow {...row} />
       <TargetFaceField
-        distanceNumber={distanceNumber}
+        distanceNumber={row.distanceNumber}
         targetFaces={targetFaces}
-        selectedId={draft.target_face_id}
+        selectedId={row.draft.target_face_id}
         roundFormat={roundFormat}
         roundBowType={roundBowType}
-        onSelect={(id) => setDraft((d) => ({ ...d, target_face_id: id }))}
+        onSelect={(id) => row.setDraft((d) => ({ ...d, target_face_id: id }))}
         locked={hasShots}
         showLockedMessage={targetFaceLockedPressed}
         onLockedPress={() => setTargetFaceLockedPressed(true)}
@@ -246,7 +295,8 @@ export function DistanceFields({
   );
 }
 
-function MarkedToggle({
+// Marked/Unmarkedの選択欄(共通のSelect)。値は選択肢の文字列で、真偽値との写しはここの1か所に置く。
+function MarkedSelect({
   isMarked,
   distanceNumber,
   onChange,
@@ -257,24 +307,15 @@ function MarkedToggle({
 }) {
   const t = useTranslations("rounds");
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-muted-foreground text-xs">
-        {t("distanceMarkedToggle")}
-      </span>
-      <div className="grid grid-cols-2 gap-2">
-        {MARKED_OPTIONS.map((o) => (
-          <Button
-            key={String(o.value)}
-            type="button"
-            variant={isMarked === o.value ? "default" : "outline"}
-            size="sm"
-            data-testid={`distance-config-${o.key}-${distanceNumber}`}
-            onClick={() => onChange(o.value)}
-          >
-            {t(o.key === "marked" ? "distanceMarked" : "distanceUnmarked")}
-          </Button>
-        ))}
-      </div>
-    </div>
+    <Select
+      label={t("distanceMarkedToggle")}
+      options={[
+        { value: "marked", label: t("distanceMarked") },
+        { value: "unmarked", label: t("distanceUnmarked") },
+      ]}
+      value={isMarked ? "marked" : "unmarked"}
+      onChange={(value) => onChange(value === "marked")}
+      testId={`distance-config-marked-${distanceNumber}`}
+    />
   );
 }

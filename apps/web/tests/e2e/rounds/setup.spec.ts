@@ -22,6 +22,7 @@ import {
   stubMissingTargetFaces,
   TARGET_FACES_REST,
 } from "../helpers/reference-data";
+import { chooseOption, editRoundName, roundName } from "../helpers/round-name";
 import { createRound, TRIPLE_SPOT_TARGET_FACE_ID } from "../helpers/rounds";
 
 const roundsText = translatorFor("rounds");
@@ -67,7 +68,7 @@ async function reloadAfter(page: Page, response: Promise<unknown>) {
   await waitForHydration(page);
 }
 
-test("開くと、ラウンドの設定が1行で、各距離の距離・的・本数・エンド数が表示される", async ({
+test("開くと、ラウンドの設定が1行で、各距離の距離・的・射数/エンド・エンド数が表示される", async ({
   page,
 }) => {
   await openRound(page, {
@@ -77,11 +78,9 @@ test("開くと、ラウンドの設定が1行で、各距離の距離・的・�
     ],
   });
 
+  await expect(roundName(page)).toContainText("設定テスト");
   await expect(page.getByTestId("round-config-summary")).toHaveText(
-    roundsText("formatBowType", {
-      format: "設定テスト",
-      bowType: "2026-08-24 / アウトドア / リカーブ",
-    }),
+    "2026-08-24 / アウトドア / リカーブ",
   );
   const first = page.getByTestId("distance-summary-1");
   await expect(first).toContainText("18m");
@@ -102,23 +101,42 @@ test("ラウンドの設定を変えて保存すると、すぐに反映され�
   // 設定を変えて保存し、すぐに反映されて閉じることを確かめる。
   await openRound(page);
   await page.getByTestId("round-config-summary").click();
-  await page.getByTestId("round-config-name").fill("編集後の名前");
   await page.getByTestId("round-config-date").fill("2026-08-25");
-  await page.getByTestId("round-config-format-indoor").click();
-  await page.getByTestId("round-config-bow-type-compound").click();
+  await chooseOption(
+    page,
+    "round-config-format",
+    roundsText("formatOption.indoor"),
+  );
+  await chooseOption(
+    page,
+    "round-config-bow-type",
+    roundsText("bowTypeOption.compound"),
+  );
   const sent = page.waitForResponse(UPDATE_ROUND_RPC);
   await page.getByTestId("round-config-save").click();
   const summary = page.getByTestId("round-config-summary");
-  const expected = roundsText("formatBowType", {
-    format: "編集後の名前",
-    bowType: "2026-08-25 / インドア / コンパウンド",
-  });
+  const expected = "2026-08-25 / インドア / コンパウンド";
   await expect(summary).toHaveText(expected);
   await expect(page.getByTestId("round-config-save")).toBeHidden();
 
   // 再読み込みして、変えた内容が残ることを確かめる。
   await reloadAfter(page, sent);
   await expect(summary).toHaveText(expected);
+});
+
+test("ヘッダーのラウンド名を押して入力欄で変え、Enterで確定すると、すぐに反映され、再読み込みしても保たれる", async ({
+  page,
+}) => {
+  // ヘッダーの名前を押して入力欄に変え、新しい名前をEnterで確定すると、すぐに反映される。
+  await openRound(page);
+  const sent = page.waitForResponse(UPDATE_ROUND_RPC);
+  await editRoundName(page, "ヘッダーで変えた名前");
+  await expect(roundName(page)).toContainText("ヘッダーで変えた名前");
+  await expect(page.getByTestId("round-name-input")).toBeHidden();
+
+  // 再読み込みして、変えた名前が残ることを確かめる。
+  await reloadAfter(page, sent);
+  await expect(roundName(page)).toContainText("ヘッダーで変えた名前");
 });
 
 test("距離があるときに距離を追加すると、最後の距離をコピーした編集ダイアログが開き、再読み込みしても保たれる", async ({
@@ -158,7 +176,7 @@ test("距離があるときに距離を追加すると、最後の距離をコ�
   );
 });
 
-test("距離・的・本数・エンド数を変えて保存すると、すぐに反映されて閉じ、再読み込みしても保たれる", async ({
+test("距離・的・射数/エンド・エンド数を変えて保存すると、すぐに反映されて閉じ、再読み込みしても保たれる", async ({
   page,
 }) => {
   // 設定を変えて保存し、すぐに反映されて閉じることを確かめる。
@@ -425,18 +443,22 @@ async function refreshRoundBases(page: Page) {
   await fetched;
 }
 
-test("ラウンド編集中に他の端末の変更が届いても、変更中の名前が残り、保存すると両方の変更が保たれる", async ({
+test("ラウンド編集中に他の端末の変更が届いても、変更中の弓種が残り、保存すると両方の変更が保たれる", async ({
   page,
 }) => {
   // 編集中に他の端末の変更を取得し、変更中の内容が残ることを確かめる。
   const roundId = await openRound(page);
   await page.getByTestId("round-config-summary").click();
-  await page.getByTestId("round-config-name").fill("編集中の名前");
+  await chooseOption(
+    page,
+    "round-config-bow-type",
+    roundsText("bowTypeOption.compound"),
+  );
   const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
   await updateRound(device.supabase, roundId, { round_date: "2026-08-25" });
   await refreshRoundBases(page);
-  await expect(page.getByTestId("round-config-name")).toHaveValue(
-    "編集中の名前",
+  await expect(page.getByTestId("round-config-bow-type")).toHaveText(
+    roundsText("bowTypeOption.compound"),
   );
 
   // 保存して再読み込みし、両方の変更が保たれることを確かめる。
@@ -444,10 +466,7 @@ test("ラウンド編集中に他の端末の変更が届いても、変更中�
   await page.getByTestId("round-config-save").click();
   await reloadAfter(page, sent);
   await expect(page.getByTestId("round-config-summary")).toHaveText(
-    roundsText("formatBowType", {
-      format: "編集中の名前",
-      bowType: "2026-08-25 / アウトドア / リカーブ",
-    }),
+    "2026-08-25 / アウトドア / コンパウンド",
   );
 });
 
@@ -457,7 +476,7 @@ test("距離編集中に他の端末の変更が届いても、変更中のエ�
   // 編集中に他の端末の変更を取得し、変更中の内容が残ることを確かめる。
   const roundId = await openRound(page);
   await page.getByTestId("distance-config-toggle-1").click();
-  // エンド数だけを変える編集を確かめるため、保存後の本数は実際の形にならない。
+  // エンド数だけを変える編集を確かめるため、保存後の射数/エンドは実際の形にならない。
   await page.getByTestId("distance-config-total-ends-1").fill("6");
   const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
   const [distanceId] = await getDistanceIds(device.supabase, roundId);
@@ -489,13 +508,8 @@ test("端末の保存が終わらない間も、設定の保存と距離の削�
     ],
   });
   const release = await blockOpLogStore(page);
-  await page.getByTestId("round-config-summary").click();
-  await page.getByTestId("round-config-name").fill("保存待ちの名前");
-  await page.getByTestId("round-config-save").click();
-  await expect(page.getByTestId("round-config-summary")).toContainText(
-    "保存待ちの名前",
-  );
-  await expect(page.getByTestId("round-config-save")).toBeHidden();
+  await editRoundName(page, "保存待ちの名前");
+  await expect(roundName(page)).toContainText("保存待ちの名前");
 
   // 距離を削除し、カードがすぐに消えることを確かめる。
   await page.getByTestId("distance-config-toggle-2").click();
@@ -507,8 +521,6 @@ test("端末の保存が終わらない間も、設定の保存と距離の削�
   const sent = page.waitForResponse(DISABLE_DISTANCE_RPC);
   await release();
   await reloadAfter(page, sent);
-  await expect(page.getByTestId("round-config-summary")).toContainText(
-    "保存待ちの名前",
-  );
+  await expect(roundName(page)).toContainText("保存待ちの名前");
   await expect(page.getByTestId("distance-summary-2")).toBeHidden();
 });

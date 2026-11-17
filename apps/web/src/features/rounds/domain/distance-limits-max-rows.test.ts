@@ -27,7 +27,7 @@ function readMaxRows(): number {
 }
 
 describe("距離の上限とAPIの最大行数", () => {
-  it("1つの距離の最大の矢数(総エンド数の上限×矢数の上限)が、max_rows以下で、取得で欠けない", () => {
+  it("1つの距離の最大の射数/エンド(総エンド数の上限×射数/エンドの上限)が、max_rows以下で、取得で欠けない", () => {
     // Given
     // When
     const maxRows = readMaxRows();

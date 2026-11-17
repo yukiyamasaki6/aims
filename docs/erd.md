@@ -6,7 +6,7 @@
 | `rounds`                  | アーチェリーの記録単位となる「ラウンド」（1回の練習・試合セッション）を表す。距離構成は`distances`が持つ |
 | `round_users`             | 特定のラウンドに対するユーザーのアクセス権限・ロールを管理する多対多の中間テーブル。1ラウンドに複数のeditor/viewerが存在しうる |
 | `distances`               | ラウンド中に射撃する特定の距離（70m、50m等）を表す。1ラウンドに複数の距離を持てる            |
-| `shots`                   | 1行が1本の矢で、点数・射手・射順を記録する。矢はIDで識別し、表示の位置・射順・点数に依存しない。エンドの生きている矢は矢数を超えない |
+| `shots`                   | 1行が1本の矢で、点数・射手・射順を記録する。矢はIDで識別し、表示の位置・射順・点数に依存しない。エンドの生きている矢は射数/エンドを超えない |
 | `round_events` | `rounds`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない。効かせた操作の、効いた項目だけを記録する |
 | `distance_events` | `distances`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない。効かせた操作の、効いた項目だけを記録する |
 | `shot_events` | `shots`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない            |
@@ -67,7 +67,7 @@ erDiagram
         string position_key "ラウンド内の並び順を表す可変長キー。重複を許し、同じキーはIDで順序を決める。表示番号は(position_key, id)順から導出"
         integer distance "距離（m） [CHECK: > 0, <= 100] [NULLABLE: is_marked=falseの場合]"
         integer total_ends "総エンド数 [CHECK: > 0, <= 60]"
-        integer arrows_per_end "1エンドあたりの矢数 [CHECK: > 0, <= 12]"
+        integer arrows_per_end "射数/エンド(1エンドあたりに射つ数) [CHECK: > 0, <= 12]"
         uuid target_face_id FK "使用する的"
         boolean is_marked "距離が判明しているか [true=距離が判明している、false=距離不明]"
         bigint revision "現在のサーバー確定リビジョン [NOT NULL] [CHECK: >= 1]"
@@ -78,8 +78,8 @@ erDiagram
     shots {
         uuid id PK "矢のID。新しい矢は端末が作る時刻順のUUID(UUIDv7の形式)。点数の変更・消去・復活で変わらない"
         uuid distance_id FK "所属する距離"
-        integer end_number "距離内で何番目のエンドか [CHECK: > 0]。生きている矢の数は距離の矢数以下(RPCが判定する)"
-        integer shot_number "エンド内で何射目か [NULLABLE: null=射順不明] [CHECK: >= 1] [矢数以下] [UK: (distance_id, end_number, shot_number) 生きている矢でnullでないもの]"
+        integer end_number "距離内で何番目のエンドか [CHECK: > 0]。生きている矢の数は距離の射数/エンド以下(RPCが判定する)"
+        integer shot_number "エンド内で何射目か [NULLABLE: null=射順不明] [CHECK: >= 1] [射数/エンド以下] [UK: (distance_id, end_number, shot_number) 生きている矢でnullでないもの]"
         uuid shooter_id FK "行射したユーザ。削除した利用者の矢は「削除済みの利用者」になる"
         string score_str "点数の文字列表現（例：X, M, 10）"
         integer score_int "点数の整数表現"
@@ -180,7 +180,7 @@ erDiagram
         string position_key "プリセット内の並び順を表す可変長キー。表示番号は(position_key, id)順から導出"
         integer distance "距離（m） [CHECK: > 0, <= 100]"
         integer total_ends "総エンド数 [CHECK: > 0, <= 60]"
-        integer arrows_per_end "1エンドあたりの矢数 [CHECK: > 0, <= 12]"
+        integer arrows_per_end "射数/エンド(1エンドあたりに射つ数) [CHECK: > 0, <= 12]"
         uuid target_face_id FK "使用する的"
         boolean is_marked "距離が判明しているか [true=距離が判明している、false=距離不明]"
         timestamp created_at "作成時刻"

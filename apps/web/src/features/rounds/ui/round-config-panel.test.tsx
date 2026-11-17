@@ -56,40 +56,34 @@ function setup(
   return { enqueue, procedures, ...utils };
 }
 
+// 種別・弓種のドロップダウンを開いて、選択肢を選ぶ。
+async function choose(
+  user: ReturnType<typeof userEvent.setup>,
+  testId: string,
+  optionName: string,
+) {
+  await user.click(screen.getByTestId(testId));
+  await user.click(await screen.findByRole("option", { name: optionName }));
+}
+
 describe("RoundConfigPanel", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   describe("初期表示", () => {
-    it("折りたたまれており、保存済みの値を要約表示する", () => {
+    it("折りたたまれており、実施日・種別・弓種だけを「 / 」で並べて要約表示し、名前を含めない", () => {
       // Given
       // When
       setup();
 
       // Then
-      expect(
-        screen.getByText(
-          roundsText("formatBowType", {
-            format: "午前練習",
-            bowType: "2026-09-15 / アウトドア / リカーブ",
-          }),
-        ),
-      ).toBeInTheDocument();
-      expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("ラウンド名が空の場合", () => {
-    it("名前の区切りを表示せず、実施日・種別・弓種だけを要約表示する", () => {
-      // Given
-      // When
-      setup({ initial: { ...initial, name: "" } });
-
-      // Then
-      expect(screen.getByTestId("round-config-summary")).toHaveTextContent(
+      const summary = screen.getByTestId("round-config-summary");
+      expect(summary).toHaveTextContent(
         /^2026-09-15 \/ アウトドア \/ リカーブ$/,
       );
+      expect(summary).not.toHaveTextContent("午前練習");
+      expect(screen.queryByTestId("round-config-date")).not.toBeInTheDocument();
     });
   });
 
@@ -103,8 +97,58 @@ describe("RoundConfigPanel", () => {
       await user.click(screen.getByTestId("round-config-summary"));
 
       // Then
-      expect(screen.getByTestId("round-config-name")).toBeInTheDocument();
+      expect(screen.getByTestId("round-config-date")).toBeInTheDocument();
     });
+
+    it("展開すると、名前の入力欄はなく、実施日の入力欄と、名前「種別」「弓種」のドロップダウンがある", async () => {
+      // Given
+      const user = userEvent.setup();
+      setup();
+
+      // When
+      await user.click(screen.getByTestId("round-config-summary"));
+
+      // Then
+      expect(screen.queryByLabelText(roundsText("roundConfigName"))).toBeNull();
+      expect(screen.getByTestId("round-config-date")).toBeInTheDocument();
+      expect(
+        screen.getByRole("combobox", {
+          name: new RegExp(roundsText("roundConfigFormat")),
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("combobox", {
+          name: new RegExp(roundsText("roundConfigBowType")),
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it.each([
+      ["種別", "round-config-format", ["アウトドア", "インドア", "フィールド"]],
+      [
+        "弓種",
+        "round-config-bow-type",
+        ["リカーブ", "コンパウンド", "ベアボウ"],
+      ],
+    ])(
+      "%sは選択肢から1つ選び、選択肢は%sの3つだけで「指定なし」がない",
+      async (_name, testId, expected) => {
+        // Given
+        const user = userEvent.setup();
+        setup();
+        await user.click(screen.getByTestId("round-config-summary"));
+
+        // When
+        await user.click(screen.getByTestId(testId));
+
+        // Then
+        const names = (await screen.findAllByRole("option")).map(
+          (option) => option.textContent,
+        );
+        expect(names).toEqual(expected);
+        expect(names).not.toContain(roundsText("historyFilterNone"));
+      },
+    );
 
     it("展開中に要約を再度押すと、編集欄を閉じる", async () => {
       // Given
@@ -116,7 +160,7 @@ describe("RoundConfigPanel", () => {
       await user.click(screen.getByTestId("round-config-summary"));
 
       // Then
-      expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("round-config-date")).not.toBeInTheDocument();
     });
 
     it("閉じて再展開すると、未保存の編集は破棄され、その時点の値から作り直す", async () => {
@@ -124,18 +168,16 @@ describe("RoundConfigPanel", () => {
       const user = userEvent.setup();
       const { rerender } = setup();
       await user.click(screen.getByTestId("round-config-summary"));
-      await user.clear(screen.getByTestId("round-config-name"));
-      await user.type(screen.getByTestId("round-config-name"), "未保存の編集");
+      await user.clear(screen.getByTestId("round-config-date"));
+      await user.type(screen.getByTestId("round-config-date"), "2026-12-31");
       await user.click(screen.getByTestId("round-config-summary"));
-      rerender(panel({ ...initial, name: "他の端末の名前" }));
+      rerender(panel({ ...initial, roundDate: "2026-10-01" }));
 
       // When
       await user.click(screen.getByTestId("round-config-summary"));
 
       // Then
-      expect(screen.getByTestId("round-config-name")).toHaveValue(
-        "他の端末の名前",
-      );
+      expect(screen.getByTestId("round-config-date")).toHaveValue("2026-10-01");
     });
   });
 
@@ -157,7 +199,7 @@ describe("RoundConfigPanel", () => {
 
   describe("保存", () => {
     describe("入力内容が有効な場合", () => {
-      it("enqueueを検証済みの設定で呼び、折りたたむ", async () => {
+      it("種別と弓種を選び直して保存すると、その2項目だけを変える操作を積み、折りたたむ", async () => {
         // Given
         const user = userEvent.setup();
         const { enqueue, procedures } = setup();
@@ -165,9 +207,8 @@ describe("RoundConfigPanel", () => {
           "00000000-0000-4000-8000-000000000001",
         );
         await user.click(screen.getByTestId("round-config-summary"));
-        await user.clear(screen.getByTestId("round-config-name"));
-        await user.type(screen.getByTestId("round-config-name"), "午後練習");
-        await user.click(screen.getByTestId("round-config-bow-type-compound"));
+        await choose(user, "round-config-format", "インドア");
+        await choose(user, "round-config-bow-type", "コンパウンド");
 
         // When
         await user.click(screen.getByTestId("round-config-save"));
@@ -177,10 +218,28 @@ describe("RoundConfigPanel", () => {
           type: "round.updated",
           eventId: "00000000-0000-4000-8000-000000000001",
           roundId: "round-1",
-          changes: { name: "午後練習", bowType: "compound" },
+          changes: { format: "indoor", bowType: "compound" },
         });
         expect(
-          screen.queryByTestId("round-config-name"),
+          screen.queryByTestId("round-config-date"),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    describe("何も変えない場合", () => {
+      it("保存しても操作を積まず、閉じる", async () => {
+        // Given
+        const user = userEvent.setup();
+        const { enqueue } = setup();
+        await user.click(screen.getByTestId("round-config-summary"));
+
+        // When
+        await user.click(screen.getByTestId("round-config-save"));
+
+        // Then
+        expect(enqueue).not.toHaveBeenCalled();
+        expect(
+          screen.queryByTestId("round-config-date"),
         ).not.toBeInTheDocument();
       });
     });
@@ -191,21 +250,13 @@ describe("RoundConfigPanel", () => {
         const user = userEvent.setup();
         const { enqueue } = setup({ hasUnmarkedDistances: true });
         await user.click(screen.getByTestId("round-config-summary"));
-        await user.clear(screen.getByTestId("round-config-name"));
-        await user.type(
-          screen.getByTestId("round-config-name"),
-          "あ".repeat(51),
-        );
         await user.clear(screen.getByTestId("round-config-date"));
-        await user.click(screen.getByTestId("round-config-format-indoor"));
+        await choose(user, "round-config-format", "インドア");
 
         // When
         await user.click(screen.getByTestId("round-config-save"));
 
         // Then
-        expect(
-          screen.getByText("ラウンド名は50文字以内で入力してください。"),
-        ).toBeInTheDocument();
         expect(
           screen.getByText(roundsText("roundConfigError.required")),
         ).toBeInTheDocument();
@@ -228,7 +279,7 @@ describe("RoundConfigPanel", () => {
       await user.keyboard("{Escape}");
 
       // Then
-      expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("round-config-date")).not.toBeInTheDocument();
       expect(enqueue).not.toHaveBeenCalled();
     });
   });
@@ -239,18 +290,14 @@ describe("RoundConfigPanel", () => {
       const user = userEvent.setup();
       const { enqueue } = setup();
       await user.click(screen.getByTestId("round-config-summary"));
-      await user.clear(screen.getByTestId("round-config-name"));
-      await user.type(
-        screen.getByTestId("round-config-name"),
-        "破棄される名前",
-      );
+      await choose(user, "round-config-bow-type", "コンパウンド");
       const backdrops = document.querySelectorAll(".bg-black\\/40");
 
       // When
       await user.click(backdrops[backdrops.length - 1]);
 
       // Then
-      expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("round-config-date")).not.toBeInTheDocument();
       expect(enqueue).not.toHaveBeenCalled();
     });
   });
@@ -261,17 +308,12 @@ describe("RoundConfigPanel", () => {
       const { rerender } = setup();
 
       // When
-      rerender(panel({ ...initial, name: "更新後" }));
+      rerender(panel({ ...initial, roundDate: "2026-10-01" }));
 
       // Then
-      expect(
-        screen.getByText(
-          roundsText("formatBowType", {
-            format: "更新後",
-            bowType: "2026-09-15 / アウトドア / リカーブ",
-          }),
-        ),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("round-config-summary")).toHaveTextContent(
+        /^2026-10-01 \/ アウトドア \/ リカーブ$/,
+      );
     });
 
     it("開いている間に参照や内容が変わっても、下書きを書き換えない", async () => {
@@ -279,15 +321,15 @@ describe("RoundConfigPanel", () => {
       const user = userEvent.setup();
       const { enqueue, rerender } = setup();
       await user.click(screen.getByTestId("round-config-summary"));
-      await user.clear(screen.getByTestId("round-config-name"));
-      await user.type(screen.getByTestId("round-config-name"), "編集中");
+      await user.clear(screen.getByTestId("round-config-date"));
+      await user.type(screen.getByTestId("round-config-date"), "2026-12-31");
 
       // When
       rerender(panel({ ...initial }, enqueue));
       rerender(panel({ ...initial, bowType: "compound" }, enqueue));
 
       // Then
-      expect(screen.getByTestId("round-config-name")).toHaveValue("編集中");
+      expect(screen.getByTestId("round-config-date")).toHaveValue("2026-12-31");
     });
 
     it("開いている間に他の端末の変更が届いた後に保存すると、開いたときの値との差だけを送る", async () => {
@@ -295,8 +337,8 @@ describe("RoundConfigPanel", () => {
       const user = userEvent.setup();
       const { enqueue, rerender } = setup();
       await user.click(screen.getByTestId("round-config-summary"));
-      await user.clear(screen.getByTestId("round-config-name"));
-      await user.type(screen.getByTestId("round-config-name"), "編集中");
+      await user.clear(screen.getByTestId("round-config-date"));
+      await user.type(screen.getByTestId("round-config-date"), "2026-12-31");
       rerender(panel({ ...initial }, enqueue));
       rerender(panel({ ...initial, bowType: "compound" }, enqueue));
 
@@ -305,38 +347,31 @@ describe("RoundConfigPanel", () => {
 
       // Then
       expect(enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({ changes: { name: "編集中" } }),
+        expect.objectContaining({ changes: { roundDate: "2026-12-31" } }),
       );
     });
   });
 
   describe("入力欄のEnterキー", () => {
-    it.each([
-      [roundsText("roundConfigName"), "round-config-name"],
-      [roundsText("roundConfigDate"), "round-config-date"],
-    ])(
-      "%sの入力欄でEnterを押しても、保存もダイアログの閉鎖もしない",
-      async (_label, testId) => {
-        // Given
-        const user = userEvent.setup();
-        const { enqueue } = setup();
-        await user.click(screen.getByTestId("round-config-summary"));
-        const input = screen.getByTestId(testId);
-        await user.click(input);
+    it("実施日の入力欄でEnterを押しても、保存もダイアログの閉鎖もしない", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { enqueue } = setup();
+      await user.click(screen.getByTestId("round-config-summary"));
+      await user.click(screen.getByTestId("round-config-date"));
 
-        // When
-        await user.keyboard("{Enter}");
+      // When
+      await user.keyboard("{Enter}");
 
-        // Then
-        expect(screen.getByTestId("round-config-name")).toBeInTheDocument();
-        expect(enqueue).not.toHaveBeenCalled();
-      },
-    );
+      // Then
+      expect(screen.getByTestId("round-config-date")).toBeInTheDocument();
+      expect(enqueue).not.toHaveBeenCalled();
+    });
   });
 });
 
 describe("RoundConfigPanel 初期フォーカス", () => {
-  it("開くと名前の入力欄でなく、Triggerなしのダイアログがフォーカスを持つ", async () => {
+  it("開くと実施日の入力欄でなく、Triggerなしのダイアログがフォーカスを持つ", async () => {
     // Given
     const user = userEvent.setup();
     setup();
@@ -347,6 +382,6 @@ describe("RoundConfigPanel 初期フォーカス", () => {
     // Then
     const dialog = screen.getByRole("dialog");
     await waitFor(() => expect(document.activeElement).toBe(dialog));
-    expect(screen.getByTestId("round-config-name")).not.toHaveFocus();
+    expect(screen.getByTestId("round-config-date")).not.toHaveFocus();
   });
 });

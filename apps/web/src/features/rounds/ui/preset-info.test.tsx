@@ -107,7 +107,7 @@ describe("DistanceInfo(的の状態)", () => {
     );
   }
 
-  it("的が見つからないときも、距離・本数・エンド数を表示し、「的データを取得できません」を出す", () => {
+  it("的が見つからないときも、距離・射数/エンド・エンド数を表示し、「的データを取得できません」を出す", () => {
     const { container } = renderWith("missing");
 
     expect(screen.getByText("70m")).toBeInTheDocument();
@@ -118,7 +118,7 @@ describe("DistanceInfo(的の状態)", () => {
   });
 });
 
-describe("DistanceInfo(矢数・総エンド数・的が空の要約)", () => {
+describe("DistanceInfo(射数/エンド・総エンド数・的が空の要約)", () => {
   function renderWith(props: {
     arrowsPerEnd: number | null;
     totalEnds: number | null;
@@ -135,7 +135,7 @@ describe("DistanceInfo(矢数・総エンド数・的が空の要約)", () => {
     );
   }
 
-  it("矢数だけがあれば、距離と「N本」だけを出し、エンド数は出さない", () => {
+  it("射数/エンドだけがあれば、距離と「N射」だけを出し、エンド数は出さない", () => {
     const { container } = renderWith({
       arrowsPerEnd: 6,
       totalEnds: null,
@@ -151,7 +151,7 @@ describe("DistanceInfo(矢数・総エンド数・的が空の要約)", () => {
     );
   });
 
-  it("矢数が空なら、総エンド数が空でも、距離だけを出し、本数・エンドの行を出さない", () => {
+  it("射数/エンドが空なら、総エンド数が空でも、距離だけを出し、射数/エンド・エンドの行を出さない", () => {
     const { container } = renderWith({
       arrowsPerEnd: null,
       totalEnds: null,
@@ -165,7 +165,7 @@ describe("DistanceInfo(矢数・総エンド数・的が空の要約)", () => {
     expect(container).not.toHaveTextContent("エンド");
   });
 
-  it("矢数と総エンド数が両方あれば、従来の「N本×Mエンド」を出す", () => {
+  it("射数/エンドと総エンド数が両方あれば、従来の「N射×Mエンド」を出す", () => {
     const { container } = renderWith({
       arrowsPerEnd: 6,
       totalEnds: 6,

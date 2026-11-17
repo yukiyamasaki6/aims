@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ScreenFrame, ScreenMenuProvider } from "./screen-frame";
 
@@ -18,6 +18,22 @@ describe("ScreenFrame", () => {
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(
       screen.getByRole("heading", { level: 1, name: "ホーム" }),
+    ).toBeInTheDocument();
+  });
+
+  it("titleに要素を渡すと、その要素がレベル1の見出しの中に出る", () => {
+    // Given
+    // When
+    render(
+      <ScreenFrame title={<button type="button">ラウンド名</button>}>
+        <p>本文</p>
+      </ScreenFrame>,
+    );
+
+    // Then
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(
+      within(heading).getByRole("button", { name: "ラウンド名" }),
     ).toBeInTheDocument();
   });
 

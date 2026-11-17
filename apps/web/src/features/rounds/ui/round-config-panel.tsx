@@ -6,6 +6,7 @@ import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import {
   buildRoundUpdatedOperation,
   type RoundConfig,
@@ -25,11 +26,10 @@ function RequiredMark() {
   );
 }
 
-// 設定の要約行の文字列。名前、実施日、種別、弓種のうち、空でないものを並べる。
+// 設定の要約行の文字列。実施日、種別、弓種のうち、空でないものを並べる(名前はヘッダーに出す)。
 function useSummaryText(config: RoundConfig): string {
   const { formatLabel, bowTypeLabel } = useOptionLabels();
   return [
-    config.name,
     config.roundDate,
     formatLabel(config.format),
     bowTypeLabel(config.bowType),
@@ -141,27 +141,6 @@ function RoundConfigFields({
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
         <label
-          htmlFor="round-config-name"
-          className="text-muted-foreground text-xs"
-        >
-          {t("roundConfigName")}
-        </label>
-        <Input
-          id="round-config-name"
-          data-testid="round-config-name"
-          value={draft.name}
-          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-          aria-invalid={Boolean(fieldErrors.name)}
-        />
-        {fieldErrors.name && (
-          <p className="text-destructive text-sm">
-            {t(`roundConfigError.${fieldErrors.name}`)}
-          </p>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <label
           htmlFor="round-config-date"
           className="text-muted-foreground text-xs"
         >
@@ -184,24 +163,29 @@ function RoundConfigFields({
         )}
       </div>
 
-      <OptionGrid
-        label={t("roundConfigFormat")}
-        options={formatOptions}
-        current={draft.format}
-        testIdPrefix="round-config-format"
-        error={
-          fieldErrors.format && t(`roundConfigError.${fieldErrors.format}`)
-        }
-        onChange={(format) => setDraft((d) => ({ ...d, format }))}
-      />
-
-      <OptionGrid
-        label={t("roundConfigBowType")}
-        options={bowTypeOptions}
-        current={draft.bowType}
-        testIdPrefix="round-config-bow-type"
-        onChange={(bowType) => setDraft((d) => ({ ...d, bowType }))}
-      />
+      <div className="flex flex-col gap-1">
+        <div className="grid grid-cols-2 gap-2">
+          <RequiredSelect
+            label={t("roundConfigFormat")}
+            options={formatOptions}
+            value={draft.format}
+            testId="round-config-format"
+            onChange={(format) => setDraft((d) => ({ ...d, format }))}
+          />
+          <RequiredSelect
+            label={t("roundConfigBowType")}
+            options={bowTypeOptions}
+            value={draft.bowType}
+            testId="round-config-bow-type"
+            onChange={(bowType) => setDraft((d) => ({ ...d, bowType }))}
+          />
+        </div>
+        {fieldErrors.format && (
+          <p className="text-destructive text-sm">
+            {t(`roundConfigError.${fieldErrors.format}`)}
+          </p>
+        )}
+      </div>
 
       <Button
         type="button"
@@ -215,42 +199,31 @@ function RoundConfigFields({
   );
 }
 
-// 必須の選択肢の組。
-function OptionGrid({
+// 必須の選択欄(共通のSelect)。必須の印を項目名に添える。「指定なし」は持たない。
+function RequiredSelect({
   label,
   options,
-  current,
-  testIdPrefix,
-  error,
+  value,
+  testId,
   onChange,
 }: {
   label: string;
   options: readonly { value: string; label: string }[];
-  current: string;
-  testIdPrefix: string;
-  error?: string;
+  value: string;
+  testId: string;
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-muted-foreground text-xs">
-        {label} <RequiredMark />
-      </span>
-      <div className="grid grid-cols-3 gap-2">
-        {options.map((o) => (
-          <Button
-            key={o.value}
-            type="button"
-            variant={current === o.value ? "default" : "outline"}
-            size="sm"
-            data-testid={`${testIdPrefix}-${o.value}`}
-            onClick={() => onChange(o.value)}
-          >
-            {o.label}
-          </Button>
-        ))}
-      </div>
-      {error && <p className="text-destructive text-sm">{error}</p>}
-    </div>
+    <Select
+      label={
+        <>
+          {label} <RequiredMark />
+        </>
+      }
+      options={options}
+      value={value}
+      onChange={onChange}
+      testId={testId}
+    />
   );
 }

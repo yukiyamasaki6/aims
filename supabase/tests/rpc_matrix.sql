@@ -241,7 +241,7 @@ as $$
 $$;
 
 -- p_returned はRPCの戻り値。create_roundは、他の書き込みRPCと同じ形で判定結果を返す。
--- 距離は 位置:距離:Marked:エンド数x矢数:的の末尾4桁:IDの末尾2桁 で表し、クライアント生成のIDが保存されることも見る。
+-- 距離は 位置:距離:Marked:エンド数x射数/エンド:的の末尾4桁:IDの末尾2桁 で表し、クライアント生成のIDが保存されることも見る。
 create function pg_temp.st_create_round(p_returned text) returns text
 language sql stable
 as $$
@@ -282,7 +282,7 @@ as $$
 $$;
 
 -- プリセットは名前で特定する。ラウンドと紐付かないため、所有者と内容だけを見る。
--- 距離は 位置:距離:Marked:エンド数x矢数:的の末尾4桁 で表す。同じ内容の重複保存は、件数と行数で区別する。
+-- 距離は 位置:距離:Marked:エンド数x射数/エンド:的の末尾4桁 で表す。同じ内容の重複保存は、件数と行数で区別する。
 create function pg_temp.st_preset(p_name text) returns text
 language sql stable
 as $$

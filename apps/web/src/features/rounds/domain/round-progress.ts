@@ -5,7 +5,7 @@ import type { Distance, Shot } from "./scorecard-types";
 import { firstOpenEnd } from "./shot-pointer";
 import type { RoundStatus, SyncOperation } from "./sync-events";
 
-// 入力を完了にする前の確認の種類。noRecords: 記録が無い。unfilledCells: 未入力のマスがある。確認が要らない(全てのエンドが矢数に達している)ときはnull。
+// 入力を完了にする前の確認の種類。noRecords: 記録が無い。unfilledCells: 未入力のマスがある。確認が要らない(全てのエンドが満杯である)ときはnull。
 export function completionConfirmation(
   distances: Distance[],
   shots: Shot[],

@@ -16,7 +16,7 @@ import {
   pointerAfterScore,
 } from "./shot-pointer";
 
-// 最大構成(1距離が上限の総エンド数×上限の矢数)の処理が、実用に耐えるかを見る。
+// 最大構成(1距離が上限の総エンド数×上限の射数/エンド)の処理が、実用に耐えるかを見る。
 // 二乗以上の劣化を捕まえるための粗い上限で、絶対の性能の保証ではない。CIの揺れで落ちるときは、測り方でなく上限を数倍に緩める。
 const LIMIT_MILLISECONDS = 100;
 const REPEAT = 5;
@@ -60,7 +60,7 @@ const maxDistance: Distance = {
   is_marked: true,
 };
 
-// 上限の構成を全て埋める矢。エンドの先頭から矢数ずつ並べる。
+// 上限の構成を全て埋める矢。エンドの先頭から射数/エンドずつ並べる。
 function filledShots(distanceId: string): Shot[] {
   return Array.from({ length: SHOT_COUNT }, (_, index) => {
     const [scoreStr, scoreInt] = SCORES[index % SCORES.length];
@@ -111,7 +111,7 @@ const emptyBase = roundTablesFromServer({
   shots: [],
 });
 
-describe("最大構成(総エンド数×矢数が上限)の処理時間", () => {
+describe("最大構成(総エンド数×射数/エンドが上限)の処理時間", () => {
   describe("状態の導出", () => {
     it.each([
       ["全て未送信(オフラインで記録した)の", undefined],
