@@ -66,17 +66,11 @@ export function RoundCardsSkeleton() {
   );
 }
 
-// 末尾と0件の文言。行1つと同じ幅・高さの領域の上下左右の中央に置く。bordered: 下の境界線を引く(点数一覧)。引かない(ホームの0件)ときは、境界線の1px分も高さに含める。
-export function RowNotice({
-  children,
-  bordered,
-}: {
-  children: string;
-  bordered: boolean;
-}) {
+// 末尾と0件の文言。行1つと同じ幅・高さ(境界線を含む)の領域の上下左右の中央に置く。境界線は引かない。
+export function RowNotice({ children }: { children: string }) {
   return (
     <p
-      className={`-mx-3 flex items-center justify-center p-4 text-center text-muted-foreground text-sm ${bordered ? "border-b" : ""}`}
+      className="-mx-3 flex items-center justify-center p-4 text-center text-muted-foreground text-sm"
       style={{ height: cardLayout.pitchPx }}
     >
       {children}
