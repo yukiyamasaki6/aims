@@ -71,7 +71,9 @@ function closeButton() {
 }
 
 function categoryLink() {
-  return screen.getByRole("link", { name: settingsText("accountTitle") });
+  return screen.getByRole("link", {
+    name: settingsText("accountTitle"),
+  });
 }
 
 // base-uiのBackdrop。ダイアログの外側の押下の先。
@@ -91,6 +93,20 @@ const ALL_VIEWS: SettingsView[] = [
 
 describe("SettingsPanel", () => {
   describe("表示", () => {
+    it("分類アイコンは装飾として隠され、分類の名前は文字だけになる", () => {
+      // Given
+      // When
+      setup();
+
+      // Then
+      const category = categoryLink();
+      expect(category).toHaveAccessibleName(settingsText("accountTitle"));
+      expect(category.querySelector("svg")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+    });
+
     it("閉じているとき、何も描かない", () => {
       // Given
       // When
@@ -275,6 +291,13 @@ describe("SettingsPanel", () => {
       ["Esc", async (user: User) => user.keyboard("{Escape}")],
       ["外側の押下", async (user: User) => user.click(backdrop())],
       ["分類の選択", async (user: User) => user.click(categoryLink())],
+      [
+        "分類のEnter操作",
+        async (user: User) => {
+          categoryLink().focus();
+          await user.keyboard("{Enter}");
+        },
+      ],
     ])(
       "項目が処理中を知らせている間は、%sで呼び先を呼ばず、表示も変えない",
       async (_name, operate) => {
@@ -288,6 +311,11 @@ describe("SettingsPanel", () => {
         expect(onClose).not.toHaveBeenCalled();
         expect(onMove).not.toHaveBeenCalled();
         expect(screen.getByText("項目の画面:password")).toBeInTheDocument();
+        expect(categoryLink()).toHaveAttribute("aria-disabled", "true");
+        expect(categoryLink()).toHaveAttribute("aria-current", "page");
+        expect(categoryLink()).toHaveAccessibleName(
+          settingsText("accountTitle"),
+        );
       },
     );
 
@@ -311,6 +339,7 @@ describe("SettingsPanel", () => {
       await user.click(categoryLink());
 
       // Then
+      expect(categoryLink()).not.toHaveAttribute("aria-disabled", "true");
       expect(onMove).toHaveBeenCalledExactlyOnceWith("account");
     });
 
@@ -399,22 +428,31 @@ describe("SettingsPanel", () => {
       setup({ view: "password" });
       // 開いた直後のフォーカスは、パネルの先頭の閉じる操作にある(初期フォーカスは描画の後に移る)。
       await waitFor(() => expect(closeButton()).toHaveFocus());
-      const reached: Element[] = [closeButton()];
 
       // When
-      for (let i = 0; i < 12; i++) {
+      const reached: (Element | null)[] = [];
+      for (let i = 0; i < 2; i++) {
         await user.tab();
-        if (document.activeElement) reached.push(document.activeElement);
+        reached.push(document.activeElement);
       }
 
       // Then
-      expect(reached).toContain(closeButton());
-      expect(reached.indexOf(closeButton())).toBeLessThan(
-        reached.indexOf(categoryLink()),
-      );
-      expect(reached.indexOf(categoryLink())).toBeLessThan(
-        reached.indexOf(screen.getByLabelText("入力")),
-      );
+      expect(reached).toEqual([categoryLink(), screen.getByLabelText("入力")]);
+    });
+
+    it("項目画面で分類へTabで到達してEnterを押すと、一覧へ移る操作を通知する", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { onMove } = setup({ view: "email" });
+      await waitFor(() => expect(closeButton()).toHaveFocus());
+
+      // When
+      await user.tab();
+      await user.keyboard("{Enter}");
+
+      // Then
+      expect(categoryLink()).toHaveFocus();
+      expect(onMove).toHaveBeenCalledWith("account");
     });
   });
 });

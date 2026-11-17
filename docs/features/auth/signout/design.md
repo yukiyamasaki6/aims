@@ -26,7 +26,7 @@
 - `src/app/(main)/layout.tsx`: 入口。入口が渡すセッションの手続きを`useSession`で受け取り、喪失と利用者の不一致の見張りを始める。
 - `src/app/(main)/settings-panel-entry.tsx`: 入口。`useSession`で受け取った手続きの`signOut`で`SignOutButton`を作り、設定パネルの分類「アカウント」へ渡す(`app/settings`)。
 - `src/features/auth/ui/sign-out-button.tsx`: サインアウトのボタンと確認ダイアログ。
-  ボタンは、設定の項目の枠の中の行(`app/settings`の「画面の作り」)として、`variant="ghost"`と`size="row"`で描く。
+  ボタンは、設定の項目一覧の行(`app/settings`の「画面の作り」)として、`variant="ghost"`と`size="row"`で描く。本文の他の3項目と同じ既存の文字14px・行高20pxを維持し、高さ44pxの操作領域と項目間の隙間0pxを保つ。確認ダイアログの文字サイズは変更しない。
   確認ダイアログは設定パネルのダイアログの中で開く入れ子のダイアログで、Escと外側の押下は確認ダイアログだけを閉じる。`BlockingConfirmDialog`に`nested`(既定は偽)を通して`DialogContent`へ渡し、`SignOutButton`は`nested`で描く。入れ子のダイアログは既定では自身の背景を描かず、外側の押下を親の背景が受けて設定パネルが閉じうるためである(`components/ui/dialog.tsx`)。
   実行中の表示とエラーを持ち、手続きの`signOut`を呼ぶ。
   結果は失敗(`failed`)とそれ以外(`ignored`。完了、実行中のため始めなかった)だけで、失敗のときだけ実行中を解いて失敗の種類の文言(UI層の文言の一覧)を示す。
