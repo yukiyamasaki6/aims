@@ -35,28 +35,49 @@ const CARD_FONTS = { date: cardLayout.dateFont, tag: cardLayout.tagFont };
 
 // 行は、境界の線(下側)だけで区切る(枠・背景・影はない)。リストは左右に-mx-3で広げ、行の内容を本文の端にそろえる。
 const listClassName = "-mx-3 border-t";
-const rowClassName = `flex ${cardLayout.height} items-center ${cardLayout.padding} text-card-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset`;
+const rowClassName = `flex items-center ${cardLayout.padding} text-card-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset`;
 
-// 読み込み後の行と同じ高さ(境界線を含む)。履歴の取得は、描いた1件の高さと間隔(0)から1ページの件数を決める(data-round-skeleton)。
+// スケルトンの棒の大きさ。左に太さの違う2段、右端に1本。
+const SKELETON_BARS = {
+  primary: "h-4 w-36",
+  secondary: "h-3 w-24",
+  trailing: "h-5 w-10",
+};
+
+// 読み込み後の行と同じ高さ(境界線を含む)・同じ左右の余白で、間隔0の3行。
 export function RoundCardsSkeleton() {
   return (
     <div className={listClassName}>
       {[0, 1, 2].map((i) => (
-        <Skeleton
+        <div
           key={i}
-          data-round-skeleton
-          className={`${cardLayout.heightWithLine} rounded-none border-b`}
-        />
+          data-testid="round-skeleton-row"
+          className={`flex items-center justify-between border-b ${cardLayout.padding}`}
+          style={{ height: cardLayout.pitchPx }}
+        >
+          <div className="flex flex-col gap-2">
+            <Skeleton className={SKELETON_BARS.primary} />
+            <Skeleton className={SKELETON_BARS.secondary} />
+          </div>
+          <Skeleton className={SKELETON_BARS.trailing} />
+        </div>
       ))}
     </div>
   );
 }
 
-// 履歴の末尾と0件の文言。行1つと同じ幅・高さの領域の中央に置く。
-export function HistoryNotice({ children }: { children: string }) {
+// 末尾と0件の文言。行1つと同じ幅・高さの領域の上下左右の中央に置く。bordered: 下の境界線を引く(点数一覧)。引かない(ホームの0件)ときは、境界線の1px分も高さに含める。
+export function RowNotice({
+  children,
+  bordered,
+}: {
+  children: string;
+  bordered: boolean;
+}) {
   return (
     <p
-      className={`-mx-3 flex ${cardLayout.heightWithLine} items-center justify-center border-b p-4 text-center text-muted-foreground text-sm`}
+      className={`-mx-3 flex items-center justify-center p-4 text-center text-muted-foreground text-sm ${bordered ? "border-b" : ""}`}
+      style={{ height: cardLayout.pitchPx }}
     >
       {children}
     </p>
@@ -139,7 +160,7 @@ function CardRow({
       ref={ref}
       href={href}
       className={rowClassName}
-      style={{ gap: widthPx.gap }}
+      style={{ gap: widthPx.gap, height: cardLayout.heightPx }}
     >
       <NameBlock
         name={item.name}

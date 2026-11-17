@@ -97,7 +97,7 @@ describe("RoundsHome", () => {
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
     });
 
-    it("ヘッダーに見出し「ホーム」のレベル1だけを持ち、件数の見出しは持たない", () => {
+    it("ヘッダーに見出し「ホーム」のレベル1が1つ、入力中の欄にレベル2「入力中のラウンド」が1つあり、件数の見出しは持たない", () => {
       // Given
       fakeWindow.setLocal({ inProgress });
 
@@ -110,7 +110,15 @@ describe("RoundsHome", () => {
         name: roundsText("homeTitle"),
       });
       expect(heading.closest("header")).not.toBeNull();
-      expect(screen.getAllByRole("heading")).toHaveLength(1);
+      expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+      expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(1);
+      expect(
+        screen.getByRole("heading", {
+          level: 2,
+          name: roundsText("homeInProgressHeading"),
+        }),
+      ).toBeInTheDocument();
+      expect(screen.getAllByRole("heading")).toHaveLength(2);
     });
 
     it("履歴の取得を呼ばず、取得が応答しない状況でも入力中のラウンドを表示する", () => {
@@ -143,7 +151,7 @@ describe("RoundsHome", () => {
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
-    it("入力中が0件なら、入力中のラウンドがないことを示し、ラウンドの開始ボタンは表示する", () => {
+    it("入力中が0件なら、見出しの下に入力中のラウンドがないことを示し、ラウンドの開始ボタンは表示する", () => {
       // Given
       fakeWindow.setLocal({ inProgress: [] });
 
@@ -151,12 +159,20 @@ describe("RoundsHome", () => {
       renderHome();
 
       // Then
-      expect(screen.getByText(roundsText("homeEmpty"))).toBeInTheDocument();
+      const heading = screen.getByRole("heading", {
+        level: 2,
+        name: roundsText("homeInProgressHeading"),
+      });
+      const notice = screen.getByText(roundsText("homeEmpty"));
+      expect(
+        heading.compareDocumentPosition(notice) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
       expect(screen.queryByRole("listitem")).toBeNull();
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
     });
 
-    it("端末の入力中をまだ読んでいなければ、カードも空の表示も出さず、ラウンドの開始ボタンは表示する", () => {
+    it("端末の入力中をまだ読んでいなければ、見出しは表示し、カードも空の表示も出さず、ラウンドの開始ボタンは表示する", () => {
       // Given
       fakeWindow.roundWindow.localList.mockReturnValue(null);
 
@@ -164,6 +180,12 @@ describe("RoundsHome", () => {
       renderHome();
 
       // Then
+      expect(
+        screen.getByRole("heading", {
+          level: 2,
+          name: roundsText("homeInProgressHeading"),
+        }),
+      ).toBeInTheDocument();
       expect(screen.queryByRole("listitem")).toBeNull();
       expect(screen.queryByText(roundsText("homeEmpty"))).toBeNull();
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();

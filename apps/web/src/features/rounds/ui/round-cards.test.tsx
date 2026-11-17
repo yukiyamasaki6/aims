@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { DistanceSubtotal } from "../domain/round-list";
-import { DistanceCards, RoundCards } from "./round-cards";
+import { DistanceCards, RoundCards, RoundCardsSkeleton } from "./round-cards";
 import {
   distanceListItem,
   roundListItem,
@@ -373,5 +373,18 @@ describe("DistanceCards", () => {
 
     // Then
     expect(screen.queryByTestId("round-menu-trigger")).toBeNull();
+  });
+});
+
+describe("RoundCardsSkeleton", () => {
+  it("ラウンドの取得中のスケルトンは3行である", () => {
+    // Given
+    // 描画だけを確かめ、棒の形や大きさは期待値にしない。
+
+    // When
+    render(<RoundCardsSkeleton />, { wrapper: IntlTestProvider });
+
+    // Then
+    expect(screen.getAllByTestId("round-skeleton-row")).toHaveLength(3);
   });
 });
