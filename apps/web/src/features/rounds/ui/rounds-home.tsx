@@ -35,7 +35,7 @@ export function RoundsHome() {
             </h2>
             {rounds !== null &&
               (rounds.length === 0 ? (
-                <RowNotice bordered={false}>{t("homeEmpty")}</RowNotice>
+                <RowNotice>{t("homeEmpty")}</RowNotice>
               ) : (
                 <RoundCards
                   rounds={rounds}

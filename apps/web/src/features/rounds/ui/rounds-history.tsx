@@ -161,11 +161,9 @@ function HistoryTail({
   const t = useTranslations("rounds");
   if (!hasMore) {
     return (
-      <div className="mt-3">
-        <RowNotice bordered>
-          {t(unit === "distance" ? "historyEndDistance" : "historyEnd")}
-        </RowNotice>
-      </div>
+      <RowNotice>
+        {t(unit === "distance" ? "historyEndDistance" : "historyEnd")}
+      </RowNotice>
     );
   }
   return (
@@ -238,7 +236,7 @@ function HistoryBody({
     );
   }
   if (rounds.length === 0 && !hasMore) {
-    return <RowNotice bordered>{t("historyEmpty")}</RowNotice>;
+    return <RowNotice>{t("historyEmpty")}</RowNotice>;
   }
   return (
     <>

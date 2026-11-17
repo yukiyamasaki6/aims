@@ -1176,6 +1176,58 @@ describe("RoundsHistory", () => {
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
 
+    it.each([
+      ["ラウンド単位", "round", "該当するラウンドは以上です"],
+      ["距離単位", "distance", "該当する距離は以上です"],
+    ] as const)(
+      "続きのない一覧の末尾に、%sの文言「%s」を表示し、文言そのものを確かめる",
+      async (_name, unit, expected) => {
+        // Given
+        remember({ condition: { unit } });
+        fetchResolves(unit === "round" ? completed : distances);
+
+        // When
+        renderHistory();
+        await screen.findAllByRole("listitem");
+
+        // Then
+        expect(screen.getByText(expected)).toBeInTheDocument();
+      },
+    );
+
+    it("末尾の文言と0件の文言は、一覧の行(カード)に含まれず、カードの後ろに置かれる", async () => {
+      // Given
+      fetchResolves(completed);
+      renderHistory();
+      const cards = await screen.findAllByRole("listitem");
+
+      // When
+      const end = screen.getByText(roundsText("historyEnd"));
+
+      // Then
+      expect(cards.some((card) => card.contains(end))).toBe(false);
+      const lastCard = cards[cards.length - 1];
+      expect(
+        lastCard.compareDocumentPosition(end) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("0件のときは、カードがなく、0件の文言「該当するラウンドがありません」だけを表示する", async () => {
+      // Given
+      fetchResolves([]);
+
+      // When
+      renderHistory();
+
+      // Then
+      expect(
+        await screen.findByText("該当するラウンドがありません"),
+      ).toBeInTheDocument();
+      expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+      expect(screen.queryByText(roundsText("historyEnd"))).toBeNull();
+    });
+
     it("見出し「履歴」のレベル1がヘッダーにあり、ラウンドの開始ボタンは持たない", async () => {
       // Given
       fetchResolves(completed);
