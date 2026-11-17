@@ -18,7 +18,7 @@ const MOBILE = { width: 375, height: 667 };
 
 type RoundInput = Omit<Parameters<typeof createRound>[0], "email" | "password">;
 
-// 既定は、1距離・12エンド・3射のラウンド。矢数に達していないエンドがあれば、最初のそのエンドの新しい矢を指してテンキーを展開した状態で開く。
+// 既定は、1距離・12エンド・3射のラウンド。満杯でないエンドがあれば、最初のそのエンドの新しい矢を指してテンキーを展開した状態で開く。
 async function openRound(
   page: Page,
   overrides: Partial<RoundInput> = {},
@@ -49,7 +49,7 @@ function shot(distanceIndex: number, endNumber: number, score: string) {
   };
 }
 
-// 全てのエンドが矢数に達した（テンキーを格納した状態で開く）記録を作る。
+// 全てのエンドが満杯になった（テンキーを格納した状態で開く）記録を作る。
 function allShots(distanceIndex: number, ends: number, arrows: number) {
   return Array.from({ length: ends * arrows }, (_, i) =>
     shot(distanceIndex, Math.floor(i / arrows) + 1, "5"),
@@ -125,7 +125,7 @@ test("点数を書くと記録され、点数の高い順に並び、再読み�
   await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("44");
 });
 
-test("矢数に達していないエンドがあるラウンドを開くと、的にある点数のキーだけを表示する", async ({
+test("満杯でないエンドがあるラウンドを開くと、的にある点数のキーだけを表示する", async ({
   page,
 }) => {
   await openRound(page, {

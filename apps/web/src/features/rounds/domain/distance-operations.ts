@@ -59,7 +59,7 @@ export function changesDistanceStructure(
 }
 
 // 保存した値と編集後の値の差分を、操作として返す。差分が無ければ操作を積まない。
-// 構成は的・エンド数・矢数の1組で、どれかが変われば3項目全てを送る。
+// 構成は的・エンド数・射数/エンドの1組で、どれかが変われば3項目全てを送る。
 export function buildDistanceUpdatedOperation(
   saved: Distance,
   config: Distance,

@@ -522,7 +522,7 @@ describe("shotFitsDistance", () => {
     expect(underMin).toBe(false);
   });
 
-  it("射順は1〜矢数なら有効で、範囲外なら無効", () => {
+  it("射順は1〜射数/エンドなら有効で、範囲外なら無効", () => {
     // Given
     const fits = (shotNumber: number) =>
       shotFitsDistance(config, { endNumber: 1, shotNumber }, score, faces);
@@ -584,7 +584,7 @@ describe("shotsFitDistance", () => {
     shot("d-1", "8", 8, { id: "c", end_number: 3 }),
   ];
 
-  it("矢が無い、または全ての矢がエンド数・矢数・的に収まるなら収まる", () => {
+  it("矢が無い、または全ての矢がエンド数・射数/エンド・的に収まるなら収まる", () => {
     // Given
     // When
     const empty = shotsFitDistance(config, [], faces);
@@ -646,7 +646,7 @@ describe("liveCountOf・endHasRoom", () => {
     expect(liveCountOf(shots, "d-1", 2)).toBe(2);
   });
 
-  it("矢数に達していないエンドには空きがある", () => {
+  it("満杯でないエンドには空きがある", () => {
     // Given
 
     // When

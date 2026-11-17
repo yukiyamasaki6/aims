@@ -57,6 +57,8 @@ const FOCUS_ALLOWED: Record<string, string> = {
     "閉じた後の戻り先と、メニュー内のキーボード操作への応答",
   "features/rounds/ui/history-filter-panel.tsx":
     "開いたときの領域(入力欄でない)への移動",
+  "features/rounds/ui/round-name-editor.tsx":
+    "名前の編集に入ったときの入力欄と、Enter・Escで終えたときの名前のボタンへの移動(利用者の操作への応答)",
   "features/rounds/ui/rounds-history.tsx": "閉じた後の起点(ボタン)への復帰",
 };
 

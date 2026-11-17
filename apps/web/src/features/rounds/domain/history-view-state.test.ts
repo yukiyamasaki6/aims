@@ -336,7 +336,7 @@ describe("historyDistancesOf", () => {
     });
   });
 
-  it("距離だけが入った行は、1エンドの矢数と的を指定なし(null)にする", () => {
+  it("距離だけが入った行は、射数/エンドと的を指定なし(null)にする", () => {
     // Given
     const draft = [distanceDraftOf({ distance: "30", arrowsPerEnd: "  " })];
 
@@ -391,7 +391,7 @@ describe("historyDistancesOf", () => {
   it.each([
     ["先頭に0のある数", "007", 7],
     ["前後に空白のある数", "  12 ", 12],
-  ])("1エンドの矢数が%sでも、正しい整数にして返す", (_name, text, expected) => {
+  ])("射数/エンドが%sでも、正しい整数にして返す", (_name, text, expected) => {
     // Given
     const draft = [distanceDraftOf({ arrowsPerEnd: text })];
 
@@ -454,7 +454,7 @@ describe("historyDistancesOf", () => {
   );
 
   it.each(["1", "12", ""])(
-    "1エンドの矢数が「%s」なら、正しい",
+    "射数/エンドが「%s」なら、正しい",
     (arrowsPerEnd) => {
       // Given
       const draft = [distanceDraftOf({ arrowsPerEnd })];
@@ -468,7 +468,7 @@ describe("historyDistancesOf", () => {
   );
 
   it.each(["0", "13", "+1", "1.5"])(
-    "1エンドの矢数が「%s」なら、1エンドの矢数の不正にする(範囲は1から12)",
+    "射数/エンドが「%s」なら、射数/エンドの不正にする(範囲は1から12)",
     (arrowsPerEnd) => {
       // Given
       const draft = [distanceDraftOf({ arrowsPerEnd })];
@@ -828,9 +828,9 @@ describe("historyViewStateOf", () => {
     ["距離が101", { distance: 101 }],
     ["距離が整数でない", { distance: 50.5 }],
     ["距離が文字列", { distance: "50" }],
-    ["矢数が13", { arrowsPerEnd: 13 }],
-    ["矢数が0", { arrowsPerEnd: 0 }],
-    ["矢数が整数でない", { arrowsPerEnd: 1.5 }],
+    ["射数/エンドが13", { arrowsPerEnd: 13 }],
+    ["射数/エンドが0", { arrowsPerEnd: 0 }],
+    ["射数/エンドが整数でない", { arrowsPerEnd: 1.5 }],
     ["的がUUIDの形でない", { targetFaceId: "not-a-uuid" }],
     ["行がオブジェクトでない(文字)", "50"],
     ["行が配列", [{ distance: 50 }]],
@@ -852,7 +852,7 @@ describe("historyViewStateOf", () => {
     },
   );
 
-  it("距離の行の境界(距離1と100、矢数1と12)は、正しい値として保つ", () => {
+  it("距離の行の境界(距離1と100、射数/エンド1と12)は、正しい値として保つ", () => {
     // Given
     const rows = [
       { distance: 1, arrowsPerEnd: 1, targetFaceId: null },
@@ -909,7 +909,7 @@ describe("historyViewStateOf", () => {
       [{ distance: 101, arrowsPerEnd: null, targetFaceId: null }],
     ],
     [
-      "矢数が範囲外(13)",
+      "射数/エンドが範囲外(13)",
       [{ distance: 50, arrowsPerEnd: 13, targetFaceId: null }],
     ],
   ])(

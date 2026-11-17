@@ -53,7 +53,7 @@ const shot = (n: number, scoreStr = "10", endNumber = 1) => ({
   score_str: scoreStr,
   score_int: Number(scoreStr),
 });
-// 全てのエンドを矢数まで満たす記録。
+// 全てのエンドを射数/エンドまで満たす記録。
 const allShots = () =>
   Array.from({ length: 36 }, (_, i) =>
     shot(i + 1, "10", Math.floor(i / 3) + 1),
@@ -84,7 +84,7 @@ describe("completionConfirmation", () => {
   const confirmationOf = (t: RoundTables) =>
     completionConfirmation(t.distances as never, t.shots as never);
 
-  it("矢数に達していないエンドがあれば未入力の旨を返し、全てのエンドが矢数に達していればnullを返す", () => {
+  it("満杯でないエンドがあれば未入力の旨を返し、全てのエンドが満杯になっていればnullを返す", () => {
     // Given
     // When
     const partial = confirmationOf(
@@ -212,7 +212,7 @@ describe("reopeningRequired", () => {
       expect(result).toBe(false);
     });
 
-    it("完了で、矢数に達したエンドへの新しい矢の記録は戻す必要がない", () => {
+    it("完了で、満杯になったエンドへの新しい矢の記録は戻す必要がない", () => {
       // Given
       const full = tables("completed", [shot(1), shot(2), shot(3)]);
 

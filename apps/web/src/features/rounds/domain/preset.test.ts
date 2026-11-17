@@ -77,7 +77,7 @@ describe("comparePresets", () => {
     expect(ids).toEqual(["recurve", "compound", "barebow"]);
   });
 
-  it("同じ種別・弓種の中では、距離の本数が多い方を上に並べる", () => {
+  it("同じ種別・弓種の中では、距離の数が多い方を上に並べる", () => {
     // Given
 
     // When
@@ -96,7 +96,7 @@ describe("comparePresets", () => {
     expect(ids).toEqual(["two", "one"]);
   });
 
-  it("距離の本数が同じ場合は、並び順の先頭から見て距離が大きい方を上に並べ、距離未設定は最も小さいものとして扱う", () => {
+  it("距離の数が同じ場合は、並び順の先頭から見て距離が大きい方を上に並べ、距離未設定は最も小さいものとして扱う", () => {
     // Given
 
     // When

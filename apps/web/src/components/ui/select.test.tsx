@@ -35,6 +35,24 @@ describe("Select", () => {
       expect(screen.getByRole("combobox", { name: "色" })).toBeInTheDocument();
     });
 
+    it("項目名に要素(必須の印つき)を渡せ、印も項目名として表示され、トリガーの名前に含まれる", () => {
+      // Given
+      const label = (
+        <>
+          色 <span>必須</span>
+        </>
+      );
+
+      // When
+      renderSelect({ label });
+
+      // Then
+      expect(screen.getByText("必須")).toBeVisible();
+      expect(screen.getByRole("combobox", { name: /色/ })).toHaveAccessibleName(
+        /必須/,
+      );
+    });
+
     it("トリガーに現在値の表示名を表示する", () => {
       // Given
       const value = "blue";

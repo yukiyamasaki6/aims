@@ -29,7 +29,7 @@ function isRoundOperation(operation: SyncOperation): boolean {
   return operation.type.startsWith("round.");
 }
 
-// 同じ矢か、同じエンド。エンドの矢数の上限と射順の重なりの判定が、同じエンドの矢の確定の順に依存する。
+// 同じ矢か、同じエンド。エンドの射数/エンドの上限と射順の重なりの判定が、同じエンドの矢の確定の順に依存する。
 function isSameShotOrEnd(
   previous: ShotOperation,
   next: ShotOperation,

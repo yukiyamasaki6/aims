@@ -9,7 +9,7 @@ import { applyOperations } from "./round-op-apply";
 import { type RoundState, selectRoundState } from "./round-tables";
 import type { SyncOperation } from "./sync-events";
 
-// 入力中と見せるか。状態が入力中かだけで決め、矢数に達していないエンドの有無や記録日では決めない。
+// 入力中と見せるか。状態が入力中かだけで決め、満杯でないエンドの有無や記録日では決めない。
 export function isRoundInProgress(
   state: Pick<RoundState, "status" | "roundDisabled">,
 ): boolean {

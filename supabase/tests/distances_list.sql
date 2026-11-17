@@ -45,7 +45,7 @@ language sql stable
 as $$ select id from dl_dist where alias = p_alias $$;
 
 -- ラウンドと距離を作る。実施日の9時（p_created_atで変えられる）に作る。
--- p_rows は距離の行の配列で、項目は n=距離の別名、k=position_key、d=距離（nullは距離が判明しない）、e=総エンド数、a=1エンドの矢数、
+-- p_rows は距離の行の配列で、項目は n=距離の別名、k=position_key、d=距離（nullは距離が判明しない）、e=総エンド数、a=射数/エンド、
 -- f=的のID（省略時は屋外122cmの公式の的）、m=距離が判明しているか（省略時は真）、x=無効にした距離か、
 -- i=距離のIDの末尾（省略時は無作為）、t=置く10点の矢の本数（小計は t * 10）、dx=置く無効な10点の矢の本数。
 -- 行は配列の順に挿入する（挿入順とIDの大小が違う入力を作るため）。
@@ -202,7 +202,7 @@ insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('N'));
 --   F: 屋外・リカーブ 09-14。F1=50m(120。無効な10点の矢を1本足してある)→無効な30m(矢は10点)→F3=20m(100)
 --   G: 屋外・コンパウンド 09-15。距離なし
 --   H: インドア・ベアボウ 09-16。position_keyが同じ2つの距離。H1(100)は先に挿入されIDが大きく、H2(200)は後に挿入されIDが小さい
---   I: 屋外・リカーブ 09-17。I1=50m 12エンド×3射(200)→I2=50m 6エンド×6射(220)。1エンドの矢数が違う
+--   I: 屋外・リカーブ 09-17。I1=50m 12エンド×3射(200)→I2=50m 6エンド×6射(220)。射数/エンドが違う
 --   J: 屋外・リカーブ 09-18。J1=50m(180)。的が屋外80cm
 --   Z: Nの完了で、Eが閲覧者として属する。インドア・リカーブ 09-11。Z1=18m(220)
 -- 返さない行: P（入力中）、X（削除済み）、Y（Nだけが属する完了）。
@@ -463,13 +463,13 @@ select is(
 select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 50, "arrows_per_end": 6}')),
   'J1,I2,F1,L1,C2,D1,A1',
-  '1エンドの矢数を加えると、矢数も等しい距離だけを返す（6射のとき、12エンド×3射のI1は返らない）'
+  '射数/エンドを加えると、射数/エンドも等しい距離だけを返す（6射のとき、12エンド×3射のI1は返らない）'
 );
 
 select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 50, "arrows_per_end": 3}')),
   'I1',
-  '1エンドの矢数が3の行は、12エンド×3射の距離だけを返す'
+  '射数/エンドが3の行は、12エンド×3射の距離だけを返す'
 );
 
 select is(
@@ -495,7 +495,7 @@ select is(
 select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 18, "arrows_per_end": 3, "target_face_id": "a1000000-0000-0000-0000-000000000004"}')),
   'H2,H1,B1,B2,Z1',
-  '距離・1エンドの矢数・的を全て加えた行は、全てが等しい距離だけを返す'
+  '距離・射数/エンド・的を全て加えた行は、全てが等しい距離だけを返す'
 );
 
 select is(

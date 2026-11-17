@@ -282,7 +282,7 @@ async function waitForDistanceDialogClosed() {
   );
 }
 
-// 開いているダイアログに距離(と1エンドの矢数)を入れて、確定のボタンを押し、閉じるまで待つ。
+// 開いているダイアログに距離(と射数/エンド)を入れて、確定のボタンを押し、閉じるまで待つ。
 async function confirmDistanceDialog(
   user: ReturnType<typeof userEvent.setup>,
   distance: string,
@@ -3521,7 +3521,7 @@ describe("RoundsHistory", () => {
         expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
       });
 
-      it("距離だけを入れて「追加」を押すと、ダイアログが閉じ、矢数の行のない距離の要約が出て、適用前は取得も記憶の変更も起きない", async () => {
+      it("距離だけを入れて「追加」を押すと、ダイアログが閉じ、射数/エンドの行のない距離の要約が出て、適用前は取得も記憶の変更も起きない", async () => {
         // Given
         const user = await renderWithDistances();
         const fetches = fake.store.loadList.mock.calls.length;
@@ -3542,7 +3542,7 @@ describe("RoundsHistory", () => {
         expect(memory.stored()).toEqual(DEFAULT_HISTORY_VIEW_STATE);
       });
 
-      it("1エンドの矢数を指定して確定すると、要約に距離と「N本」が出る", async () => {
+      it("射数/エンドを指定して確定すると、要約に距離と「N射」が出る", async () => {
         // Given
         const user = await renderWithDistances();
 
@@ -3621,7 +3621,7 @@ describe("RoundsHistory", () => {
         expect(screen.queryByRole("listitem")).toBeNull();
       });
 
-      it("1エンドの矢数を入れた確定は矢数の値で、空の確定はnullで、取得の条件の行になる", async () => {
+      it("射数/エンドを入れた確定は射数/エンドの値で、空の確定はnullで、取得の条件の行になる", async () => {
         // Given
         const user = await renderWithDistances();
         await addDistance(user, "50", "6");
@@ -3715,7 +3715,7 @@ describe("RoundsHistory", () => {
       it.each([
         ["距離が空", "", "", "distanceInvalid"],
         ["距離が範囲外(101)", "101", "", "distanceInvalid"],
-        ["1エンドの矢数が範囲外(13)", "50", "13", "arrowsPerEndInvalid"],
+        ["射数/エンドが範囲外(13)", "50", "13", "arrowsPerEndInvalid"],
       ] as const)(
         "%sで「追加」を押すと、閉じず、その欄の下に原因の文言を出し、要約も取得も増えない",
         async (_name, distance, arrowsPerEnd, error) => {

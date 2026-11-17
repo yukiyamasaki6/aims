@@ -129,7 +129,7 @@ function createDistance(
   };
 }
 
-// 構成を変えるとき、新しい構成で無効な表示中の矢があるか。生きている矢の数が新しい矢数を超えるエンドも無効とする。
+// 構成を変えるとき、新しい構成で無効な表示中の矢があるか。生きている矢の数が新しい射数/エンドを超えるエンドも無効とする。
 function hasShotInvalidUnder(
   tables: RoundTables,
   distance: DistanceRow,

@@ -835,7 +835,7 @@ describe("roundsList: 距離単位", () => {
     });
   });
 
-  it("距離の行が指定ありなら、p_distanceに距離・1エンドの矢数・的の3鍵だけの1つのオブジェクトで送る", async () => {
+  it("距離の行が指定ありなら、p_distanceに距離・射数/エンド・的の3鍵だけの1つのオブジェクトで送る", async () => {
     // Given
     const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
 

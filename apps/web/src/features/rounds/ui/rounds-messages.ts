@@ -73,7 +73,7 @@ export const roundsMessages = {
     } satisfies Record<HistoryRangeError, string>,
     historyFilterDistances: "ラウンド構成",
     historyFilterDistance: "距離(m)",
-    historyFilterArrowsPerEnd: "1エンドの矢数",
+    historyFilterArrowsPerEnd: "射数/エンド",
     historyFilterTarget: "的",
     historyFilterDistanceSelect: "距離を選択",
     historyDistanceAdd: "追加",
@@ -81,7 +81,7 @@ export const roundsMessages = {
     historyDistanceEdit: "距離を編集",
     historyDistanceError: {
       distanceInvalid: "距離は1〜100の整数で入力してください",
-      arrowsPerEndInvalid: "1エンドの矢数は1〜12の整数で入力してください",
+      arrowsPerEndInvalid: "射数/エンドは1〜12の整数で入力してください",
     } satisfies Record<HistoryDistanceError, string>,
     // 点数カードの中央で、表示しきれない距離の数。
     historyDistancesRest: "+{count}",
@@ -132,11 +132,13 @@ export const roundsMessages = {
     formatBowType: "{format} / {bowType}",
     // ラウンドの設定
     roundConfigName: "ラウンド名",
+    roundNamePlaceholder: "ラウンド名",
+    roundNameEdit: "ラウンド名を編集",
+    roundNameEditNamed: "ラウンド名を編集: {name}",
     roundConfigDate: "実施日",
     roundConfigFormat: "種別",
     roundConfigBowType: "弓種",
     roundConfigError: {
-      tooLong: `ラウンド名は${NAME_MAX_LENGTH}文字以内で入力してください。`,
       required: "実施日を入力してください。",
       unmarkedDistances:
         "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。",
@@ -148,14 +150,14 @@ export const roundsMessages = {
       "この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？",
     distanceLocked: "スコアが記録済みのため変更できません",
     distanceFieldDistance: "距離（m）",
-    distanceFieldArrows: "エンドあたりの本数",
+    distanceFieldArrows: "射数/エンド",
     distanceFieldTotalEnds: "総エンド数",
     distanceTargetFace: "的",
     distanceMarkedToggle: "Marked / Unmarked",
     distanceMarked: "Marked",
     distanceUnmarked: "Unmarked",
-    distanceEnds: "{arrowsPerEnd}本×{totalEnds}エンド",
-    distanceArrowsPerEnd: "{arrowsPerEnd}本",
+    distanceEnds: "{arrowsPerEnd}射×{totalEnds}エンド",
+    distanceArrowsPerEnd: "{arrowsPerEnd}射",
     distanceConfigError: {
       required: "距離を入力してください。",
       notPositiveInteger: "1以上の整数を入力してください。",

@@ -140,7 +140,7 @@ describe("RoundDetailClient", () => {
       ["オフライン", { status: "offline" }],
       ["エラー", { status: "error", reason: "failed" }],
     ] as const)(
-      "%sでは、戻るのリンクだけがヘッダーにあり、プリセット保存とラウンドのメニューは出ない",
+      "%sでは、戻るのリンクだけがヘッダーにあり、ラウンド名・プリセット保存・ラウンドのメニューは出ない",
       (_name, view) => {
         // Given
         fake.setView(ID, view);
@@ -153,6 +153,8 @@ describe("RoundDetailClient", () => {
         const header = back.closest("header");
         expect(header).not.toBeNull();
         expect(within(header as HTMLElement).queryByRole("button")).toBeNull();
+        expect(screen.queryByTestId("round-name-display")).toBeNull();
+        expect(screen.queryByTestId("round-name-input")).toBeNull();
       },
     );
   });

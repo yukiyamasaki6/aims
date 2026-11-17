@@ -30,7 +30,7 @@ export function isSamePointer(a: Pointer, b: Pointer): boolean {
   );
 }
 
-// 距離の中で、`fromEnd`以降の、矢数に達していない最初のエンドの新しい矢。無ければnull。
+// 距離の中で、`fromEnd`以降の、満杯でない最初のエンドの新しい矢。無ければnull。
 function openEndFrom(
   distance: Distance,
   shots: Shot[],
@@ -44,7 +44,7 @@ function openEndFrom(
   return null;
 }
 
-// 矢数に達していない最初のエンド(距離の並び順、エンドの昇順)の新しい矢。全て満杯ならnull。
+// 満杯でない最初のエンド(距離の並び順、エンドの昇順)の新しい矢。全て満杯ならnull。
 // `distances`は並び順、`shots`は生きている矢とする。
 export function firstOpenEnd(distances: Distance[], shots: Shot[]): Pointer {
   for (const distance of distances) {

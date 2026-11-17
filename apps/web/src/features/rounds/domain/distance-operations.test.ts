@@ -155,10 +155,10 @@ describe("distanceToAdd", () => {
 
 describe("changesDistanceStructure", () => {
   describe("構成が変わる場合", () => {
-    // 1項目だけを変えた判定を確かめるため、変えた後の本数は実際の形にならない。
+    // 1項目だけを変えた判定を確かめるため、変えた後の射数/エンドは実際の形にならない。
     it.each([
       { field: "総エンド数", overrides: { total_ends: 6 } },
-      { field: "エンドあたりの本数", overrides: { arrows_per_end: 6 } },
+      { field: "射数/エンド", overrides: { arrows_per_end: 6 } },
       { field: "的", overrides: { target_face_id: "face-2" } },
     ])("$fieldが変わると、変わったと判定する", ({ overrides }) => {
       // Given

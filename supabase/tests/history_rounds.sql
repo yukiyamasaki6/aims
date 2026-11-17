@@ -27,7 +27,7 @@ create function pg_temp.id(p_alias text) returns uuid
 language sql stable
 as $$ select id from hr_id where alias = p_alias $$;
 
--- 実際にある形のラウンドを作る。p_rowsは距離の行の配列で、d=距離、e=総エンド数、a=1エンドの矢数、f=的のID。
+-- 実際にある形のラウンドを作る。p_rowsは距離の行の配列で、d=距離、e=総エンド数、a=射数/エンド、f=的のID。
 -- 屋外は各距離6エンド×6射、インドアは10エンド×3射で、全距離で同じ形にする。矢は入れない（この関数は合計点を扱わない）。
 create function pg_temp.mk(
   p_alias text, p_owner text, p_date date, p_format text, p_bow_type text, p_status text, p_rows jsonb, p_disabled boolean default false

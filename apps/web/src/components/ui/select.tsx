@@ -1,12 +1,13 @@
 "use client";
 
 import { Select as SelectPrimitive } from "@base-ui/react/select";
+import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
 type SelectOption = { value: string; label: string };
 
-// base-uiのSelectを包んだ選択欄。項目名は見えるラベルで、トリガーへ関連付ける。
+// base-uiのSelectを包んだ選択欄。項目名は見えるラベルで、トリガーへ関連付ける。必須の印などは、使う側が項目名(ReactNode)として渡す。
 // 値の状態は使う側が持つ。未選択の表示も、選択肢の1つとして使う側が渡す。
 function Select({
   label,
@@ -16,7 +17,7 @@ function Select({
   testId,
   className,
 }: {
-  label: string;
+  label: ReactNode;
   options: readonly SelectOption[];
   value: string;
   onChange: (value: string) => void;
