@@ -1,15 +1,17 @@
 import {
   DEFAULT_HISTORY_CONDITION,
+  DEFAULT_HISTORY_INPUT,
   type HistoryCondition,
   type HistoryDistanceRow,
   type HistoryInput,
   type HistoryRangeDraft,
   type HistoryRangeError,
+  type HistoryRangeFields,
   historyRangeOf,
 } from "./history-view-state";
 
 // フィルターのパネルの編集中の値。開くたびに入力値から作り、閉じると破棄する。
-// 種別・弓種・向き・単位は入力値と同じ型、期間と得点の範囲は入力途中の文字、ラウンド構成と絞り込む距離は距離のダイアログで確定した検証済みの行である。
+// 種別・弓種・向き・単位は入力値と同じ型、期間と単位ごとの得点の範囲は入力途中の文字、ラウンド構成と絞り込む距離は距離のダイアログで確定した検証済みの行である。
 export type HistoryFilterDraft = {
   unit: HistoryInput["unit"];
   dateDirection: HistoryInput["dateDirection"];
@@ -52,6 +54,8 @@ export function historyFilterDraftOf(input: HistoryInput): HistoryFilterDraft {
       dateTo: input.dateTo ?? "",
       scoreMin: textOf(input.scoreMin),
       scoreMax: textOf(input.scoreMax),
+      distanceScoreMin: textOf(input.distanceScoreMin),
+      distanceScoreMax: textOf(input.distanceScoreMax),
     },
     distances: input.distances,
     distanceRow: input.distanceRow,
@@ -60,23 +64,45 @@ export function historyFilterDraftOf(input: HistoryInput): HistoryFilterDraft {
 
 // 既定の編集中の値。リセットで使う。
 export const DEFAULT_HISTORY_FILTER_DRAFT: HistoryFilterDraft =
-  historyFilterDraftOf(DEFAULT_HISTORY_CONDITION);
+  historyFilterDraftOf(DEFAULT_HISTORY_INPUT);
 
-// 編集中の値を新しい入力値にする。検証するのは期間と得点の範囲だけで、距離は距離のダイアログの確定で検証済みのため、そのまま入力値にする。
+// 表示している単位の得点の範囲を、期間とあわせて検証する対象の4つの文字列にする。
+function rangeFieldsOf(draft: HistoryFilterDraft): HistoryRangeFields {
+  const { range } = draft;
+  return draft.unit === "distance"
+    ? {
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
+        scoreMin: range.distanceScoreMin,
+        scoreMax: range.distanceScoreMax,
+      }
+    : range;
+}
+
+// 編集中の値を新しい入力値にする。検証するのは期間と表示している単位の得点の範囲だけで、もう一方の単位の得点の範囲は、現在の入力値(base)のままにする。距離は距離のダイアログの確定で検証済みのため、そのまま入力値にする。
 export function historyInputOfDraft(
   draft: HistoryFilterDraft,
+  base: HistoryInput,
 ): HistoryInputResult {
-  const range = historyRangeOf(draft.range);
-  if (!range.ok) return { ok: false, errors: { range: range.errors } };
+  const result = historyRangeOf(rangeFieldsOf(draft));
+  if (!result.ok) return { ok: false, errors: { range: result.errors } };
+  const { dateFrom, dateTo, scoreMin, scoreMax } = result.range;
+  const scores =
+    draft.unit === "distance"
+      ? { distanceScoreMin: scoreMin, distanceScoreMax: scoreMax }
+      : { scoreMin, scoreMax };
   return {
     ok: true,
     input: {
+      ...base,
       unit: draft.unit,
       dateDirection: draft.dateDirection,
       scoreDirection: draft.scoreDirection,
       format: draft.format,
       bowType: draft.bowType,
-      ...range.range,
+      dateFrom,
+      dateTo,
+      ...scores,
       distances: draft.distances,
       distanceRow: draft.distanceRow,
     },
@@ -97,7 +123,7 @@ function isSameRow(
   );
 }
 
-// 導出されるフィルターが既定か。適用中の印に使う。オフの間の絞り込む距離は導出に含まれないため数えない。
+// 導出されるフィルターが既定か。適用中の印に使う。使わない単位の絞り込む距離・ラウンド構成・得点の範囲は導出に含まれないため数えない。
 export function isDefaultHistoryCondition(
   condition: HistoryCondition,
 ): boolean {

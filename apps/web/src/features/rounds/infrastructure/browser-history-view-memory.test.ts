@@ -19,6 +19,8 @@ const saved: HistoryViewState = {
     dateTo: "2026-05-31",
     scoreMin: 0,
     scoreMax: 600,
+    distanceScoreMin: 20,
+    distanceScoreMax: 80,
     distances: [
       {
         distance: 50,
@@ -61,6 +63,54 @@ describe("createBrowserHistoryViewMemory", () => {
       // Then
       expect(state).toEqual(saved);
     });
+
+    it("単位ごとの得点の範囲、ラウンド構成、距離の指定を持つ状態を書いて読むと、使わない単位の値も含めて全て復元する", () => {
+      // Given
+      const state: HistoryViewState = {
+        input: { ...saved.input, unit: "round" },
+      };
+      createBrowserHistoryViewMemory(identityReader).write(state);
+
+      // When
+      const { input } = createBrowserHistoryViewMemory(identityReader).read();
+
+      // Then
+      expect([input.scoreMin, input.scoreMax]).toEqual([0, 600]);
+      expect([input.distanceScoreMin, input.distanceScoreMax]).toEqual([
+        20, 80,
+      ]);
+      expect(input.distances).toEqual(saved.input.distances);
+      expect(input.distanceRow).toEqual(saved.input.distanceRow);
+    });
+
+    it.each(["round", "distance"])(
+      "距離単位の範囲を持たない旧い保存値(単位が%s)は、scoreMin・scoreMaxをラウンド単位の範囲として読み、距離単位の範囲は指定なしにする",
+      (unit) => {
+        // Given
+        const {
+          distanceScoreMin: _min,
+          distanceScoreMax: _max,
+          ...old
+        } = saved.input;
+        window.sessionStorage.setItem(
+          "aims:history-view",
+          JSON.stringify({
+            userId: "user-1",
+            state: { input: { ...old, unit, scoreMin: 100, scoreMax: 500 } },
+          }),
+        );
+
+        // When
+        const { input } = createBrowserHistoryViewMemory(identityReader).read();
+
+        // Then
+        expect([input.scoreMin, input.scoreMax]).toEqual([100, 500]);
+        expect([input.distanceScoreMin, input.distanceScoreMax]).toEqual([
+          null,
+          null,
+        ]);
+      },
+    );
 
     it("旧い形の保存値(condition・sortKey・unit・distanceRow・filterOpen・distanceRowInput)は、読み替えず、既定の状態で返す", () => {
       // Given

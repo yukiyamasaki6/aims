@@ -19,6 +19,8 @@ describe("createFakeHistoryViewMemory", () => {
         dateTo: null,
         scoreMin: 0,
         scoreMax: null,
+        distanceScoreMin: 20,
+        distanceScoreMax: 80,
         distances: [
           {
             distance: 50,

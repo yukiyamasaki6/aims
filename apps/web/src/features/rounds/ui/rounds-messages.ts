@@ -46,7 +46,9 @@ export const roundsMessages = {
     historyFilterClose: "閉じる",
     historyFilterActive: "適用中",
     historyControlsApply: "検索",
-    historyShowDistances: "距離単位で表示",
+    historyUnitLabel: "表示単位",
+    historyUnitRound: "ラウンド",
+    historyUnitDistance: "距離",
     historyDateDirection: {
       desc: "新しい順",
       asc: "古い順",
