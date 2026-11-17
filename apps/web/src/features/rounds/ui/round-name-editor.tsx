@@ -11,8 +11,11 @@ import { NAME_MAX_LENGTH } from "../domain/round-constants";
 import type { SyncOperation } from "../domain/sync-events";
 import { useRoundProcedures } from "./rounds-context";
 
-// 名前の表示のボタンと入力欄が共有する箱(文字の大きさ14px、左右の余白、枠線の幅)。表示と入力で幅が飛ばない。
-const NAME_BOX = "h-8 items-center border border-transparent px-2.5 text-sm";
+// 名前の表示のボタンと入力欄が共有する箱(文字の大きさ14px、左右の余白5px、枠線1px)。表示と入力で幅が飛ばない。
+const NAME_BOX = "h-8 items-center border border-transparent px-[5px] text-sm";
+
+// 箱の左を、ヘッダーのタイトルの左の余白(6px)のうち3pxだけ左へ出す。残る3pxは、入力欄のフォーカスの縁(3px)がタイトルの枠で切れない余裕である。「戻る」の文字の右端から名前の文字の左端までは、間隔2px+余白6px-3px+箱の左の余白と枠線6px＝11pxで、アイコンと同じ約10pxになる。
+const NAME_OFFSET = "-ml-[3px]";
 
 // 編集中の入力欄。入力は50文字までで、確定でのエラーは持たない。Enter(変換中を除く)で確定し、Escで取り消す(どちらも、表示に戻った後に名前のボタンへフォーカスを移す)。入力欄の外の操作(blur)での確定は、移した先のフォーカスを残す。
 function NameInput({
@@ -30,7 +33,9 @@ function NameInput({
   const placeholder = t("roundNamePlaceholder");
   return (
     // 見えない同じ文字(sizer)と入力欄を同じマスに重ね、入力欄の幅を文字に合わせて増減させる(上限は親の幅)。末尾にカーソルの幅(2px)だけを足し、文字の左右の余白を同じにする。入力欄の幅は0にして最小幅を親(マス)の幅にし、入力欄自身の固有の幅(約20文字分)が列の幅に効かないようにする。変換中の未確定文字も、入力欄の値に含まれるので測れる。空のときはプレースホルダーの幅。
-    <span className="inline-grid max-w-full min-w-0 grid-cols-[minmax(0,auto)]">
+    <span
+      className={`inline-grid max-w-full min-w-0 grid-cols-[minmax(0,auto)] ${NAME_OFFSET}`}
+    >
       <span
         aria-hidden="true"
         className={`invisible col-start-1 row-start-1 overflow-hidden whitespace-pre ${NAME_BOX}`}
@@ -45,7 +50,7 @@ function NameInput({
         aria-label={t("roundConfigName")}
         placeholder={placeholder}
         data-testid="round-name-input"
-        className="col-start-1 row-start-1 w-0 min-w-full px-2.5 text-sm md:text-sm"
+        className="col-start-1 row-start-1 w-0 min-w-full px-[5px] text-sm md:text-sm"
         onChange={(e) => onChange(e.target.value)}
         onBlur={() => onFinish(true, false)}
         onKeyDown={(e) => {
@@ -149,7 +154,7 @@ export function RoundNameEditor({
           : t("roundNameEdit")
       }
       onClick={start}
-      className={`block max-w-full truncate rounded-lg text-left ${NAME_BOX} ${named ? "" : "text-muted-foreground"}`}
+      className={`block max-w-full truncate rounded-lg text-left ${NAME_OFFSET} ${NAME_BOX} ${named ? "" : "text-muted-foreground"}`}
     >
       {named ? config.name : t("roundNamePlaceholder")}
     </button>
