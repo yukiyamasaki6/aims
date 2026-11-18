@@ -117,7 +117,7 @@ describe("パスワード再設定の手続き", () => {
       expect(resetCheck).not.toHaveBeenCalled();
     });
 
-    it("セキュリティチェックが未完了なら、その不備を示し、認証サービスを呼ばない", async () => {
+    it("セキュリティチェックが未完了なら、認証サービスを呼ばず、コードの送付を待ちにする", async () => {
       // Given
       const { procedure, authenticator, events, viewOf } = setup();
 
@@ -127,8 +127,10 @@ describe("パスワード再設定の手続き", () => {
       await procedure.sendCode({ email }, view);
 
       // Then
-      expect(view.observedState.fieldErrors).toEqual({
-        captcha: "incomplete",
+      expect(view.observedState).toMatchObject({
+        pending: "send",
+        awaitingCheck: true,
+        fieldErrors: {},
       });
       expect(events).toEqual([]);
       expect(authenticator.sendCode).not.toHaveBeenCalled();

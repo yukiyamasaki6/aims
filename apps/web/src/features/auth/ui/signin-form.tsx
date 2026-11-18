@@ -18,6 +18,7 @@ import { AuthHeader } from "./auth-header";
 import { PasswordInput } from "./password-input";
 import { Turnstile } from "./turnstile";
 import { useAuthTexts } from "./use-auth-texts";
+import { useCheckWait } from "./use-check-wait";
 import { useScreenView } from "./use-screen-view";
 
 // エラー文の要素のidの接頭辞(`${ID_PREFIX}-email-error`)。
@@ -43,10 +44,17 @@ export function SignInForm({
   const hydrated = useHydrated();
   const t = useTranslations("auth");
   const texts = useAuthTexts();
+  const errorText = texts.screenError(flow.error, flow.fieldErrors.captcha);
+  const { run, checkProps } = useCheckWait({
+    flow,
+    dispatch: view.dispatch,
+    resume: (input: Parameters<SignIn["submit"]>[0]) =>
+      void signIn.submit(input, view),
+  });
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    void signIn.submit({ email, password, from: readReturnTo() }, view);
+    run({ email, password, from: readReturnTo() });
   }
 
   return (
@@ -69,16 +77,14 @@ export function SignInForm({
           siteKey={siteKey}
           ref={checkRef}
           onVerify={(token) => view.dispatch({ type: "captchaChecked", token })}
-          error={texts.fieldError("captcha", flow.fieldErrors.captcha)}
+          {...checkProps}
         />
         <BusyButton type="submit" busy={flow.submitting}>
           {t("signInSubmit")}
         </BusyButton>
       </form>
-      {flow.error && (
-        <p className="text-center text-destructive text-sm">
-          {texts.failure(flow.error)}
-        </p>
+      {errorText && (
+        <p className="text-center text-destructive text-sm">{errorText}</p>
       )}
       <p className="text-muted-foreground text-sm">
         <Link href={RESET_PASSWORD_PATH} className="underline">

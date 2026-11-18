@@ -1,7 +1,7 @@
-import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { type RefObject, useRef, useState } from "react";
 import { useMountedRef } from "@/hooks/use-mounted-ref";
 import type { ScreenView } from "../application/screen-view";
+import type { TurnstileReset } from "./turnstile";
 
 // 画面の状態を、集約の命令(開始)と事実(reducer)で遷移させて持ち、手続きへ渡す画面の約束を作る。
 // 開始の命令は描画済みの状態に適用し、事実は直前の状態に適用する。
@@ -14,10 +14,10 @@ export function useScreenView<State, Event>(
 ): {
   state: State;
   view: ScreenView<State, Event>;
-  checkRef: RefObject<TurnstileInstance | undefined>;
+  checkRef: RefObject<TurnstileReset | undefined>;
 } {
   const mounted = useMountedRef();
-  const checkRef = useRef<TurnstileInstance>(undefined);
+  const checkRef = useRef<TurnstileReset>(undefined);
   const [state, setState] = useState(initial);
   const [stable] = useState(() => ({
     dispatch: (event: Event) => setState((prev) => reducer(prev, event)),

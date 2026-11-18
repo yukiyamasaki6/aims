@@ -8,18 +8,11 @@ import { OtpEmailStep } from "./otp-email-step";
 
 const authText = translatorFor("auth");
 
-// 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、errorの受け渡しを確かめられるスタブで模す。
+// 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックする。
 vi.mock("./turnstile", () => ({
-  Turnstile: forwardRef<unknown, { error?: string }>(
-    function TurnstileStub(props) {
-      return (
-        <>
-          <div data-testid="turnstile-stub" />
-          {props.error && <p>{props.error}</p>}
-        </>
-      );
-    },
-  ),
+  Turnstile: forwardRef(function TurnstileStub() {
+    return <div data-testid="turnstile-stub" />;
+  }),
 }));
 
 type Props = ComponentProps<typeof OtpEmailStep>;
@@ -31,7 +24,6 @@ function createForm(overrides: Partial<Props> = {}) {
     email: "",
     onEmailChange: vi.fn(),
     emailError: undefined,
-    captchaError: undefined,
     submitting: false,
     error: null,
     hydrated: true,
@@ -39,6 +31,8 @@ function createForm(overrides: Partial<Props> = {}) {
     siteKey: "site-key",
     checkRef: { current: undefined },
     onCheck: vi.fn(),
+    waiting: false,
+    onFailed: vi.fn(),
     ...overrides,
   } satisfies Props;
 }
@@ -146,19 +140,6 @@ describe("OtpEmailStep", () => {
       const input = screen.getByPlaceholderText("you@example.com");
       expect(input).not.toHaveAttribute("aria-describedby");
       expect(input).toHaveAttribute("aria-invalid", "false");
-    });
-
-    it("captchaのエラーをTurnstileへ渡す", () => {
-      // Given
-
-      // When
-      const form = createForm({
-        captchaError: "captchaのエラー",
-      });
-      renderStep(form);
-
-      // Then
-      expect(screen.getByText("captchaのエラー")).toBeInTheDocument();
     });
 
     it("submittingのとき、送信ボタンをaria-disabledにしスピナーを出す", () => {

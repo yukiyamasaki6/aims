@@ -110,21 +110,21 @@ let subject = subjects[0];
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、onVerifyの発火とreset()の呼び出しを制御し、errorの表示を受け取れるスタブで模す。
 const turnstile = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
+  onFailed: undefined as (() => void) | undefined,
   reset: vi.fn(),
 }));
 vi.mock("./turnstile", () => ({
   Turnstile: forwardRef<
     unknown,
-    { onVerify: (token: string | null) => void; error?: string }
+    {
+      onVerify: (token: string | null) => void;
+      onFailed?: () => void;
+    }
   >(function TurnstileStub(props, ref) {
     turnstile.onVerify = props.onVerify;
+    turnstile.onFailed = props.onFailed;
     useImperativeHandle(ref, () => ({ reset: turnstile.reset }));
-    return (
-      <>
-        <div data-testid="turnstile-stub" />
-        {props.error && <p>{props.error}</p>}
-      </>
-    );
+    return <div data-testid="turnstile-stub" />;
   }),
 }));
 
@@ -178,6 +178,10 @@ function backButton() {
 
 function setPasswordButton() {
   return screen.getByRole("button", { name: subject.passwordSubmit });
+}
+
+function failCheck() {
+  act(() => turnstile.onFailed?.());
 }
 
 function completeCaptcha(token = "captcha-token") {
@@ -235,21 +239,17 @@ async function advanceToPasswordStep({ checked = true } = {}) {
 
 // 確認・再送が終わった後に、送信中表示を解除し、再送・確認・戻るのいずれも再び実行できる（共有の送信中ガードが解除されている）ことを検証する。
 // 再送はクールダウン中のため、クールダウン中のエラーが表示されることで操作を受け付けたことを確認する。
-// resendBlockedBy: 再送を押したときに示される不備。待ちが残っていれば"cooldown"、再送の失敗の直後(待ちを始めず、トークンを消費済み)は"captcha"。
-async function expectCodeStepOperationsAvailable(
-  resendBlockedBy: "cooldown" | "captcha" = "cooldown",
-) {
+// resendBlocked: 再送を押したときにクールダウン中のエラーが示されるか。再送の失敗の直後は、待ちを始めておらず、押すとチェックの待ちになり他の操作を止めるため、押さずに、押せる状態であることだけを確かめる。
+async function expectCodeStepOperationsAvailable(resendBlocked = true) {
   expect(spinnerIn(verifyButton())).toBeNull();
   expect(spinnerIn(resendButton())).toBeNull();
 
-  fireEvent.click(resendButton());
-  expect(
-    screen.getByText(
-      resendBlockedBy === "cooldown"
-        ? COOLDOWN_ERROR_MESSAGE
-        : CAPTCHA_ERROR_MESSAGE,
-    ),
-  ).toBeInTheDocument();
+  if (resendBlocked) {
+    fireEvent.click(resendButton());
+    expect(screen.getByText(COOLDOWN_ERROR_MESSAGE)).toBeInTheDocument();
+  } else {
+    expect(resendButton()).toHaveAttribute("aria-disabled", "false");
+  }
 
   auth.verifyCode.mockClear();
   auth.verifyCode.mockResolvedValue(refusedWith({ kind: "code_expired" }));
@@ -362,7 +362,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       expect(auth.sendCode).not.toHaveBeenCalled();
     });
 
-    it("メールアドレスが未入力でcaptchaも未完了の場合、メール欄とcaptcha欄のエラーを同時に表示し送信しない", async () => {
+    it("メールアドレスが未入力でcaptchaが未完了の場合、メール欄のエラーだけを表示し、captchaは待たず送信しない", async () => {
       // Given
       const user = userEvent.setup();
       renderForm();
@@ -374,7 +374,46 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       expect(
         screen.getByText(authText("fieldError.email.required")),
       ).toBeInTheDocument();
+      expect(screen.queryByText(CAPTCHA_ERROR_MESSAGE)).not.toBeInTheDocument();
+      expect(sendCodeButton()).toHaveAttribute("aria-disabled", "false");
+      expect(auth.sendCode).not.toHaveBeenCalled();
+    });
+
+    it("captchaの完了前に押すと、captchaのエラーを出さずに送信中になり、トークンが届くと、押した入力で1回だけ送信してコード入力画面へ進む", async () => {
+      // Given
+      auth.sendCode.mockResolvedValue(ACCEPTED);
+      const user = userEvent.setup();
+      renderForm();
+      await user.type(emailInput(), "user@example.com");
+      await user.click(sendCodeButton());
+
+      // When
+      completeCaptcha("late-token");
+
+      // Then
+      expect(
+        await screen.findByRole("heading", { name: authText("otpTitle") }),
+      ).toBeInTheDocument();
+      expect(auth.sendCode).toHaveBeenCalledExactlyOnceWith({
+        purpose: subject.purpose,
+        email: "user@example.com",
+        captchaToken: "late-token",
+      });
+    });
+
+    it("captchaの完了前に押した後、チェックの失敗で待ちが解けてcaptchaのエラーを表示する", async () => {
+      // Given
+      const user = userEvent.setup();
+      renderForm();
+      await user.type(emailInput(), "user@example.com");
+      await user.click(sendCodeButton());
+
+      // When
+      failCheck();
+
+      // Then
       expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
+      expect(sendCodeButton()).toHaveAttribute("aria-disabled", "false");
       expect(auth.sendCode).not.toHaveBeenCalled();
     });
 
@@ -401,7 +440,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       ["認証サービスが拒否した", "rate_limited"],
       ["通信の失敗になった", "unreachable"],
     ] as const)(
-      "%s後は使ったトークンを消費し、新しいトークンで取り直して進める",
+      "%s後は使ったトークンを消費し、押すと待ちになり、取り直した新しいトークンで自動で進める",
       async (_name, kind) => {
         // Given
         auth.sendCode.mockResolvedValueOnce(refused(kind));
@@ -411,12 +450,10 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
         await submitEmailStep(user);
         await screen.findByText(authText(`failure.${kind}`));
         await user.click(sendCodeButton());
-        expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
         expect(auth.sendCode).toHaveBeenCalledOnce();
-        completeCaptcha("second-token");
 
         // When
-        await user.click(sendCodeButton());
+        completeCaptcha("second-token");
 
         // Then
         expect(
@@ -668,16 +705,38 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       expect(turnstile.reset).toHaveBeenCalledOnce();
     });
 
-    it("captcha未完了の場合、再送欄にエラーを表示し再送しない", async () => {
+    it("captchaの完了前に再送を押すと、captchaのエラーを出さずに再送中になり、トークンが届くと1回だけ再送する", async () => {
       // Given
       renderForm();
       await advanceToResendReady();
-
-      // When
+      auth.sendCode.mockResolvedValue(ACCEPTED);
       fireEvent.click(resendButton());
 
+      // When
+      completeCaptcha("late-resend-token");
+      await settle();
+
       // Then
-      expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
+      expect(screen.queryByText(CAPTCHA_ERROR_MESSAGE)).not.toBeInTheDocument();
+      expect(auth.sendCode).toHaveBeenCalledExactlyOnceWith({
+        purpose: subject.purpose,
+        email: "user@example.com",
+        captchaToken: "late-resend-token",
+      });
+    });
+
+    it("再送の待ちの間にチェックが失敗すると、未完了の文言を再送の欄の外に表示し、再送しない", async () => {
+      // Given
+      renderForm();
+      await advanceToResendReady();
+      fireEvent.click(resendButton());
+
+      // When
+      failCheck();
+
+      // Then
+      const message = screen.getByText(CAPTCHA_ERROR_MESSAGE);
+      expect(resendButton().parentElement).not.toContainElement(message);
       expect(auth.sendCode).not.toHaveBeenCalled();
     });
 
@@ -718,14 +777,14 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
         screen.getByText(authText("failure.captcha_failed")),
       ).toBeInTheDocument();
       expect(turnstile.reset).toHaveBeenCalledOnce();
-      await expectCodeStepOperationsAvailable("captcha");
+      await expectCodeStepOperationsAvailable(false);
     });
 
     it.each([
       ["認証サービスが拒否した", "rate_limited"],
       ["通信の失敗になった", "unreachable"],
     ] as const)(
-      "%s後は使ったトークンを消費し、新しいトークンで再送する",
+      "%s後は使ったトークンを消費し、押すと待ちになり、取り直した新しいトークンで自動で再送する",
       async (_name, kind) => {
         // Given
         renderForm();
@@ -736,13 +795,11 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
         await settle();
         await advanceSeconds(60);
         fireEvent.click(resendButton());
-        expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
         expect(auth.sendCode).toHaveBeenCalledOnce();
         auth.sendCode.mockResolvedValue(ACCEPTED);
-        completeCaptcha("second-resend-token");
 
         // When
-        fireEvent.click(resendButton());
+        completeCaptcha("second-resend-token");
         await settle();
 
         // Then
@@ -931,7 +988,7 @@ describe("サインアップのパスワード設定の段階のセキュリテ�
     );
   });
 
-  it("パスワード設定の段階のチェックが未完了なら、コード入力の段階でチェックを完了していても、未完了の理由を表示し、設定しない", async () => {
+  it("パスワード設定の段階のチェックが未完了なら、コード入力の段階でチェックを完了していても、押すと待ちになり、設定の段階のトークンが届くまで設定しない", async () => {
     // Given
     const user = userEvent.setup();
     renderForm();
@@ -947,8 +1004,48 @@ describe("サインアップのパスワード設定の段階のセキュリテ�
     await user.click(setPasswordButton());
 
     // Then
-    expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
+    expect(screen.queryByText(CAPTCHA_ERROR_MESSAGE)).not.toBeInTheDocument();
+    expect(setPasswordButton()).toHaveAttribute("aria-disabled", "true");
     expect(auth.setPassword).not.toHaveBeenCalled();
+  });
+
+  it("パスワード設定の段階で、チェックの完了前に押した後にチェックが失敗すると、未完了の文言を表示し、設定しない", async () => {
+    // Given
+    const user = userEvent.setup();
+    renderForm();
+    await advanceToPasswordStep({ checked: false });
+    await user.type(passwordInput(), "password123");
+    await user.click(setPasswordButton());
+
+    // When
+    failCheck();
+
+    // Then
+    expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
+    expect(setPasswordButton()).toHaveAttribute("aria-disabled", "false");
+    expect(auth.setPassword).not.toHaveBeenCalled();
+  });
+
+  it("パスワード設定の段階で、チェックの完了前に押した後にトークンが届くと、押した入力のまま設定してサインインする", async () => {
+    // Given
+    auth.setPassword.mockResolvedValue(ACCEPTED);
+    const user = userEvent.setup();
+    renderForm();
+    await advanceToPasswordStep({ checked: false });
+    await user.type(passwordInput(), "password123");
+    await user.click(setPasswordButton());
+
+    // When
+    completeCaptcha("late-password-step-token");
+
+    // Then
+    await waitFor(() => expect(leave).toHaveBeenCalledWith("/rounds"));
+    expect(auth.setPassword).toHaveBeenCalledOnce();
+    expect(auth.signIn).toHaveBeenCalledExactlyOnceWith({
+      email: "user@example.com",
+      password: "password123",
+      captchaToken: "late-password-step-token",
+    });
   });
 
   it("設定の後のサインインが失敗すると、その理由を表示し、パスワード設定の段階に留まり、遷移しない", async () => {

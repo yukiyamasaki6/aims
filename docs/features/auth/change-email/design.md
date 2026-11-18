@@ -45,6 +45,8 @@ Turnstileは再送だけに使う(要求と確認の呼び出しはチェック�
 
 ## 構成とデータの流れ
 
+チェック未完了の送信は、集約の開始の命令が待ちの状態にし、画面が`useCheckWait`でトークンの到着を受けて同じ操作を再開する(追加チェックの表示中は待ち、失敗と上限は不備として示す)。規則は`docs/features/auth/design.md`の「セキュリティチェックの待ち」に従う。
+
 構造の方針は`docs/architecture.md`に従う。
 
 - `supabase/config.toml`: `[auth.email]`に`double_confirm_changes = true`を足し、`[auth.email.template.email_change]`(件名「【AIMS】メールアドレス変更の認証コード」、`content_path`は`./supabase/templates/change-email.html`)を足す。
@@ -62,7 +64,7 @@ Turnstileは再送だけに使う(要求と確認の呼び出しはチェック�
 - `src/features/auth/domain/auth-failure.ts`、`flow.ts`: 失敗の種類に`email_exists`と`same_email`、欄の誤りに`currentCode`と`newCode`(未入力と、誤りまたは期限切れ)を足す。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 約束の実装を足す。応答のコードは専用の対応(下表)で写す。
 - `src/features/auth/ui/auth-messages.ts`: 上の種類と画面の文言を足す。
-- `src/features/auth/ui/otp-code-step.tsx`: `ResendSection`だけをexportする(`OtpCodeStep`の振る舞いは変えない)。
+- `src/features/auth/ui/otp-code-step.tsx`: `ResendSection`だけをexportする(`OtpCodeStep`の振る舞いは変えない)。`ResendSection`は再送ボタンと再送の失敗だけを描き、セキュリティチェックの失敗の文言は持たない。文言は、画面が`flow.error`と同じ段落(再送の部分の下)に出す(`docs/features/auth/design.md`の「セキュリティチェックの待ち」)。
 - `src/features/settings/ui/settings-account.tsx`、`settings-messages.ts`、`src/routes.ts`: 「メールアドレス変更」項目(パスワード変更の上)と、`CHANGE_EMAIL_HASH`(`#settings/account/email`)。
   保護と遷移元は背景の画面(`/rounds`の配下)のものが効き、遷移元はハッシュを含む(`auth/signin`)。
 
@@ -72,7 +74,7 @@ Turnstileは再送だけに使う(要求と確認の呼び出しはチェック�
    認証サービスは、現在と新しいメールアドレスへ別々のコードを送る(captchaは要さない)。
 2. 確認: 値が確認できたコードのままでない欄のコードを、その欄のメールアドレス(変更前の欄は現在、変更後の欄は新しいメールアドレス)を付けて、1回の操作の中で順に`verifyOtp`で確認する。
    一方だけでは認証サービスは完了せず、もう一方で完了して新しいセッションを返す。SDKは採用し、この端末のサインインは維持される。
-3. 再送: 現在のメールアドレスを付け、チェックのトークンを添えて`resend`を呼ぶ。両方のアドレスへ新しいコードが届き、前のコードは無効になる。成功も失敗もトークンを消費してやり直す。
+3. 再送: 現在のメールアドレスを付け、チェックのトークンを添えて`resend`を呼ぶ。両方のアドレスへ新しいコードが届き、前のコードは無効になる。成功も失敗もトークンを消費してやり直す(全画面の規則。`docs/features/auth/design.md`)。
 4. 応答の後、画面が表示中のときだけ状態を更新する。離れていても、確認の残りの呼び出しを含め、呼び出しは進める。
 
 ### 応答の写し

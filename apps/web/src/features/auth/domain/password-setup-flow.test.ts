@@ -11,7 +11,6 @@ import {
 } from "./password-setup-flow";
 
 const NETWORK_ERROR_MESSAGE = "unreachable";
-const CAPTCHA_MESSAGE = "incomplete";
 const WAIT_MESSAGE = "cooldown";
 
 type Operation = NonNullable<PasswordSetupFlow["pending"]>;
@@ -597,7 +596,7 @@ describe("操作の開始の可否と入力の検証", () => {
     });
 
     it.each([null, ""])(
-      "トークンが%pなら、セキュリティチェックの不備を示す",
+      "トークンが%pで失敗もしていなければ、依頼を返さず、コードの送付を実行中の待ちにする",
       (captchaToken) => {
         // Given
         const flow = flowWith({ captchaToken });
@@ -609,14 +608,43 @@ describe("操作の開始の可否と入力の検証", () => {
         });
 
         // Then
-        expect(result).toMatchObject({
-          request: null,
-          state: { fieldErrors: { captcha: CAPTCHA_MESSAGE } },
+        expect(result.request).toBeNull();
+        expect(result.state).toMatchObject({
+          pending: "send",
+          awaitingCheck: true,
+          fieldErrors: {},
+          error: null,
         });
       },
     );
 
-    it("メールアドレスとセキュリティチェックの両方に不備があれば、両方を示す", () => {
+    it("失敗の通知で待ちが解けた後に押すと、すぐには失敗を示さず、通常どおり待ちにする", () => {
+      // Given
+      const waiting = beginSendCode(flowWith({}), {
+        email: "user@example.com",
+        offline: false,
+      }).state;
+      const released = passwordSetupReducer(waiting, {
+        type: "checkWaitReleased",
+      });
+
+      // When
+      const result = beginSendCode(released, {
+        email: "user@example.com",
+        offline: false,
+      });
+
+      // Then
+      expect(result.request).toBeNull();
+      expect(result.state).toMatchObject({
+        pending: "send",
+        awaitingCheck: true,
+        error: null,
+      });
+      expect(result.state.fieldErrors.captcha).toBeUndefined();
+    });
+
+    it("メールアドレスに不備があれば、チェックが待ちでも、メールの不備だけを示し、待ちにしない", () => {
       // Given
       const flow = flowWith({ captchaToken: null });
 
@@ -624,12 +652,8 @@ describe("操作の開始の可否と入力の検証", () => {
       const result = beginSendCode(flow, { email: "", offline: false });
 
       // Then
-      expect(result).toMatchObject({
-        request: null,
-        state: {
-          fieldErrors: { email: "required", captcha: CAPTCHA_MESSAGE },
-        },
-      });
+      expect(result.state.fieldErrors).toEqual({ email: "required" });
+      expect(result.state.awaitingCheck).toBe(false);
     });
   });
 
@@ -738,29 +762,6 @@ describe("操作の開始の可否と入力の検証", () => {
         state: { fieldErrors: { resend: WAIT_MESSAGE }, resendCooldown: 30 },
       });
     });
-
-    it("待ち時間とセキュリティチェックの両方に不備があれば、両方を示す", () => {
-      // Given
-      const flow = flowWith({
-        step: "code",
-        resendCooldown: 30,
-        captchaToken: null,
-      });
-
-      // When
-      const result = beginSendCode(flow, {
-        email: "user@example.com",
-        offline: false,
-      });
-
-      // Then
-      expect(result).toMatchObject({
-        request: null,
-        state: {
-          fieldErrors: { resend: WAIT_MESSAGE, captcha: CAPTCHA_MESSAGE },
-        },
-      });
-    });
   });
 
   describe("beginSetPassword", () => {
@@ -817,7 +818,7 @@ describe("操作の開始の可否と入力の検証", () => {
       });
     });
 
-    it("チェックを要するときは、チェックが未完了なら、チェック未完了を示して開始しない", () => {
+    it("チェックを要するときは、チェックが未完了なら、依頼を返さず、パスワードの設定を実行中の待ちにする", () => {
       // Given
       const flow = flowWith({ step: "password", captchaToken: null });
 
@@ -831,27 +832,36 @@ describe("操作の開始の可否と入力の検証", () => {
       // Then
       expect(result.request).toBeNull();
       expect(result.state).toMatchObject({
-        pending: null,
-        fieldErrors: { captcha: "incomplete" },
+        pending: "setPassword",
+        awaitingCheck: true,
+        fieldErrors: {},
       });
     });
 
-    it("チェックを要するときは、パスワードの不備とチェック未完了を全て示す", () => {
+    it("チェックを要するときは、失敗の通知で待ちが解けた後に押すと、通常どおり待ちにする", () => {
       // Given
-      const flow = flowWith({ step: "password", captchaToken: null });
+      const waiting = beginSetPassword(
+        flowWith({ step: "password", captchaToken: null }),
+        { password: "password1", offline: false, requiresCheck: true },
+      ).state;
+      const released = passwordSetupReducer(waiting, {
+        type: "checkWaitReleased",
+      });
 
       // When
-      const result = beginSetPassword(flow, {
-        password: "",
+      const result = beginSetPassword(released, {
+        password: "password1",
         offline: false,
         requiresCheck: true,
       });
 
       // Then
-      expect(result.state.fieldErrors).toEqual({
-        password: "required",
-        captcha: "incomplete",
+      expect(result.request).toBeNull();
+      expect(result.state).toMatchObject({
+        pending: "setPassword",
+        awaitingCheck: true,
       });
+      expect(result.state.fieldErrors.captcha).toBeUndefined();
     });
 
     it("チェックを要しないときは、チェックが未完了でも開始し、トークンを依頼に含めない", () => {
@@ -931,20 +941,6 @@ describe("オフラインの判定", () => {
         expect(result.state.fieldErrors.captcha).toBeUndefined();
       },
     );
-
-    it("オンラインでは、不備とチェック未完了を全部まとめて示す(従来どおり)", () => {
-      // Given
-      const flow = offlineFlow({ captchaToken: null });
-
-      // When
-      const result = beginSendCode(flow, { email: "", offline: false });
-
-      // Then
-      expect(result.state.fieldErrors).toEqual({
-        email: "required",
-        captcha: CAPTCHA_MESSAGE,
-      });
-    });
 
     it("実行中なら、オフラインでも状態を変えない", () => {
       // Given
@@ -1069,6 +1065,138 @@ describe("オフラインの判定", () => {
 
       // Then
       expect(result.state.fieldErrors).toEqual({ password: "required" });
+    });
+  });
+});
+
+describe("セキュリティチェックの待ち", () => {
+  const email = "user@example.com";
+  const arrived = (flow: PasswordSetupFlow) =>
+    passwordSetupReducer(flow, { type: "captchaChecked", token: "token" });
+
+  it("コードの送付、再送、パスワードの設定の各開始は、チェック未完了なら待ちになり、待ちの操作の種類を保つ", () => {
+    // Given
+    const sending = beginSendCode(flowWith({}), { email, offline: false });
+    const resending = beginSendCode(flowWith({ step: "code" }), {
+      email,
+      offline: false,
+    });
+    const setting = beginSetPassword(flowWith({ step: "password" }), {
+      password: "password1",
+      offline: false,
+      requiresCheck: true,
+    });
+
+    // When
+    const pendings = [sending, resending, setting].map(({ request, state }) => [
+      request,
+      state.pending,
+      state.awaitingCheck,
+    ]);
+
+    // Then
+    expect(pendings).toEqual([
+      [null, "send", true],
+      [null, "send", true],
+      [null, "setPassword", true],
+    ]);
+  });
+
+  it("チェックを要しない確認は、チェックが未完了でも待たずに開始する", () => {
+    // Given
+    const flow = flowWith({ step: "code" });
+
+    // When
+    const result = beginVerifyCode(flow, {
+      email,
+      code: "123456",
+      offline: false,
+    });
+
+    // Then
+    expect(result.request).not.toBeNull();
+    expect(result.state).toMatchObject({
+      pending: "verify",
+      awaitingCheck: false,
+    });
+  });
+
+  it("待ちの間、トークンが無い再押下では何も変えず、トークンが届いた後の同じ操作の開始では依頼を返す", () => {
+    // Given
+    const waiting = beginSendCode(flowWith({}), {
+      email,
+      offline: false,
+    }).state;
+
+    // When
+    const again = beginSendCode(waiting, { email, offline: false });
+    const resumed = beginSendCode(arrived(waiting), { email, offline: false });
+
+    // Then
+    expect(again.state).toBe(waiting);
+    expect(again.request).toBeNull();
+    expect(resumed.request).toEqual({ email, captchaToken: "token" });
+    expect(resumed.state).toMatchObject({
+      pending: "send",
+      awaitingCheck: false,
+    });
+  });
+
+  it("待ちの操作と別の操作は、トークンが届いても開始せず、状態を変えない", () => {
+    // Given
+    const waiting = beginSendCode(flowWith({}), {
+      email,
+      offline: false,
+    }).state;
+    const flow = arrived(waiting);
+
+    // When
+    const result = beginSetPassword(flow, {
+      password: "password1",
+      offline: false,
+      requiresCheck: true,
+    });
+
+    // Then
+    expect(result.state).toBe(flow);
+    expect(result.request).toBeNull();
+  });
+
+  it("待ちの再開時にオフラインなら、オフラインを示して送らず、待ちと実行中を解く", () => {
+    // Given
+    const waiting = beginSendCode(flowWith({}), {
+      email,
+      offline: false,
+    }).state;
+
+    // When
+    const result = beginSendCode(arrived(waiting), { email, offline: true });
+
+    // Then
+    expect(result.request).toBeNull();
+    expect(result.state).toMatchObject({
+      error: "offline",
+      pending: null,
+      awaitingCheck: false,
+      captchaToken: "token",
+    });
+  });
+
+  it("待ちを解く事実は、待ちを解いて実行中を終え、チェックのエラーを示す", () => {
+    // Given
+    const waiting = beginSendCode(flowWith({}), {
+      email,
+      offline: false,
+    }).state;
+
+    // When
+    const result = passwordSetupReducer(waiting, { type: "checkWaitReleased" });
+
+    // Then
+    expect(result).toMatchObject({
+      pending: null,
+      awaitingCheck: false,
+      fieldErrors: { captcha: "incomplete" },
     });
   });
 });

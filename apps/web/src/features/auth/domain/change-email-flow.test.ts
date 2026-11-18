@@ -558,13 +558,6 @@ describe("beginResendEmailChangeCode", () => {
 
   it.each([
     [
-      "待ち中でトークン無しのオンラインは、待機とチェックの両方",
-      { resendCooldown: 30, captchaToken: null },
-      false,
-      { resend: "cooldown", captcha: "incomplete" },
-      null,
-    ],
-    [
       "待ち中でトークンありは、待機だけ",
       { resendCooldown: 30 },
       false,
@@ -572,10 +565,10 @@ describe("beginResendEmailChangeCode", () => {
       null,
     ],
     [
-      "待ちが明けてトークン無しのオンラインは、チェックだけ",
-      { captchaToken: null },
+      "待ち中でトークン無しのオンラインは、チェックが待ちなら待機だけ",
+      { resendCooldown: 30, captchaToken: null },
       false,
-      { captcha: "incomplete" },
+      { resend: "cooldown" },
       null,
     ],
     [
@@ -608,6 +601,118 @@ describe("beginResendEmailChangeCode", () => {
       expect(result.state.pending).toBeNull();
     },
   );
+
+  it("待ちが明けてトークン無しのオンラインは、依頼を返さず、再送を実行中の待ちにする", () => {
+    // Given
+    const flow = flowWith({ ...onCodeStep, captchaToken: null });
+
+    // When
+    const result = beginResendEmailChangeCode(flow, { offline: false });
+
+    // Then
+    expect(result.request).toBeNull();
+    expect(result.state).toMatchObject({
+      pending: "resend",
+      awaitingCheck: true,
+      fieldErrors: {},
+      error: null,
+    });
+  });
+
+  it("失敗の通知で再送の待ちが解けた後に押すと、すぐには失敗を示さず、通常どおり待ちにする", () => {
+    // Given
+    const waiting = beginResendEmailChangeCode(
+      flowWith({ ...onCodeStep, captchaToken: null }),
+      { offline: false },
+    ).state;
+    const released = changeEmailReducer(waiting, { type: "checkWaitReleased" });
+
+    // When
+    const result = beginResendEmailChangeCode(released, { offline: false });
+
+    // Then
+    expect(result.request).toBeNull();
+    expect(result.state).toMatchObject({
+      pending: "resend",
+      awaitingCheck: true,
+      error: null,
+    });
+    expect(result.state.fieldErrors.captcha).toBeUndefined();
+  });
+
+  it("再送の待ちは、トークンが無い再押下では状態を変えず、届いた後の開始では依頼を返し、オフラインなら解く", () => {
+    // Given
+    const waiting = beginResendEmailChangeCode(
+      flowWith({ ...onCodeStep, captchaToken: null }),
+      { offline: false },
+    ).state;
+    const arrived = changeEmailReducer(waiting, {
+      type: "captchaChecked",
+      token: "fresh",
+    });
+
+    // When
+    const again = beginResendEmailChangeCode(waiting, { offline: false });
+    const resumed = beginResendEmailChangeCode(arrived, { offline: false });
+    const offline = beginResendEmailChangeCode(arrived, { offline: true });
+
+    // Then
+    expect(again.state).toBe(waiting);
+    expect(resumed.request).toEqual({
+      email: currentEmail,
+      captchaToken: "fresh",
+    });
+    expect(resumed.state).toMatchObject({
+      pending: "resend",
+      awaitingCheck: false,
+    });
+    expect(offline.request).toBeNull();
+    expect(offline.state).toMatchObject({
+      error: "offline",
+      pending: null,
+      awaitingCheck: false,
+    });
+  });
+
+  it("待ちの操作と別の操作は、トークンが届いても開始せず、状態を変えない", () => {
+    // Given
+    const waiting = beginResendEmailChangeCode(
+      flowWith({ ...onCodeStep, captchaToken: null }),
+      { offline: false },
+    ).state;
+    const flow = changeEmailReducer(waiting, {
+      type: "captchaChecked",
+      token: "fresh",
+    });
+
+    // When
+    const result = beginConfirmEmailChange(flow, {
+      codes: { currentCode: "123456", newCode: "654321" },
+      offline: false,
+    });
+
+    // Then
+    expect(result.state).toBe(flow);
+    expect(result.request).toBeNull();
+  });
+
+  it("再送の待ちは、待ちを解く事実で解け、実行中を終えてチェックのエラーを示す", () => {
+    // Given
+    const waiting = beginResendEmailChangeCode(
+      flowWith({ ...onCodeStep, captchaToken: null }),
+      { offline: false },
+    ).state;
+
+    // When
+    const result = changeEmailReducer(waiting, { type: "checkWaitReleased" });
+
+    // Then
+    expect(result).toMatchObject({
+      pending: null,
+      awaitingCheck: false,
+      fieldErrors: { captcha: "incomplete" },
+    });
+  });
 
   it("オフラインで拒否された再送は、チェックのトークンを保つ", () => {
     // Given

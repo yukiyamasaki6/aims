@@ -4,7 +4,12 @@ import {
   validateResendWait,
 } from "./auth-code";
 import type { AuthFailure, AuthFailureKind } from "./auth-failure";
-import { isCaptchaCompleted } from "./captcha-token";
+import {
+  applyCheckedToken,
+  applyCheckWaitReleased,
+  type CheckEvent,
+  isCaptchaCompleted,
+} from "./captcha-token";
 import { validateEmail } from "./email-address";
 import type { FieldErrors, Start } from "./flow";
 
@@ -28,6 +33,8 @@ export type ChangeEmailFlow = {
   readonly confirmedCodes: { readonly [F in CodeField]: string | null };
   readonly captchaToken: string | null;
   readonly pending: Operation | null;
+  // チェック未完了のまま押され、実行中の操作がトークンを待っている。
+  readonly awaitingCheck: boolean;
   readonly resendCooldown: number;
   readonly fieldErrors: FieldErrors<"email" | "captcha" | "resend" | CodeField>;
   readonly error: AuthFailureKind | null;
@@ -46,6 +53,7 @@ export const initialChangeEmailFlow: ChangeEmailFlow = {
   confirmedCodes: NO_CONFIRMED_CODES,
   captchaToken: null,
   pending: null,
+  awaitingCheck: false,
   resendCooldown: 0,
   fieldErrors: {},
   error: null,
@@ -60,23 +68,32 @@ type Checked<Request> =
   | { readonly ok: false; readonly fieldErrors: FieldErrorSet }
   | { readonly ok: true; readonly request: Request };
 
-// 開始の命令。判定の順序は、実行中 → 入力の判定 → オフラインの判定(→ 再送ではチェックの判定を入力の判定に含める)。
-// 実行中の操作が無いときだけ開始できる。画面は現在の段階の操作だけを描くため、段階は検査しない。
-// 入力の不備は、検査できる全てを示す。入力に不備が無くオフラインなら、通信もトークンの消費もせず、オフラインを示す。
-// 開始できるなら、その操作を実行中にする。開始では以前のエラーを消す。
+// 開始の命令。判定の順序は、実行中(待ち以外) → 入力の判定 → オフラインの判定 → チェックの判定(チェックを要する操作だけ)。
+// 実行中の操作が無いか、同じ操作がチェックを待っているときだけ開始できる。待ちの間は、トークンが無い再押下では何も変えず、トークンが届いた後の開始は通常の開始と同じに進む。
+// 画面は現在の段階の操作だけを描くため、段階は検査しない。
+// 入力の不備は、検査できる全てを示す。
+// 入力に不備が無くオフラインなら、通信もトークンの消費もせず、オフラインを示す(チェックの状態によらず、待たない)。
+// 入力に不備もオフラインも無いとき、チェックが完了なら操作を実行中にして依頼を返し、未完了(失敗の後を含む)なら依頼を返さず、操作を実行中の待ちにする。
+// 開始では以前のエラーを消す(4操作で同じ)。
 // 実行中の間はエラーを持たない。
 function begin<Request>(
   flow: ChangeEmailFlow,
   operation: Operation,
   offline: boolean,
+  requiresCheck: boolean,
   check: () => Checked<Request>,
 ): Start<ChangeEmailFlow, Request> {
-  if (flow.pending !== null) return { state: flow, request: null };
+  const waiting = requiresCheck && !isCaptchaCompleted(flow.captchaToken);
+  const resuming = flow.awaitingCheck && flow.pending === operation;
+  if (flow.pending !== null && (!resuming || waiting)) {
+    return { state: flow, request: null };
+  }
+  const idle = { ...flow, pending: null, awaitingCheck: false };
   const checked = check();
   if (!checked.ok) {
     return {
       state: {
-        ...flow,
+        ...idle,
         error: null,
         fieldErrors: checked.fieldErrors,
       },
@@ -85,19 +102,14 @@ function begin<Request>(
   }
   if (offline) {
     return {
-      state: { ...flow, error: "offline", fieldErrors: {} },
+      state: { ...idle, error: "offline", fieldErrors: {} },
       request: null,
     };
   }
-  return {
-    state: {
-      ...flow,
-      error: null,
-      fieldErrors: {},
-      pending: operation,
-    },
-    request: checked.request,
-  };
+  const running = { ...idle, error: null, fieldErrors: {}, pending: operation };
+  return waiting
+    ? { state: { ...running, awaitingCheck: true }, request: null }
+    : { state: running, request: checked.request };
 }
 
 // 新しいメールアドレスの要求。送るのは新しいメールアドレスだけで、同じアドレスかどうかは認証サービスの応答で判定する。
@@ -105,7 +117,7 @@ export function beginRequestEmailChange(
   flow: ChangeEmailFlow,
   input: { email: string; offline: boolean },
 ): Start<ChangeEmailFlow, { newEmail: string }> {
-  return begin(flow, "request", input.offline, () => {
+  return begin(flow, "request", input.offline, false, () => {
     const email = validateEmail(input.email);
     if (email) return { ok: false, fieldErrors: { email } };
     return { ok: true, request: { newEmail: input.email } };
@@ -137,7 +149,7 @@ export function beginConfirmEmailChange(
     return { state: flow, request: null };
   }
   const emails = { currentCode: currentEmail, newCode: newEmail };
-  return begin(flow, "confirm", input.offline, () => {
+  return begin(flow, "confirm", input.offline, false, () => {
     const missing = CODE_FIELDS.filter((field) =>
       validateAuthCode(input.codes[field]),
     );
@@ -160,28 +172,18 @@ export function beginConfirmEmailChange(
   });
 }
 
-// コードの再送。待ち時間とセキュリティチェックの両方に不備が無く、オフラインでなければ送れる。
+// コードの再送。待ち時間に不備が無く、オフラインでなく、セキュリティチェックが完了していれば送れる。
 // 再送は、現在のメールアドレスを付けて頼む(新しいメールアドレスを付けると、認証サービスは何も送らず成功を返す)。
-// チェック未完了は、オンラインのときだけ不備にする(オフラインでは原因を取り違えるため示さない)。
 export function beginResendEmailChangeCode(
   flow: ChangeEmailFlow,
   input: { offline: boolean },
 ): Start<ChangeEmailFlow, { email: string; captchaToken: string }> {
   const { currentEmail, captchaToken } = flow;
   if (currentEmail === null) return { state: flow, request: null };
-  return begin(flow, "resend", input.offline, () => {
+  return begin(flow, "resend", input.offline, true, () => {
     const wait = validateResendWait(flow.resendCooldown);
-    const captchaMissing = !input.offline && !isCaptchaCompleted(captchaToken);
-    if (wait || captchaMissing) {
-      return {
-        ok: false,
-        fieldErrors: {
-          ...(wait && { resend: wait }),
-          ...(captchaMissing && { captcha: "incomplete" }),
-        },
-      };
-    }
-    // オフラインのときは、トークンは使われない(beginが送らない)。
+    if (wait) return { ok: false, fieldErrors: { resend: wait } };
+    // チェック未完了のとき、トークンは使われない(beginが送らない)。
     return {
       ok: true,
       request: { email: currentEmail, captchaToken: captchaToken ?? "" },
@@ -190,6 +192,7 @@ export function beginResendEmailChangeCode(
 }
 
 // 画面で起きた事実。開始の命令は含まない(begin*)。
+// checkWaitReleased: チェックの部品の失敗、または待ちの上限(`captcha-token.ts`)。待ちの間だけ待ちを解いてチェックのエラーを示す。
 // currentEmailLoaded: 開いたときに現在のメールアドレスを読めた。
 // requested: 要求が受け付けられた(応答の現在のメールアドレスと、要求した新しいメールアドレス)。
 // confirmed: 確認の結果(確認できた欄とコード、誤りまたは期限切れだった欄、完了したか、コードに紐づかない最初の失敗)。
@@ -198,6 +201,7 @@ export function beginResendEmailChangeCode(
 export type ChangeEmailEvent =
   | { type: "currentEmailLoaded"; email: string }
   | { type: "captchaChecked"; token: string | null }
+  | CheckEvent
   | { type: "cooldownTicked" }
   | { type: "backed" }
   | { type: "requested"; currentEmail: string; newEmail: string }
@@ -223,7 +227,9 @@ export function changeEmailReducer(
         ? { ...flow, currentEmail: event.email }
         : flow;
     case "captchaChecked":
-      return { ...flow, captchaToken: event.token };
+      return applyCheckedToken(flow, event.token);
+    case "checkWaitReleased":
+      return applyCheckWaitReleased(flow, { pending: null });
     case "cooldownTicked":
       return { ...flow, resendCooldown: flow.resendCooldown - 1 };
     // 応答待ちに戻ると、遅れて届いた応答が別の段階へ反映されるため、操作中は戻らない。
@@ -307,7 +313,11 @@ function settle(flow: ChangeEmailFlow, event: Settlement): ChangeEmailFlow {
         generation: flow.generation + 1,
       };
     case "failed":
-      return { ...flow, pending: null, error: event.failure.kind };
+      return {
+        ...flow,
+        pending: null,
+        error: event.failure.kind,
+      };
     case "refused":
       return {
         ...settle(flow, { type: "failed", failure: event.failure }),

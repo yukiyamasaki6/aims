@@ -1,6 +1,5 @@
 "use client";
 
-import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { useTranslations } from "next-intl";
 import type { FormEvent, RefObject } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
@@ -8,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 import { AuthField } from "./auth-field";
 import { AuthHeader } from "./auth-header";
-import { Turnstile } from "./turnstile";
+import { Turnstile, type TurnstileReset } from "./turnstile";
 
 // 実行中の確認(verify)か、コードの送付(send。この段階では再送)。
 type Pending = "verify" | "send" | null;
@@ -21,8 +20,6 @@ type OtpCodeStepProps = {
   onCodeChange: (value: string) => void;
   codeError: string | undefined;
   resendError: string | undefined;
-  // セキュリティチェックが未完了の不備。再送ボタンの下に出す。
-  captchaError: string | undefined;
   // 実行中の確認か再送。どちらかが実行中の間は、3つのボタンを無効にする。
   pending: Pending;
   error: string | null;
@@ -30,8 +27,10 @@ type OtpCodeStepProps = {
   onVerify: (e: FormEvent<HTMLFormElement>) => void;
   onResend: () => void;
   siteKey: string;
-  checkRef: RefObject<TurnstileInstance | undefined>;
+  checkRef: RefObject<TurnstileReset | undefined>;
   onCheck: (token: string | null) => void;
+  onFailed: () => void;
+  waiting: boolean;
   resendCooldown: number;
 };
 
@@ -42,7 +41,6 @@ export function OtpCodeStep({
   onCodeChange,
   codeError,
   resendError,
-  captchaError,
   pending,
   error,
   onBack,
@@ -51,6 +49,8 @@ export function OtpCodeStep({
   siteKey,
   checkRef,
   onCheck,
+  onFailed,
+  waiting,
   resendCooldown,
 }: OtpCodeStepProps) {
   const t = useTranslations("auth");
@@ -74,12 +74,17 @@ export function OtpCodeStep({
       <p className="text-center text-muted-foreground text-sm">
         {t("otpSpamNote")}
       </p>
-      <Turnstile siteKey={siteKey} ref={checkRef} onVerify={onCheck} />
+      <Turnstile
+        siteKey={siteKey}
+        ref={checkRef}
+        onVerify={onCheck}
+        onFailed={onFailed}
+        waiting={waiting}
+      />
       <ResendSection
         pending={pending}
         resendCooldown={resendCooldown}
         resendError={resendError}
-        captchaError={captchaError}
         onResend={onResend}
       />
     </>
@@ -135,13 +140,11 @@ export function ResendSection({
   pending,
   resendCooldown,
   resendError,
-  captchaError,
   onResend,
 }: {
   pending: Pending;
   resendCooldown: number;
   resendError: string | undefined;
-  captchaError: string | undefined;
   onResend: () => void;
 }) {
   const t = useTranslations("auth");
@@ -160,9 +163,6 @@ export function ResendSection({
           : t("otpResend")}
       </BusyButton>
       {resendError && <p className="text-destructive text-sm">{resendError}</p>}
-      {captchaError && (
-        <p className="text-destructive text-sm">{captchaError}</p>
-      )}
     </div>
   );
 }

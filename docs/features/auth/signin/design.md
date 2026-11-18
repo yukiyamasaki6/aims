@@ -16,10 +16,11 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 | 状態 | 表示 | 次の状態 |
 | --- | --- | --- |
 | 初期 | 入力欄、サインイン、「パスワードをお忘れですか」のリンク。サインアップへの本文内のリンクは置かず、ヘッダー(`GuestHeader`)のサインアップで行く | リンクで`/reset-password`、ヘッダーで`/signup` |
-| 検証エラー | 不備のあるメールアドレス、パスワード、captchaの全てを表示する | 再送信でエラーが消え、新しいエラーが出る |
+| 検証エラー | 不備のあるメールアドレスとパスワードを全て表示する。チェックのエラーは添えない(失敗は待った結果だけで示す) | 再送信でエラーが消え、新しいエラーが出る |
+| チェック待ち | チェック未完了のまま押された。送信中と同じ表示(ボタンが処理中)で、エラーを持たない。入力は押した時点の値を保つ | トークンの到着で自動で送信(送信中)。追加チェックの表示中は待ちを続ける。チェックの失敗、または追加チェックが無いまま10秒の上限でcaptchaのエラーを表示して解除 |
 | 送信中 | ボタンを`aria-disabled`にする。以前のエラーは開始で消す | 成功で遷移元、無ければ`/rounds`へページ全体を置き換える(送信中は解除しない) |
 | オフライン | 送信の直前にオフラインと判定した。入力に不備が無いとき、「ネットワークに接続されていません。…」を全体のエラーに表示する。トークンは消費せず送らない | 再送信 |
-| 認証失敗(通信の断を含む) | エラーを表示し、ボタンを再度有効にし、captchaを未完了に戻す | 再送信 |
+| 認証失敗(通信の断を含む) | エラーを表示し、ボタンを再度有効にし、captchaを未完了に戻して取り直す。続けて押されても、新しいトークンまで待つ | 再送信 |
 
 - 認証済みで`/signin`を開くと、有効な遷移元があればそこへ、無ければ`/rounds`へ送る。遷移元のハッシュはリダイレクト先に含める。URLのハッシュだけで届いたときは、ブラウザがリダイレクト先へ引き継ぐ。
 - サインイン画面は設定パネルを描かないため、ハッシュ`#settings…`が付いていても設定パネルは開かない(`app/settings`)。
@@ -33,7 +34,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/app/(auth)/signin/page.tsx`: 入口。認証の実装(接続を作る関数`createClient`を渡す)、ページ全体の置き換えの実装(`createBrowserPageLoad`)、送信時の遷移元の読み出し(`window.location.search`の`returnTo`と`window.location.hash`を、`auth-routes.ts`のハッシュを足す規則に渡す)を持ち、手続きを生成し、手続きと読み出しを画面へ渡す。
 - `src/features/auth/ui/signin-form.tsx`: フォームの描画。状態を`useScreenView`で持ち、入力欄は`value`と`onChange`で制御する。送信時に、遷移元の読み出しを呼び、手続きへ入力(その結果の遷移元`from`を含む)と画面の約束(`ScreenView`。`begin`、`dispatch`、`resetCheck`、`isMounted`)を渡す。失敗の後に、手続きの頼み(`resetCheck`)でウィジェットをやり直す。
 - `src/features/auth/application/sign-in.ts`: 手続き。状態を持たず、送信の直前に通信の可否の約束(`Connectivity`。入口で組み立てる)でオフラインを1回読み(購読しない)、画面の約束の`begin`で開始し(実行中と入力の不備とオフラインは集約が拒否する)、照合、離脱の判定、失敗とチェックのやり直し、または置き換えの順序と、サインインの照合の約束(`SignInAuthenticator`)を持つ。失敗は全て、トークンを消費してチェックのやり直しを頼む。
-- `src/features/auth/domain/sign-in-flow.ts`: 集約。開始の命令`beginSignIn`が、送信の可否と判定の順序(入力判定 → オフライン判定 → チェック判定)を守り、`Start`(新しい状態と、開始するときだけ依頼。開始しないときの依頼は`null`で、実行中か入力の不備かは状態が示す)を返す。事実(`captchaChecked`、`failed`)は`reducer`で反映し、失敗の後の状態とcaptchaトークンの消費を守る。`failed`は全ての失敗でトークンを消費する。
+- `src/features/auth/domain/sign-in-flow.ts`: 集約。開始の命令`beginSignIn`が、送信の可否と判定の順序(入力判定 → オフライン判定 → チェック判定)を守り、`Start`(新しい状態と、開始するときだけ依頼。開始しないときの依頼は`null`で、実行中か入力の不備かは状態が示す)を返す。事実(`captchaChecked`、`checkWaitReleased`、`failed`)は`reducer`で反映し、失敗の後の状態とcaptchaトークンの消費を守る。`failed`は全ての失敗でトークンを消費する。
 - `src/features/auth/domain/email-address.ts`: メールアドレスの規則(domain)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(domain)。利用者向けの文言は持たない。認証サービスの語彙も持たない。
 - `src/features/auth/domain/captcha-token.ts`、`password.ts`: セキュリティチェックのトークンと、パスワードの入力と文字種の規則(domain。誤りの種類を返す)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
@@ -44,7 +45,8 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/ui/use-screen-view.ts`: 画面の状態を持つ汎用のフック。`reducer`で遷移させる状態を`useState`で持ち、画面の約束`ScreenView`を作る。約束は描画ごとに作り、`dispatch`、`resetCheck`、`isMounted`は同じ参照にする。
 - `src/features/auth/application/page-replace.ts`: ページ全体を読み込む約束(`PageReplace`)。行き先への置き換え(`replace`)、今の文書の読み込み直し(`reload`)、今の場所(パス、クエリ、ハッシュ)の読み出し(`here`)を持つ。サインイン、サインアップ、セッション(サインアウト、喪失、利用者の不一致)の3つの手続きが使う。
 - `src/features/auth/application/screen-view.ts`: 手続きが画面に頼む約束。開始の命令の適用(`begin`)、事実の送信、チェックのやり直しの依頼、表示中かの確認。`begin`は描画済みの状態に、`dispatch`は直前の状態に適用する契約をここに書く。
-- `src/features/auth/ui/turnstile.tsx`: Turnstileの部品。`interaction-only`で描画し、操作が必要な間だけ領域を出し、それ以外は畳む。未完了のエラーの文言も、呼び出し側が渡して表示する。サイトキーは引数で受ける(環境変数`NEXT_PUBLIC_TURNSTILE_SITE_KEY`の読み出しは各入口が行い、画面の部品を通して渡す)。
+- `src/features/auth/ui/turnstile.tsx`: Turnstileの部品。`interaction-only`で描画し、追加チェックの表示と、チェックの失敗で展開し、取り直し(`reset`)があるまで出しっぱなしにし、それ以外は畳む(規則は`docs/features/auth/design.md`の「チェック欄の展開と畳み」)。チェックの失敗と待ちの上限は`onFailed`で伝え(集約の待ちの解除になる)、上限は、受け取る`waiting`(待ち中でトークンが無い)の間、部品が追加チェックを表示していない間だけ数える。チェックの失敗の文言は持たない(画面が`flow.error`と同じ段落に出す)。サイトキーは引数で受ける(環境変数`NEXT_PUBLIC_TURNSTILE_SITE_KEY`の読み出しは各入口が行い、画面の部品を通して渡す)。
+- `src/features/auth/ui/use-check-wait.ts`: チェック待ちの再開のフック(共通。入力の記憶と再開(`run`)と、部品へ渡す`waiting`・`onFailed`だけを持つ。`docs/features/auth/design.md`)。
 - `src/features/auth/ui/auth-header.tsx`: 認証画面の見出し。
 - `src/lib/supabase/infrastructure/client.ts`: ブラウザの接続。
 - `src/hooks/use-mounted-ref.ts`: 画面がマウント中かどうかの参照。画面が`isMounted`として手続きへ渡し、手続きが照合の後に確かめる。
@@ -52,7 +54,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 
 流れは次のとおりである。
 
-1. 送信の直前にオフラインを1回読む。入力判定 → オフライン判定 → チェック判定の順に判定する。オンラインでは、メールアドレス、パスワード、captchaを検証し、不備のある欄を全て示す。オフラインでは入力の不備だけを示し、チェック未完了は示さない。入力に不備が無くオフラインなら、`offline`を示し、トークンは消費せず送らない。
+1. 送信の直前にオフラインを1回読む。入力判定 → オフライン判定 → チェック判定の順に判定する。メールアドレスとパスワードを検証し、不備のある欄を全て示す(チェックのエラーは添えない)。入力に不備が無くオフラインなら、`offline`を示し、トークンは消費せず送らない。入力に不備が無くオンラインでチェック未完了なら、実行中のまま待ち、トークンが届くと、フック`useCheckWait`が、記憶した押した時点の入力で手続きの`submit`を再び呼ぶ。待ちの規則は`docs/features/auth/design.md`に従う。
 2. 通れば、`signInWithPassword`をトークン付きで呼ぶ。
 3. 成功なら、送信時に読んだ遷移元(`from`)、無ければ`/rounds`へ、ページ全体を置き換える。失敗なら(通信の断も含め)、集約が文言を選んで表示し、トークンを消費し、手続きがウィジェットのやり直しを頼む。
 
@@ -61,7 +63,8 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 | 判断 | 理由 | 見直す条件 |
 | --- | --- | --- |
 | サインインをServer Actionでなく、クライアントから直接呼ぶ | 送信中に別の画面へ移動すると、Server Actionのリダイレクトと競合したため、Server Actionをやめた。詳細: #318 | 競合を避けられる方式が出たとき |
-| ネイティブの`disabled`と入力欄の検証を使わず、`noValidate`と`aria-disabled`で表す | 空入力やcaptcha未完了の理由を利用者へ伝えるため | 理由を別の方法で利用者へ伝えるとき |
+| ネイティブの`disabled`と入力欄の検証を使わず、`noValidate`と`aria-disabled`で表す | 空入力やチェックの失敗の理由を利用者へ伝えるため | 理由を別の方法で利用者へ伝えるとき |
+| チェック未完了の押下をエラーにせず待ち、トークンの到着で自動送信する | 押下を捨てて再押下を求めると、オートフィルの即時押下や失敗直後の再押下で止まるため。待ちは通常の実行中と同じ表示にし、利用者に確認中を意識させない。追加チェックの表示中は利用者の操作を待つため上限を適用せず、表示が無いまま10秒、または失敗の通知で待ちをやめる | チェックが常に押下前に完了する方式にしたとき |
 | 成功時は送信中を解除しない | 遷移までの二重送信を防ぐため | 完了の方式を変えるとき |
 | 接続を送信時に取得する(描画時に作らない) | 描画時に作ると、`/signin`の事前描画にSupabaseの環境変数が要り、欠落が通信エラーの表示でなく描画の失敗になるため。認証の実装が、渡された関数で照合のたびに取得する | 環境変数の欠落を描画時に検知したいとき |
 | 認証サービスのクラス名とエラーコードは、インフラ層の変換だけが知り、ドメイン層は失敗の種類だけを持つ | 認証サービスを差し替えても、ドメイン層と文言の一覧が変わらないため | 認証サービスを差し替えるとき |

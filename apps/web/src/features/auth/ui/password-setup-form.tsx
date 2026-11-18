@@ -1,6 +1,5 @@
 "use client";
 
-import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
@@ -19,8 +18,9 @@ import { AuthHeader } from "./auth-header";
 import { OtpCodeStep } from "./otp-code-step";
 import { OtpEmailStep } from "./otp-email-step";
 import { PasswordInput } from "./password-input";
-import { Turnstile } from "./turnstile";
+import { Turnstile, type TurnstileReset } from "./turnstile";
 import { useAuthTexts } from "./use-auth-texts";
+import { useCheckWait } from "./use-check-wait";
 import { useScreenView } from "./use-screen-view";
 
 // 画面ごとに違う文言。画面の配置にだけ関わるため、画面の部品が持つ。
@@ -34,12 +34,19 @@ export type PasswordSetupCopy = {
   passwordSubmit: string;
 };
 
+// チェックを待つ操作の、押した時点の入力。コードの送付(初回と再送)とパスワードの設定(サインアップ)が待つ。
+type CheckedInput =
+  | { kind: "sendCode"; email: string }
+  | { kind: "setPassword"; email: string; password: string };
+
 type StepProps = {
   procedure: PasswordSetup;
   copy: PasswordSetupCopy;
   flow: PasswordSetupFlow;
   view: ScreenView<PasswordSetupFlow, PasswordSetupEvent>;
   siteKey: string;
+  run: (input: CheckedInput) => void;
+  checkProps: ReturnType<typeof useCheckWait>["checkProps"];
 };
 
 // メール入力、コード入力、パスワード設定の3段階の画面。サインアップとパスワード再設定が使う。
@@ -61,13 +68,24 @@ export function PasswordSetupForm({
   const hydrated = useHydrated();
   const texts = useAuthTexts();
   const { dispatch } = view;
+  const { run, checkProps } = useCheckWait({
+    flow,
+    dispatch,
+    resume: (input: CheckedInput) =>
+      void (input.kind === "sendCode"
+        ? procedure.sendCode({ email: input.email }, view)
+        : procedure.setPassword(
+            { email: input.email, password: input.password },
+            view,
+          )),
+  });
   // 残りが変わるたびに1秒の予約をやり直し、0で止まり、離れるときに取り消す。
   useEffect(
     () =>
       flow.resendCooldown === 0 ? undefined : procedure.tickCooldown(dispatch),
     [flow.resendCooldown, procedure, dispatch],
   );
-  const step = { procedure, copy, flow, view, siteKey };
+  const step = { procedure, copy, flow, view, siteKey, run, checkProps };
 
   if (flow.step === "password")
     return <PasswordStep {...step} check={check} email={email} />;
@@ -80,17 +98,17 @@ export function PasswordSetupForm({
       email={email}
       onEmailChange={setEmail}
       emailError={texts.fieldError("email", flow.fieldErrors.email)}
-      captchaError={texts.fieldError("captcha", flow.fieldErrors.captcha)}
       submitting={flow.pending === "send"}
-      error={texts.failure(flow.error)}
+      error={texts.screenError(flow.error, flow.fieldErrors.captcha)}
       hydrated={hydrated}
       siteKey={siteKey}
       onSubmit={(e) => {
         e.preventDefault();
-        void procedure.sendCode({ email }, view);
+        run({ kind: "sendCode", email });
       }}
       checkRef={check}
       onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
+      {...checkProps}
     />
   );
 }
@@ -102,10 +120,12 @@ function CodeStep({
   flow,
   view,
   siteKey,
+  run,
+  checkProps,
   check,
   email,
 }: StepProps & {
-  check: RefObject<TurnstileInstance | undefined>;
+  check: RefObject<TurnstileReset | undefined>;
   email: string;
 }) {
   const texts = useAuthTexts();
@@ -120,18 +140,20 @@ function CodeStep({
       onCodeChange={setCode}
       codeError={texts.fieldError("code", flow.fieldErrors.code)}
       resendError={texts.fieldError("resend", flow.fieldErrors.resend)}
-      captchaError={texts.fieldError("captcha", flow.fieldErrors.captcha)}
       pending={pending}
-      error={texts.failure(flow.error)}
+      error={texts.screenError(flow.error, flow.fieldErrors.captcha)}
       onBack={() => view.dispatch({ type: "emailStepReturned" })}
       onVerify={(e) => {
         e.preventDefault();
         void procedure.verifyCode({ email, code }, view);
       }}
-      onResend={() => void procedure.sendCode({ email }, view)}
+      onResend={() => {
+        run({ kind: "sendCode", email });
+      }}
       siteKey={siteKey}
       checkRef={check}
       onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
+      {...checkProps}
       resendCooldown={flow.resendCooldown}
     />
   );
@@ -144,14 +166,17 @@ function PasswordStep({
   flow,
   view,
   siteKey,
+  run,
+  checkProps,
   check,
   email,
 }: StepProps & {
-  check: RefObject<TurnstileInstance | undefined>;
+  check: RefObject<TurnstileReset | undefined>;
   email: string;
 }) {
   const t = useTranslations("auth");
   const texts = useAuthTexts();
+  const errorText = texts.screenError(flow.error, flow.fieldErrors.captcha);
   const [password, setPassword] = useState("");
   const submitting = flow.pending === "setPassword";
   const errorId = `${copy.idPrefix}-password-error`;
@@ -161,7 +186,7 @@ function PasswordStep({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          void procedure.setPassword({ email, password }, view);
+          run({ kind: "setPassword", email, password });
         }}
         noValidate
         className="flex w-full flex-col gap-3"
@@ -191,17 +216,15 @@ function PasswordStep({
             onVerify={(token) =>
               view.dispatch({ type: "captchaChecked", token })
             }
-            error={texts.fieldError("captcha", flow.fieldErrors.captcha)}
+            {...checkProps}
           />
         )}
         <BusyButton type="submit" busy={submitting}>
           {copy.passwordSubmit}
         </BusyButton>
       </form>
-      {flow.error && (
-        <p className="text-center text-destructive text-sm">
-          {texts.failure(flow.error)}
-        </p>
+      {errorText && (
+        <p className="text-center text-destructive text-sm">{errorText}</p>
       )}
     </>
   );

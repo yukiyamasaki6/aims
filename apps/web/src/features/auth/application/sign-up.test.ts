@@ -129,7 +129,7 @@ describe("サインアップの手続き", () => {
       expect(resetCheck).not.toHaveBeenCalled();
     });
 
-    it("セキュリティチェックが未完了なら、その不備を示し、認証サービスを呼ばない", async () => {
+    it("セキュリティチェックが未完了なら、認証サービスを呼ばず、コードの送付を待ちにする", async () => {
       // Given
       const { signUp, authenticator, events, viewOf } = setup();
       const view = viewOf(initialPasswordSetupFlow);
@@ -138,8 +138,10 @@ describe("サインアップの手続き", () => {
       await signUp.sendCode({ email }, view);
 
       // Then
-      expect(view.observedState.fieldErrors).toEqual({
-        captcha: "incomplete",
+      expect(view.observedState).toMatchObject({
+        pending: "send",
+        awaitingCheck: true,
+        fieldErrors: {},
       });
       expect(events).toEqual([]);
       expect(authenticator.sendCode).not.toHaveBeenCalled();
@@ -398,7 +400,7 @@ describe("サインアップの手続き", () => {
       expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
     });
 
-    it("パスワード設定の段階のチェックが未完了なら、チェック未完了を示し、パスワードを設定しない", async () => {
+    it("パスワード設定の段階のチェックが未完了なら、パスワードを設定せず、設定を待ちにする", async () => {
       // Given
       const { signUp, authenticator, events, viewOf } = setup();
       const view = viewOf(onPasswordStep);
@@ -407,8 +409,10 @@ describe("サインアップの手続き", () => {
       await signUp.setPassword(input, view);
 
       // Then
-      expect(view.observedState.fieldErrors).toEqual({
-        captcha: "incomplete",
+      expect(view.observedState).toMatchObject({
+        pending: "setPassword",
+        awaitingCheck: true,
+        fieldErrors: {},
       });
       expect(events).toEqual([]);
       expect(authenticator.setPassword).not.toHaveBeenCalled();

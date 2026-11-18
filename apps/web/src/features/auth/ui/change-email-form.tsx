@@ -1,6 +1,5 @@
 "use client";
 
-import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { ChevronLeft } from "lucide-react";
 import { useTranslations } from "next-intl";
 import {
@@ -26,8 +25,9 @@ import {
 import { AuthField } from "./auth-field";
 import { ResendSection } from "./otp-code-step";
 import { SettingsBackLink } from "./settings-back-link";
-import { Turnstile } from "./turnstile";
+import { Turnstile, type TurnstileReset } from "./turnstile";
 import { useAuthTexts } from "./use-auth-texts";
+import { useCheckWait } from "./use-check-wait";
 import { useScreenView } from "./use-screen-view";
 
 // エラー文の要素のidの接頭辞(`${ID_PREFIX}-email-error`)。
@@ -52,7 +52,6 @@ export function ChangeEmailForm({
     checkRef,
   } = useScreenView(changeEmailReducer, initialChangeEmailFlow);
   const t = useTranslations("auth");
-  const texts = useAuthTexts();
   const { dispatch, isMounted } = view;
   // 開いたときに現在のメールアドレスを読む(表示だけに使う)。
   useEffect(() => {
@@ -69,6 +68,12 @@ export function ChangeEmailForm({
   const busy = flow.pending !== null;
   useEffect(() => onBusyChange(busy), [busy, onBusyChange]);
   const [email, setEmail] = useState("");
+  // チェックを要するのは再送だけで、再開に入力は要らない。
+  const { run, checkProps } = useCheckWait<null>({
+    flow,
+    dispatch,
+    resume: () => void changeEmail.resend(view),
+  });
   // 完了では、本文に完了の文言だけを描く。ヘッダーの戻るは処理中だけ押せない。
   return (
     <ScreenFrame
@@ -92,13 +97,11 @@ export function ChangeEmailForm({
               view={view}
               siteKey={siteKey}
               checkRef={checkRef}
+              onResend={() => run(null)}
+              checkProps={checkProps}
             />
           )}
-          {flow.error && (
-            <p className="text-center text-destructive text-sm">
-              {texts.failure(flow.error)}
-            </p>
-          )}
+          <ErrorText flow={flow} />
           {/* 領域は常に描画し、完了の文言だけを差し込む(後から挿入された領域は、読み上げられない場合があるため)。 */}
           <p role="status" className="text-center text-sm">
             {flow.completed ? t("changeEmailDone") : null}
@@ -109,6 +112,13 @@ export function ChangeEmailForm({
   );
 }
 
+// 画面の全体のエラー。失敗とチェックの失敗を、同じ段落に出す。
+function ErrorText({ flow }: { flow: ChangeEmailFlow }) {
+  const texts = useAuthTexts();
+  const text = texts.screenError(flow.error, flow.fieldErrors.captcha);
+  return text && <p className="text-center text-destructive text-sm">{text}</p>;
+}
+
 // コード確認の段階。2つの欄を1つのフォームで出し、値を変えた欄をまとめて確認する。
 function CodeStep({
   changeEmail,
@@ -116,12 +126,16 @@ function CodeStep({
   view,
   siteKey,
   checkRef,
+  onResend,
+  checkProps,
 }: {
   changeEmail: ChangeEmail;
   flow: ChangeEmailFlow;
   view: ChangeEmailView;
   siteKey: string;
-  checkRef: RefObject<TurnstileInstance | undefined>;
+  checkRef: RefObject<TurnstileReset | undefined>;
+  onResend: () => void;
+  checkProps: ReturnType<typeof useCheckWait>["checkProps"];
 }) {
   const t = useTranslations("auth");
   const texts = useAuthTexts();
@@ -151,6 +165,7 @@ function CodeStep({
         siteKey={siteKey}
         ref={checkRef}
         onVerify={(token) => view.dispatch({ type: "captchaChecked", token })}
+        {...checkProps}
       />
       <ResendSection
         pending={
@@ -162,8 +177,7 @@ function CodeStep({
         }
         resendCooldown={flow.resendCooldown}
         resendError={texts.fieldError("resend", flow.fieldErrors.resend)}
-        captchaError={texts.fieldError("captcha", flow.fieldErrors.captcha)}
-        onResend={() => void changeEmail.resend(view)}
+        onResend={onResend}
       />
     </>
   );

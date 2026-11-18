@@ -26,15 +26,21 @@ const code = "123456";
 // 外部のTurnstileウィジェット(iframe)を包むコンポーネントのため境界としてモックし、onVerifyの発火を制御する。
 const turnstile = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
+  onFailed: undefined as (() => void) | undefined,
 }));
 vi.mock("./turnstile", () => ({
-  Turnstile: forwardRef<unknown, { onVerify: (token: string | null) => void }>(
-    function TurnstileStub(props, ref) {
-      turnstile.onVerify = props.onVerify;
-      useImperativeHandle(ref, () => ({ reset: vi.fn() }));
-      return <div data-testid="turnstile-stub" />;
-    },
-  ),
+  Turnstile: forwardRef<
+    unknown,
+    {
+      onVerify: (token: string | null) => void;
+      onFailed?: () => void;
+    }
+  >(function TurnstileStub(props, ref) {
+    turnstile.onVerify = props.onVerify;
+    turnstile.onFailed = props.onFailed;
+    useImperativeHandle(ref, () => ({ reset: vi.fn() }));
+    return <div data-testid="turnstile-stub" />;
+  }),
 }));
 
 function setup(
@@ -412,15 +418,41 @@ describe("メールアドレス変更画面の部品", () => {
       expect(codeInput("new")).toHaveAttribute("aria-describedby", newError.id);
     });
 
-    it("待ちが明けても、セキュリティチェックが未完了なら、再送の不備を表示し、再送を頼まない", async () => {
+    it("待ちが明けても、セキュリティチェックが未完了なら、再送は待ちになり、トークンが届くと、現在のメールアドレスで1回だけ再送を頼む", async () => {
       // Given
       const { authenticator, clock } = setup();
       const user = userEvent.setup();
       await advanceToCodeStep(user);
       waitOutCooldown(clock);
+      await user.click(resendButton());
 
       // When
+      act(() => turnstile.onVerify?.("captcha-token"));
+
+      // Then
+      await vi.waitFor(() =>
+        expect(
+          authenticator.resendEmailChangeCode,
+        ).toHaveBeenCalledExactlyOnceWith({
+          email: FAKE_CURRENT_EMAIL,
+          captchaToken: "captcha-token",
+        }),
+      );
+      expect(
+        screen.queryByText(authText("fieldError.captcha.incomplete")),
+      ).not.toBeInTheDocument();
+    });
+
+    it("再送の待ちの間にチェックが失敗すると、チェックの失敗の文言を表示し、再送を頼まない", async () => {
+      // Given
+      const { authenticator, clock } = setup();
+      const user = userEvent.setup();
+      await advanceToCodeStep(user);
+      waitOutCooldown(clock);
       await user.click(resendButton());
+
+      // When
+      act(() => turnstile.onFailed?.());
 
       // Then
       expect(
