@@ -15,6 +15,7 @@ import {
 import { settingsPanel } from "../helpers/settings";
 import {
   expectTurnstileReset,
+  releaseTurnstileToken,
   turnstileTokenCount,
   waitForTurnstileToken,
 } from "../helpers/turnstile";
@@ -192,7 +193,31 @@ test("認証に失敗すると、理由が表示されセキュリティチェ�
   await expectTurnstileReset(page, 1);
 });
 
-test("オフラインで送信すると、チェック未完了でなくオフラインの文言が表示される(再送信でも同じ)", async ({
+test("セキュリティチェックの完了前に押しても、エラーなしで待ち、完了するとサインインできる", async ({
+  page,
+}) => {
+  // 自動のチェックが終わらない状態で、サインインを押す。
+  const { email, password } = await createUniqueUser("signin-check-wait");
+  await page.addInitScript(() => {
+    (
+      window as unknown as { e2eTurnstileFailFromCall: number }
+    ).e2eTurnstileFailFromCall = 1;
+  });
+  const signInButton = await openSignIn(page);
+  await fillCredentials(page, email, password);
+  await signInButton.click();
+  await expect(signInButton).toHaveAttribute("aria-disabled", "true");
+  await expect(
+    page.getByText(authText("fieldError.captcha.incomplete")),
+  ).toBeHidden();
+
+  // チェックが終わると、押し直さずにサインインしてラウンド一覧へ進む。
+  await releaseTurnstileToken(page);
+  await waitForTurnstileToken(page, 1);
+  await expect(page).toHaveURL(/\/rounds/);
+});
+
+test("オフラインで送信すると、オフラインの文言が表示される(再送信でも同じ)", async ({
   page,
 }) => {
   const { email, password } = await createUniqueUser("signin-offline");
@@ -206,16 +231,13 @@ test("オフラインで送信すると、チェック未完了でなくオフ�
   await signInButton.click();
 
   await expect(page.getByText(authText("failure.offline"))).toBeVisible();
-  await expect(
-    page.getByText(authText("fieldError.captcha.incomplete")),
-  ).toBeHidden();
   await expect(page).toHaveURL(/\/signin/);
 });
 
-test("操作が必要なセキュリティチェックを完了すると、サインインできる", async ({
+test("追加の操作が必要なセキュリティチェックの表示中に押しても、完了するとサインインできる", async ({
   page,
 }) => {
-  // 操作が必要なセキュリティチェックを解いて、サインインを押せる状態にする。
+  // 追加の操作が必要なチェックが表示されている状態で、サインインを押す。
   const { email, password } = await createUniqueUser("signin-interactive");
   await page.addInitScript(() => {
     (
@@ -227,15 +249,19 @@ test("操作が必要なセキュリティチェックを完了すると、サ�
   await expectUncovered(widget);
   expect(await turnstileTokenCount(page)).toBe(0);
   await fillCredentials(page, email, password);
+  await signInButton.click();
+  await expect(signInButton).toHaveAttribute("aria-disabled", "true");
+  await expectUncovered(widget);
+  await expect(
+    page.getByText(authText("fieldError.captcha.incomplete")),
+  ).toBeHidden();
+
+  // チェックを完了すると、押し直さずにサインインしてラウンド一覧へ進む。
   await page.evaluate(() =>
     (
       window as unknown as { e2eTurnstileSolve: () => void }
     ).e2eTurnstileSolve(),
   );
-  await expectHidden(widget);
   await waitForTurnstileToken(page, 1);
-
-  // サインインしてラウンド一覧へ進む。
-  await signInButton.click();
   await expect(page).toHaveURL(/\/rounds/);
 });

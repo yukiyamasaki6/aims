@@ -72,10 +72,10 @@ describe("beginSignIn", () => {
 
   it.each([
     [
-      "メール、パスワード、チェックがすべて不備なら全て",
+      "メールとパスワードが空なら、チェックの状態によらず、その2つだけ",
       { email: "", password: "", offline: false },
       null,
-      { email: "required", password: "required", captcha: "incomplete" },
+      { email: "required", password: "required" },
     ],
     [
       "メールが不正でパスワードが空ならその2つ",
@@ -84,16 +84,10 @@ describe("beginSignIn", () => {
       { email: "invalidFormat", password: "required" },
     ],
     [
-      "パスワードが空でチェックが未完了ならその2つ",
+      "パスワードが空でチェックが待ちなら、チェックのエラーは示さずパスワードだけ",
       { email: "user@example.com", password: "", offline: false },
       null,
-      { password: "required", captcha: "incomplete" },
-    ],
-    [
-      "チェックだけが未完了ならチェックだけ",
-      validInput,
-      null,
-      { captcha: "incomplete" },
+      { password: "required" },
     ],
   ] as const)("入力不備では、%s示す", (_name, input, token, fieldErrors) => {
     // Given
@@ -106,7 +100,12 @@ describe("beginSignIn", () => {
     const result = beginSignIn(flow, input);
 
     // Then
-    expect(result).toMatchObject({ request: null, state: { fieldErrors } });
+    expect(result.request).toBeNull();
+    expect(result.state).toMatchObject({
+      submitting: false,
+      awaitingCheck: false,
+    });
+    expect(result.state.fieldErrors).toEqual(fieldErrors);
   });
 
   it("開始できるときは、前回の失敗の文言と欄のエラーを消して送信中にする", () => {
@@ -174,18 +173,33 @@ describe("beginSignIn: オフライン", () => {
     });
   });
 
-  it("チェックが未完了でも、チェック未完了を示さず、offlineを示す", () => {
+  it("チェックが未完了でも、失敗の通知で待ちが解けた後でも、待たず、チェックのエラーを示さず、offlineを示す", () => {
     // Given
+    const released = signInReducer(
+      beginSignIn(initialSignInFlow, validInput).state,
+      { type: "checkWaitReleased" },
+    );
 
     // When
-    const result = beginSignIn(initialSignInFlow, offlineInput);
+    const waiting = beginSignIn(initialSignInFlow, offlineInput);
+    const afterFailure = beginSignIn(released, offlineInput);
 
     // Then
-    expect(result.request).toBeNull();
-    expect(result.state).toMatchObject({ error: "offline", fieldErrors: {} });
+    expect(waiting.request).toBeNull();
+    expect(waiting.state).toMatchObject({
+      error: "offline",
+      fieldErrors: {},
+      submitting: false,
+      awaitingCheck: false,
+    });
+    expect(afterFailure.request).toBeNull();
+    expect(afterFailure.state).toMatchObject({
+      error: "offline",
+      fieldErrors: {},
+    });
   });
 
-  it("入力に不備があれば、その不備だけを示し、チェック未完了もofflineも示さない", () => {
+  it("入力に不備があれば、その不備だけを示し、チェックのエラーもofflineも示さない", () => {
     // Given
     const flow: SignInFlow = { ...initialSignInFlow, error: "other" };
 
@@ -274,7 +288,7 @@ describe("signInReducer: failed", () => {
     },
   );
 
-  it("失敗の後は、チェックをやり直すまで開始できず、新しいトークンで再び開始できる", () => {
+  it("失敗の後は、チェックをやり直すまで待ちになり、新しいトークンで再び開始できる", () => {
     // Given
     const started = beginSignIn(verified, validInput).state;
     const refused = signInReducer(started, {
@@ -292,9 +306,7 @@ describe("signInReducer: failed", () => {
     // Then
     expect(withoutToken).toMatchObject({
       request: null,
-      state: {
-        fieldErrors: { captcha: "incomplete" },
-      },
+      state: { submitting: true, awaitingCheck: true, fieldErrors: {} },
     });
     expect(result).toMatchObject({
       request: {
@@ -303,5 +315,180 @@ describe("signInReducer: failed", () => {
         captchaToken: "new-token",
       },
     });
+  });
+
+  it("失敗の後は、チェックの待ちを解く", () => {
+    // Given
+    const started = beginSignIn(verified, validInput).state;
+    const flow: SignInFlow = { ...started, awaitingCheck: true };
+
+    // When
+    const result = signInReducer(flow, {
+      type: "failed",
+      failure: { kind: "unreachable" },
+    });
+
+    // Then
+    expect(result.awaitingCheck).toBe(false);
+  });
+});
+
+describe("beginSignIn: セキュリティチェックの待ち", () => {
+  const waiting = beginSignIn(initialSignInFlow, validInput).state;
+
+  it("入力が有効でチェックが未完了なら、依頼を返さず送信中の待ちにする", () => {
+    // Given
+
+    // When
+    const result = beginSignIn(initialSignInFlow, validInput);
+
+    // Then
+    expect(result.request).toBeNull();
+    expect(result.state).toMatchObject({
+      submitting: true,
+      awaitingCheck: true,
+      error: null,
+      fieldErrors: {},
+    });
+  });
+
+  it("失敗の通知で待ちが解けた後に押すと、すぐには失敗を示さず、通常どおり待ちにし、続く解除の事実で再び解ける", () => {
+    // Given
+    const released = signInReducer(waiting, { type: "checkWaitReleased" });
+
+    // When
+    const pressed = beginSignIn(released, validInput);
+    const releasedAgain = signInReducer(pressed.state, {
+      type: "checkWaitReleased",
+    });
+
+    // Then
+    expect(pressed.request).toBeNull();
+    expect(pressed.state).toMatchObject({
+      submitting: true,
+      awaitingCheck: true,
+      error: null,
+    });
+    expect(pressed.state.fieldErrors.captcha).toBeUndefined();
+    expect(releasedAgain).toMatchObject({
+      submitting: false,
+      awaitingCheck: false,
+      fieldErrors: { captcha: "incomplete" },
+    });
+  });
+
+  it("待ちの間、トークンが無い再押下では何も変えない", () => {
+    // Given
+
+    // When
+    const result = beginSignIn(waiting, validInput);
+
+    // Then
+    expect(result.state).toBe(waiting);
+    expect(result.request).toBeNull();
+  });
+
+  it("待ちの間にトークンが届いた後の開始では、依頼を返し、待ちを解いて送信中を続ける", () => {
+    // Given
+    const arrived = signInReducer(waiting, {
+      type: "captchaChecked",
+      token: "captcha-token",
+    });
+
+    // When
+    const result = beginSignIn(arrived, validInput);
+
+    // Then
+    expect(result.request).toMatchObject({ captchaToken: "captcha-token" });
+    expect(result.state).toMatchObject({
+      submitting: true,
+      awaitingCheck: false,
+    });
+  });
+
+  it("待ちの再開時にオフラインなら、オフラインを示して送らず、待ちと送信中を解き、トークンは保つ", () => {
+    // Given
+    const arrived = signInReducer(waiting, {
+      type: "captchaChecked",
+      token: "captcha-token",
+    });
+
+    // When
+    const result = beginSignIn(arrived, { ...validInput, offline: true });
+
+    // Then
+    expect(result.request).toBeNull();
+    expect(result.state).toMatchObject({
+      error: "offline",
+      submitting: false,
+      awaitingCheck: false,
+      captchaToken: "captcha-token",
+    });
+  });
+
+  it("待ちの間に入力を直して再押下しても、トークンが無ければ状態を変えない", () => {
+    // Given
+
+    // When
+    const result = beginSignIn(waiting, { ...validInput, email: "" });
+
+    // Then
+    expect(result.state).toBe(waiting);
+  });
+});
+
+describe("signInReducer: セキュリティチェックの事実", () => {
+  const waiting = beginSignIn(initialSignInFlow, validInput).state;
+
+  it("待ちを解く事実は、待ちを解いて送信中を終え、チェックのエラーを示す", () => {
+    // Given
+
+    // When
+    const result = signInReducer(waiting, { type: "checkWaitReleased" });
+
+    // Then
+    expect(result).toMatchObject({
+      submitting: false,
+      awaitingCheck: false,
+      fieldErrors: { captcha: "incomplete" },
+    });
+  });
+
+  it("待ちでないときの待ちを解く事実は、状態を変えない", () => {
+    // Given
+
+    // When
+    const result = signInReducer(verified, { type: "checkWaitReleased" });
+
+    // Then
+    expect(result).toBe(verified);
+  });
+
+  it("トークンが届くと、示していたチェックのエラーが消える", () => {
+    // Given
+    const released = signInReducer(waiting, { type: "checkWaitReleased" });
+
+    // When
+    const result = signInReducer(released, {
+      type: "captchaChecked",
+      token: "captcha-token",
+    });
+
+    // Then
+    expect(released.fieldErrors.captcha).toBe("incomplete");
+    expect(result.fieldErrors.captcha).toBeUndefined();
+  });
+
+  it("待ちの間にトークンが失効(null)しても、待ちは続く", () => {
+    // Given
+
+    // When
+    const result = signInReducer(waiting, {
+      type: "captchaChecked",
+      token: null,
+    });
+
+    // Then
+    expect(result).toMatchObject({ awaitingCheck: true, submitting: true });
   });
 });

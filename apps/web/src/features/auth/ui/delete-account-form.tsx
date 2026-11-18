@@ -6,7 +6,10 @@ import { ScreenFrame } from "@/components/screen-frame";
 import { BusyButton } from "@/components/ui/busy-button";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { DeleteAccount } from "../application/delete-account";
+import type { ScreenView } from "../application/screen-view";
 import {
+  type DeleteAccountEvent,
+  type DeleteAccountFlow,
   deleteAccountReducer,
   initialDeleteAccountFlow,
 } from "../domain/delete-account-flow";
@@ -15,6 +18,7 @@ import { PasswordInput } from "./password-input";
 import { SettingsBackLink } from "./settings-back-link";
 import { Turnstile } from "./turnstile";
 import { useAuthTexts } from "./use-auth-texts";
+import { useCheckWait } from "./use-check-wait";
 import { useScreenView } from "./use-screen-view";
 
 // エラー文の要素のidの接頭辞(`${ID_PREFIX}-current-password-error`)。
@@ -41,17 +45,13 @@ export function DeleteAccountForm({
   const hydrated = useHydrated();
   const t = useTranslations("auth");
   const texts = useAuthTexts();
+  const errorText = texts.screenError(flow.error, flow.fieldErrors.captcha);
   useEffect(
     () => onBusyChange(flow.submitting),
     [flow.submitting, onBusyChange],
   );
 
-  // 値は送信時に読む(入力欄は制御しない)。
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    void deleteAccount.submit({ password: String(data.get("password")) }, view);
-  }
+  const { onSubmit, checkProps } = useSubmit(deleteAccount, flow, view);
 
   return (
     <ScreenFrame
@@ -89,7 +89,7 @@ export function DeleteAccountForm({
               onVerify={(token) =>
                 view.dispatch({ type: "captchaChecked", token })
               }
-              error={texts.fieldError("captcha", flow.fieldErrors.captcha)}
+              {...checkProps}
             />
             <BusyButton
               type="submit"
@@ -99,15 +99,33 @@ export function DeleteAccountForm({
               {t("deleteAccountSubmit")}
             </BusyButton>
           </form>
-          {flow.error && (
-            <p className="text-center text-destructive text-sm">
-              {texts.failure(flow.error)}
-            </p>
+          {errorText && (
+            <p className="text-center text-destructive text-sm">{errorText}</p>
           )}
         </main>
       </div>
     </ScreenFrame>
   );
+}
+
+// 送信の処理と、チェックの待ち。値は送信時に読み(入力欄は制御しない)、チェックを待つ間のために押した時点の値を記憶する。
+function useSubmit(
+  deleteAccount: DeleteAccount,
+  flow: DeleteAccountFlow,
+  view: ScreenView<DeleteAccountFlow, DeleteAccountEvent>,
+) {
+  const { run, checkProps } = useCheckWait({
+    flow,
+    dispatch: view.dispatch,
+    resume: (input: Parameters<DeleteAccount["submit"]>[0]) =>
+      void deleteAccount.submit(input, view),
+  });
+  function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    run({ password: String(data.get("password")) });
+  }
+  return { onSubmit, checkProps };
 }
 
 // 削除が取り消せないことと、削除される内容。

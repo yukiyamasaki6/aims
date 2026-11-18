@@ -21,7 +21,7 @@ function resultOf(failure: AuthFailure): CallResult {
 
 const widget = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
-  error: undefined as string | undefined,
+  onFailed: undefined as (() => void) | undefined,
   reset: vi.fn(),
 }));
 
@@ -30,13 +30,13 @@ vi.mock("./turnstile", () => ({
     unknown,
     {
       onVerify: (token: string | null) => void;
-      error?: string;
+      onFailed?: () => void;
     }
-  >(function TurnstileStub({ onVerify, error }, ref) {
+  >(function TurnstileStub({ onVerify, onFailed }, ref) {
     widget.onVerify = onVerify;
-    widget.error = error;
+    widget.onFailed = onFailed;
     useImperativeHandle(ref, () => ({ reset: widget.reset }));
-    return <div data-testid="turnstile-stub">{error}</div>;
+    return <div data-testid="turnstile-stub" />;
   }),
 }));
 
@@ -88,11 +88,15 @@ function verify(token: string | null) {
   act(() => widget.onVerify?.(token));
 }
 
+function failCheck() {
+  act(() => widget.onFailed?.());
+}
+
 describe("サインイン画面の部品", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     widget.onVerify = undefined;
-    widget.error = undefined;
+    widget.onFailed = undefined;
   });
 
   it("メールアドレスとパスワードの欄に、パスワード管理ツールが認識できるnameとautocompleteを付ける", () => {
@@ -220,7 +224,7 @@ describe("サインイン画面の部品", () => {
     },
   );
 
-  it("チェック未完了の文言をウィジェットへ渡す", async () => {
+  it("チェックの完了前に押すと、チェックのエラーを出さずに送信中になり、認証しない", async () => {
     // Given
     const { authenticator } = setup();
     const user = userEvent.setup();
@@ -230,7 +234,47 @@ describe("サインイン画面の部品", () => {
     await user.click(submitButton());
 
     // Then
-    expect(widget.error).toBe(authText("fieldError.captcha.incomplete"));
+    expect(
+      screen.queryByText(authText("fieldError.captcha.incomplete")),
+    ).not.toBeInTheDocument();
+    expect(submitButton()).toHaveAttribute("aria-disabled", "true");
+    expect(authenticator.signIn).not.toHaveBeenCalled();
+  });
+
+  it("チェックの完了前に押した後、トークンが届くと、押した入力のまま1回だけ認証する", async () => {
+    // Given
+    const { authenticator, pageReplace } = setup();
+    const user = userEvent.setup();
+    await fillCredentials(user);
+    await user.click(submitButton());
+
+    // When
+    verify("captcha-token");
+
+    // Then
+    await vi.waitFor(() => expect(pageReplace.replace).toHaveBeenCalled());
+    expect(authenticator.signIn).toHaveBeenCalledExactlyOnceWith({
+      email: "user@example.com",
+      password: "password1",
+      captchaToken: "captcha-token",
+    });
+  });
+
+  it("チェックの完了前に押した後、チェックが失敗すると、未完了の文言を他のエラーと同じ段落に表示し、押せる状態に戻す", async () => {
+    // Given
+    const { authenticator } = setup();
+    const user = userEvent.setup();
+    await fillCredentials(user);
+    await user.click(submitButton());
+
+    // When
+    failCheck();
+
+    // Then
+    expect(
+      screen.getByText(authText("fieldError.captcha.incomplete")),
+    ).toBeInTheDocument();
+    expect(submitButton()).toHaveAttribute("aria-disabled", "false");
     expect(authenticator.signIn).not.toHaveBeenCalled();
   });
 
@@ -275,7 +319,7 @@ describe("サインイン画面の部品", () => {
       expect(submitButton().querySelector(".animate-spin")).toBeNull();
     });
 
-    it("新しいトークンが無いまま押しても、使用済みのトークンは再利用されず照合は1回のままになる", async () => {
+    it("新しいトークンが無いまま押しても、使用済みのトークンは再利用されず、待ちになり、照合は1回のままになる", async () => {
       // Given
       const { authenticator, user } = await failFirstAttempt(
         failure,
@@ -287,7 +331,10 @@ describe("サインイン画面の部品", () => {
       await user.click(submitButton());
 
       // Then
-      expect(widget.error).toBe(authText("fieldError.captcha.incomplete"));
+      expect(
+        screen.queryByText(authText("fieldError.captcha.incomplete")),
+      ).not.toBeInTheDocument();
+      expect(submitButton()).toHaveAttribute("aria-disabled", "true");
       expect(authenticator.signIn).toHaveBeenCalledOnce();
     });
 
@@ -315,7 +362,7 @@ describe("サインイン画面の部品", () => {
     });
   });
 
-  it("何も入力せずに送信すると、メールアドレス、パスワード、セキュリティチェックの不備を全て表示し、認証しない", async () => {
+  it("何も入力せずに送信すると、メールアドレスとパスワードの不備を表示し、チェックは待たず、認証しない", async () => {
     // Given
     const { authenticator } = setup();
     const user = userEvent.setup();
@@ -330,11 +377,14 @@ describe("サインイン画面の部品", () => {
     expect(
       screen.getByText(authText("fieldError.password.required")),
     ).toBeInTheDocument();
-    expect(widget.error).toBe(authText("fieldError.captcha.incomplete"));
+    expect(
+      screen.queryByText(authText("fieldError.captcha.incomplete")),
+    ).not.toBeInTheDocument();
+    expect(submitButton()).toHaveAttribute("aria-disabled", "false");
     expect(authenticator.signIn).not.toHaveBeenCalled();
   });
 
-  it("オフラインで送信すると、チェック未完了でなくオフラインの文言を全体のエラーに表示し、認証しない", async () => {
+  it("オフラインで送信すると、チェックを待たずオフラインの文言を全体のエラーに表示し、認証しない", async () => {
     // Given
     const { authenticator } = setup({ offline: true });
     const user = userEvent.setup();
@@ -345,7 +395,9 @@ describe("サインイン画面の部品", () => {
 
     // Then
     expect(await screen.findByText(authText("failure.offline"))).toBeVisible();
-    expect(widget.error).toBeUndefined();
+    expect(
+      screen.queryByText(authText("fieldError.captcha.incomplete")),
+    ).not.toBeInTheDocument();
     expect(authenticator.signIn).not.toHaveBeenCalled();
     expect(widget.reset).not.toHaveBeenCalled();
   });

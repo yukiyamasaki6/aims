@@ -1,13 +1,12 @@
 "use client";
 
-import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { useTranslations } from "next-intl";
 import type { FormEvent, RefObject } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { AuthField } from "./auth-field";
 import { AuthHeader } from "./auth-header";
-import { Turnstile } from "./turnstile";
+import { Turnstile, type TurnstileReset } from "./turnstile";
 
 type OtpEmailStepProps = {
   // エラー文の要素のidの接頭辞(`${idPrefix}-email-error`)。
@@ -16,14 +15,15 @@ type OtpEmailStepProps = {
   email: string;
   onEmailChange: (value: string) => void;
   emailError: string | undefined;
-  captchaError: string | undefined;
   submitting: boolean;
   error: string | null;
   hydrated: boolean;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   siteKey: string;
-  checkRef: RefObject<TurnstileInstance | undefined>;
+  checkRef: RefObject<TurnstileReset | undefined>;
   onCheck: (token: string | null) => void;
+  onFailed: () => void;
+  waiting: boolean;
 };
 
 export function OtpEmailStep({
@@ -32,7 +32,6 @@ export function OtpEmailStep({
   email,
   onEmailChange,
   emailError,
-  captchaError,
   submitting,
   error,
   hydrated,
@@ -40,6 +39,8 @@ export function OtpEmailStep({
   siteKey,
   checkRef,
   onCheck,
+  onFailed,
+  waiting,
 }: OtpEmailStepProps) {
   const t = useTranslations("auth");
   const errorId = `${idPrefix}-email-error`;
@@ -69,7 +70,8 @@ export function OtpEmailStep({
           siteKey={siteKey}
           ref={checkRef}
           onVerify={onCheck}
-          error={captchaError}
+          onFailed={onFailed}
+          waiting={waiting}
         />
         <BusyButton type="submit" busy={submitting}>
           {t("otpSendCode")}

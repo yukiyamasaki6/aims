@@ -89,17 +89,45 @@ describe("beginDeleteAccount", () => {
     expect(blank.request).toEqual({ password: " ", captchaToken: "token-1" });
   });
 
-  it("チェックが済んでいなければ、理由を示して開始しない", () => {
+  it("チェックが済んでいなければ、依頼を返さず、送信中の待ちにする", () => {
     // Given
     // When
     const result = beginDeleteAccount(initialDeleteAccountFlow, validInput);
 
     // Then
     expect(result.request).toBeNull();
-    expect(result.state.fieldErrors).toEqual({ captcha: "incomplete" });
+    expect(result.state).toMatchObject({
+      submitting: true,
+      awaitingCheck: true,
+      fieldErrors: {},
+      error: null,
+    });
   });
 
-  it("未入力とチェック未完了が同時なら、両方を示す", () => {
+  it("失敗の通知で待ちが解けた後に押すと、すぐには失敗を示さず、通常どおり待ちにする", () => {
+    // Given
+    const waiting = beginDeleteAccount(
+      initialDeleteAccountFlow,
+      validInput,
+    ).state;
+    const released = deleteAccountReducer(waiting, {
+      type: "checkWaitReleased",
+    });
+
+    // When
+    const result = beginDeleteAccount(released, validInput);
+
+    // Then
+    expect(result.request).toBeNull();
+    expect(result.state).toMatchObject({
+      submitting: true,
+      awaitingCheck: true,
+      error: null,
+    });
+    expect(result.state.fieldErrors.captcha).toBeUndefined();
+  });
+
+  it("未入力なら、チェックの状態によらず、未入力だけを示す", () => {
     // Given
     // When
     const result = beginDeleteAccount(initialDeleteAccountFlow, {
@@ -109,13 +137,10 @@ describe("beginDeleteAccount", () => {
 
     // Then
     expect(result.request).toBeNull();
-    expect(result.state.fieldErrors).toEqual({
-      currentPassword: "required",
-      captcha: "incomplete",
-    });
+    expect(result.state.fieldErrors).toEqual({ currentPassword: "required" });
   });
 
-  it("オフラインなら、開始せず、オフラインを示す(チェック未完了は示さない)", () => {
+  it("オフラインなら、開始せず、オフラインを示す(チェックを待たず、チェックのエラーも示さない)", () => {
     // Given
     // When
     const result = beginDeleteAccount(initialDeleteAccountFlow, {
@@ -195,4 +220,48 @@ describe("deleteAccountReducer", () => {
       });
     },
   );
+});
+
+describe("deleteAccountReducer: セキュリティチェックの待ち", () => {
+  const waiting = beginDeleteAccount(
+    initialDeleteAccountFlow,
+    validInput,
+  ).state;
+
+  it("待ちの間、トークンが無い再押下では何も変えず、届いた後の開始では依頼を返す", () => {
+    // Given
+    const arrived = deleteAccountReducer(waiting, {
+      type: "captchaChecked",
+      token: "token-2",
+    });
+
+    // When
+    const again = beginDeleteAccount(waiting, validInput);
+    const resumed = beginDeleteAccount(arrived, validInput);
+
+    // Then
+    expect(again.state).toBe(waiting);
+    expect(resumed.request).toEqual({
+      password: "password-current1",
+      captchaToken: "token-2",
+    });
+    expect(resumed.state).toMatchObject({
+      submitting: true,
+      awaitingCheck: false,
+    });
+  });
+
+  it("待ちを解く事実は、待ちを解いて送信中を終え、チェックのエラーを示す", () => {
+    // Given
+
+    // When
+    const result = deleteAccountReducer(waiting, { type: "checkWaitReleased" });
+
+    // Then
+    expect(result).toMatchObject({
+      submitting: false,
+      awaitingCheck: false,
+      fieldErrors: { captcha: "incomplete" },
+    });
+  });
 });

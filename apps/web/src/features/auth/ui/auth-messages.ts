@@ -46,7 +46,8 @@ export const authMessages = {
         invalidRule: passwordRule,
       },
       captcha: {
-        incomplete: "セキュリティを確認中です。もう一度お試しください。",
+        incomplete:
+          "セキュリティの確認に失敗しました。しばらくしてからもう一度お試しください。",
       },
       code: {
         required: "認証コードを入力してください。",

@@ -13,17 +13,19 @@ const authText = translatorFor("auth");
 
 const widget = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
+  onFailed: undefined as (() => void) | undefined,
   reset: vi.fn(),
 }));
 
 vi.mock("./turnstile", () => ({
   Turnstile: forwardRef<
     unknown,
-    { onVerify: (token: string | null) => void; error?: string }
-  >(function TurnstileStub({ onVerify, error }, ref) {
+    { onVerify: (token: string | null) => void; onFailed?: () => void }
+  >(function TurnstileStub({ onVerify, onFailed }, ref) {
     widget.onVerify = onVerify;
+    widget.onFailed = onFailed;
     useImperativeHandle(ref, () => ({ reset: widget.reset }));
-    return <div data-testid="turnstile-stub">{error}</div>;
+    return <div data-testid="turnstile-stub" />;
   }),
 }));
 
@@ -61,6 +63,7 @@ describe("アカウント削除画面の部品", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     widget.onVerify = undefined;
+    widget.onFailed = undefined;
   });
 
   it("見出しと、削除が取り消せないこと・削除される内容の説明、現在のパスワードの欄、削除ボタンを表示する", () => {
@@ -228,19 +231,41 @@ describe("アカウント削除画面の部品", () => {
     expect(authenticator.reauthenticate).not.toHaveBeenCalled();
   });
 
-  it("チェックが済んでいないと、チェックの理由を示し、手続きは再認証を行わない", async () => {
+  it("チェックが済む前に押すと、チェックの理由を示さずに処理中になり、トークンが届くと、押した入力で1回だけ再認証する", async () => {
     // Given
     const { authenticator } = setup();
     const user = userEvent.setup();
     await user.type(passwordInput(), "password-current1");
-
-    // When
     await user.click(submitButton());
 
+    // When
+    verify("captcha-token");
+
     // Then
-    expect(screen.getByTestId("turnstile-stub")).toHaveTextContent(
-      authText("fieldError.captcha.incomplete"),
-    );
+    expect(
+      screen.queryByText(authText("fieldError.captcha.incomplete")),
+    ).not.toBeInTheDocument();
+    expect(authenticator.reauthenticate).toHaveBeenCalledExactlyOnceWith({
+      password: "password-current1",
+      captchaToken: "captcha-token",
+    });
+  });
+
+  it("チェックが済む前に押した後、チェックが失敗すると、未完了の文言を表示し、再認証しない", async () => {
+    // Given
+    const { authenticator } = setup();
+    const user = userEvent.setup();
+    await user.type(passwordInput(), "password-current1");
+    await user.click(submitButton());
+
+    // When
+    act(() => widget.onFailed?.());
+
+    // Then
+    expect(
+      screen.getByText(authText("fieldError.captcha.incomplete")),
+    ).toBeInTheDocument();
+    expect(submitButton()).toHaveAttribute("aria-disabled", "false");
     expect(authenticator.reauthenticate).not.toHaveBeenCalled();
   });
 

@@ -209,7 +209,6 @@ describe("サインインの手続き", () => {
   it.each([
     ["bad-email", "password1", "first-token"],
     ["user@example.com", "", "first-token"],
-    ["user@example.com", "password1", null],
   ])(
     "不備がある入力では認証を呼ばず、不備を状態に示すだけで、出来事を送らない",
     async (email, password, token) => {
@@ -230,6 +229,24 @@ describe("サインインの手続き", () => {
       expect(resetCheck).not.toHaveBeenCalled();
     },
   );
+
+  it("チェックが未完了なら、認証を呼ばず、状態を送信中の待ちにする", async () => {
+    // Given
+    const { signIn, authenticator, actions, viewOf } = setup();
+    const view = viewOf(initialSignInFlow);
+
+    // When
+    await signIn.submit(input, view);
+
+    // Then
+    expect(authenticator.signIn).not.toHaveBeenCalled();
+    expect(view.observedState).toMatchObject({
+      submitting: true,
+      awaitingCheck: true,
+      fieldErrors: {},
+    });
+    expect(actions).toEqual([]);
+  });
 
   it("拒否では、failedを送ってトークンを消費し、チェックを1回やり直させ、遷移しない", async () => {
     // Given
@@ -268,7 +285,7 @@ describe("サインインの手続き", () => {
     expect(pageReplace.replace).not.toHaveBeenCalled();
   });
 
-  it("失敗の後は、新しいトークンが無いまま再送信しても照合しない", async () => {
+  it("失敗の後は、新しいトークンが無いまま再送信しても照合せず、待ちにする", async () => {
     // Given
     const { signIn, authenticator, viewOf } = setup();
     authenticator.signIn.mockResolvedValueOnce(refused(failure401));
@@ -280,8 +297,10 @@ describe("サインインの手続き", () => {
 
     // Then
     expect(authenticator.signIn).toHaveBeenCalledOnce();
-    expect(view.observedState.fieldErrors).toEqual({
-      captcha: "incomplete",
+    expect(view.observedState).toMatchObject({
+      submitting: true,
+      awaitingCheck: true,
+      fieldErrors: {},
     });
   });
 

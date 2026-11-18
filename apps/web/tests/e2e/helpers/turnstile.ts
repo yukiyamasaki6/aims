@@ -19,6 +19,9 @@ import { expect, type Page } from "@playwright/test";
 // window.e2eTurnstileResetCountに数える(どちらもページを読み込み直すと0に戻る)。
 // window.e2eTurnstileReissueOnResetをテスト側がpage.addInitScript()で真にすると、
 // reset()の後に最後に描いたウィジェットのcallbackへ新しいトークンを渡す(チェックの取り直しの再現)。
+// window.e2eTurnstileFailFromCallで止めた(トークンを渡さずに描かれた)ウィジェットのうち、最後に描いたものの
+// callbackへ、window.e2eTurnstileRelease()がトークンを渡す(自動のチェックが利用者の操作より遅れて終わる状態の再現)。
+// 試験の側は、releaseTurnstileTokenで呼び、続けてwaitForTurnstileTokenで受け取りと描画の反映を待つ。
 // テストは、waitForTurnstileTokenでトークンの受け取りを待ち、expectTurnstileResetで
 // チェックのやり直しの依頼を確かめる。
 const DUMMY_TOKEN = "mock-turnstile-token";
@@ -41,6 +44,11 @@ export async function mockTurnstile(page: Page): Promise<void> {
           }
           // 最後に描いたウィジェットのoptions。resetはoptionsを持たないため保持する。
           var lastOptions = null;
+          // トークンを渡さずに止めた最後のウィジェットのoptions。
+          var lastStalledOptions = null;
+          window.e2eTurnstileRelease = function () {
+            if (lastStalledOptions) emitToken(lastStalledOptions);
+          };
           window.turnstile = {
             render: function (container, options) {
               window.e2eTurnstileRenderCount++;
@@ -69,7 +77,9 @@ export async function mockTurnstile(page: Page): Promise<void> {
               var shouldFail =
                 window.e2eTurnstileFailFromCall &&
                 window.e2eTurnstileRenderCount >= window.e2eTurnstileFailFromCall;
-              if (!shouldFail && options && typeof options.callback === "function") {
+              if (shouldFail) {
+                lastStalledOptions = options;
+              } else if (options && typeof options.callback === "function") {
                 setTimeout(function () { emitToken(options); }, 0);
               }
               return "mock-widget-id-" + window.e2eTurnstileRenderCount;
@@ -112,6 +122,15 @@ type TurnstileCounts = {
   e2eTurnstileTokenCount?: number;
   e2eTurnstileResetCount?: number;
 };
+
+// 止めておいたウィジェットへ、トークンを渡す。
+export async function releaseTurnstileToken(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    (
+      window as unknown as { e2eTurnstileRelease: () => void }
+    ).e2eTurnstileRelease(),
+  );
+}
 
 // トークンを受け取った回数(ページを読み込んでからの累計)。
 export async function turnstileTokenCount(page: Page): Promise<number> {

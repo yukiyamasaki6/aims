@@ -10,6 +10,17 @@ export function useAuthTexts() {
   return {
     failure: (kind: AuthFailureKind | null) =>
       kind === null ? null : t(`failure.${kind}`),
+    // 画面の全体のエラーの文言。失敗と、チェックの失敗(`fieldErrors.captcha`)を、同じ段落に続けて並べる(同時には起きない)。
+    screenError: (
+      kind: AuthFailureKind | null,
+      captcha: FieldErrorKinds["captcha"] | undefined,
+    ) => {
+      const text = [
+        kind === null ? "" : t(`failure.${kind}`),
+        captcha === undefined ? "" : lookup(`fieldError.captcha.${captcha}`),
+      ].join("");
+      return text === "" ? null : text;
+    },
     fieldError: <Field extends keyof FieldErrorKinds>(
       field: Field,
       kind: FieldErrorKinds[Field] | undefined,
