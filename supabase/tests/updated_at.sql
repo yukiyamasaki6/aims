@@ -1,6 +1,6 @@
 begin;
 
-select plan(18);
+select plan(20);
 
 insert into auth.users (id) values ('d0000000-0000-0000-0000-000000000001');
 
@@ -100,6 +100,17 @@ select ok(
 insert into public.distance_events (event_id, round_id, distance_id, type, author_id, revision, position_key, distance, is_marked, total_ends, arrows_per_end, target_face_id)
 values ('d0000000-0000-0000-0000-00000000000d', 'd0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000007', 'CREATED', 'd0000000-0000-0000-0000-000000000001', 1, 'a', 70, true, 6, 6, 'd0000000-0000-0000-0000-000000000004');
 
+select pg_sleep(0.01);
+
+insert into public.distance_events (event_id, round_id, distance_id, type, author_id, revision, position_key, distance, is_marked, total_ends, arrows_per_end, target_face_id)
+values ('d0000000-0000-0000-0000-00000000000f', 'd0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000007', 'CREATED', 'd0000000-0000-0000-0000-000000000001', 2, 'a', 70, true, 6, 6, 'd0000000-0000-0000-0000-000000000004');
+
+select ok(
+  (select created_at from public.distance_events where event_id = 'd0000000-0000-0000-0000-00000000000f')
+    > (select created_at from public.distance_events where event_id = 'd0000000-0000-0000-0000-00000000000d'),
+  'distance_events.created_atは同一トランザクション内でも単調増加する（clock_timestamp）'
+);
+
 select ok(
   (select updated_at >= created_at from public.distance_events where event_id = 'd0000000-0000-0000-0000-00000000000d'),
   'distance_eventsの作成直後のupdated_atはcreated_atより前にならない'
@@ -114,6 +125,17 @@ select ok(
 
 insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, set_fields)
 values ('d0000000-0000-0000-0000-00000000000e', 'd0000000-0000-0000-0000-000000000007', 'd0000000-0000-0000-0000-000000000008', 'RECORDED', 'd0000000-0000-0000-0000-000000000001', 1, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10, array['score', 'shooter_id']);
+
+select pg_sleep(0.01);
+
+insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, set_fields)
+values ('d0000000-0000-0000-0000-000000000010', 'd0000000-0000-0000-0000-000000000007', 'd0000000-0000-0000-0000-000000000008', 'RECORDED', 'd0000000-0000-0000-0000-000000000001', 2, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10, array['score', 'shooter_id']);
+
+select ok(
+  (select created_at from public.shot_events where event_id = 'd0000000-0000-0000-0000-000000000010')
+    > (select created_at from public.shot_events where event_id = 'd0000000-0000-0000-0000-00000000000e'),
+  'shot_events.created_atは同一トランザクション内でも単調増加する（clock_timestamp）'
+);
 
 select ok(
   (select updated_at >= created_at from public.shot_events where event_id = 'd0000000-0000-0000-0000-00000000000e'),

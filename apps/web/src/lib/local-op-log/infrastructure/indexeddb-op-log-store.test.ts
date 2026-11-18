@@ -2,16 +2,19 @@ import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { openDB } from "idb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  NewOpLogEntry,
-  OpLogStore,
-  StreamEntry,
-  StreamRules,
-} from "../contract/op-log-store";
+import type { OpLogStore, StreamRules } from "../contract/op-log-store";
 import { loadStreamGroup } from "../op-log-store-test-helpers";
 import { createIndexedDbOpLogStore } from "./indexeddb-op-log-store";
 
 type Op = { eventId: string; value: string };
+
+// 公開の契約(append・規則)の引数から、操作の型を得る。
+type NewOpLogEntry<O extends { eventId: string }> = Parameters<
+  OpLogStore<O, unknown>["append"]
+>[0];
+type StreamEntry<O extends { eventId: string }> = Parameters<
+  StreamRules<O, unknown>["reflects"]
+>[1];
 
 // ベースは取得時点のrevisionと、保持の対象かだけを持つ。
 type Base = { revision: number; keep: boolean };

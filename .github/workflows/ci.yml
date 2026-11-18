@@ -248,7 +248,15 @@ jobs:
       - name: Run E2E Tests
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: e2e-results.json
-        run: pnpm --filter web exec playwright test --workers=4 --reporter=list,json
+        run: |
+          start_ns=$(date +%s%N)
+          set +e
+          pnpm --filter web exec playwright test --workers=4 --reporter=list,json 2>&1 | tee apps/web/e2e.log
+          e2e_status=${PIPESTATUS[0]}
+          set -e
+          end_ns=$(date +%s%N)
+          printf '{"elapsedMs":%s,"exitCode":%s}\n' "$(( (end_ns - start_ns) / 1000000 ))" "$e2e_status" > apps/web/e2e-timing.json
+          exit "$e2e_status"
 
       # テストごとの所要時間の上位は、artifactのe2e-results.jsonから次で並べる。
       # jq -r '[.. | objects | select(has("specs")) | .specs[] | {file, title, d: .tests[0].results[0].duration}] | sort_by(-.d) | .[] | "\(.d / 1000)\t\(.file)\t\(.title)"' e2e-results.json
@@ -256,6 +264,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-results
-          path: apps/web/e2e-results.json
+          name: e2e-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/web/e2e-results.json
+            apps/web/e2e.log
+            apps/web/e2e-timing.json
+            apps/web/test-results
           retention-days: 14

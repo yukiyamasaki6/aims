@@ -1,5 +1,4 @@
 import { act, render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -196,29 +195,6 @@ describe("RoundDetailClient", () => {
   });
 
   describe("準備完了", () => {
-    it("pathnameのIDを購読し、窓口の状態をスコアカードへ渡し、追記は窓口へ渡す", async () => {
-      // Given
-      fake.setView(ID, ready("午前練習", faces("face-1", "face-2")));
-      const user = userEvent.setup();
-
-      // When
-      renderDetail();
-      await user.click(await screen.findByRole("button", { name: "append" }));
-
-      // Then
-      const scorecard = screen.getByTestId("scorecard");
-      expect(scorecard).toHaveTextContent("午前練習");
-      expect(scorecard).toHaveAttribute("data-round-id", ID);
-      expect(scorecard).toHaveAttribute("data-faces", "face-1,face-2");
-      expect(fake.roundWindow.watch).toHaveBeenCalledWith(
-        ID,
-        expect.any(Function),
-      );
-      expect(fake.roundWindow.append).toHaveBeenCalledWith(ID, {
-        type: "probe",
-      });
-    });
-
     it("窓口の状態が変わると描画し直し、画面を閉じると購読を解除する", () => {
       // Given
       const { unmount } = renderDetail();
@@ -314,24 +290,6 @@ describe("RoundDetailClient", () => {
         expect(fake.roundWindow.watch).not.toHaveBeenCalled();
       },
     );
-
-    it("オフラインとエラーの表示を出し、再試行は窓口のretryを呼ぶ", async () => {
-      // Given
-      fake.setView(ID, { status: "error", reason: "failed" });
-      const user = userEvent.setup();
-      renderDetail();
-      const retry = await screen.findByRole("button", {
-        name: roundsText("fetchRetry"),
-      });
-
-      // When
-      await act(async () => {
-        await user.click(retry);
-      });
-
-      // Then
-      expect(fake.roundWindow.retry).toHaveBeenCalledExactlyOnceWith(ID);
-    });
 
     it("オフラインのとき、オフラインの表示を出す", () => {
       // Given

@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode, RefObject } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HistoryPagesSnapshot } from "../application/history-pages-memory";
+import type { createHistoryPagesMemory } from "../application/history-pages-memory";
 import type { FetchResult } from "../domain/fetch-status";
 import {
   DEFAULT_HISTORY_CONDITION,
@@ -23,6 +23,11 @@ import {
   RoundsListStoreProvider,
 } from "./rounds-context";
 import { useHistoryPages } from "./use-history-pages";
+
+// 公開の契約(記憶の書き込み)の引数から、表示の記憶の型を得る。
+type HistoryPagesSnapshot = Parameters<
+  ReturnType<typeof createHistoryPagesMemory>["write"]
+>[0];
 
 // 行の固定の高さ(境界線を含む)。件数は、この値と画面の高さから決まる。
 const ROW_HEIGHT = cardLayout.pitchPx;

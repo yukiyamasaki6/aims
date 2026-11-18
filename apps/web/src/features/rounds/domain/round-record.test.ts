@@ -12,10 +12,12 @@ import {
   outboxOf,
   type RoundRecord,
   retireItems,
-  type StoredGroup,
   sameRecordedOperations,
 } from "./round-record";
 import type { SyncOperation } from "./sync-events";
+
+// 公開の契約(保存の組の合流)の引数から、保存の組の型を得る。
+type StoredGroup = Parameters<typeof mergeStored>[1];
 
 // 反映済みの判定は、ラウンドのrevisionと確定のrevisionの比較で決まる。記録の集約の規則(値の入出力)が検証対象で、操作の中身は問わないため、名前だけの更新を使う。
 function op(id: string): SyncOperation {

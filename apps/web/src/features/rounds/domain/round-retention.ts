@@ -20,7 +20,7 @@ export function isRoundInProgress(
 // ベースに反映されていない操作は、未確定(未送信)の操作と、確定済みで取得に未反映の操作。
 // ベースが知らない確定済みの操作が残る間に組を消すと、後から届いた古い取得で古い状態に戻るため保持する。
 // 表示の規則(`isRoundInProgress`)とは別で、保持して入力中と見せないラウンドがある。
-export function keepsRoundBase(
+function keepsRoundBase(
   base: RoundBaseRecord,
   entries: ReflectableEntry[],
 ): boolean {

@@ -24,7 +24,7 @@ function isProtectedPath(pathname: string): boolean {
 
 // 遷移元として受け付けるのは、保護対象の同一オリジンのパスに限る。
 // 検証して正規化した pathname + search + hash を返し、拒否は null。
-export function allowedReturnTo(raw: string | null | undefined): string | null {
+function allowedReturnTo(raw: string | null | undefined): string | null {
   if (typeof raw !== "string") return null;
 
   // URLパーサが//hostや/\hostの形にする迂回は、基準と別のオリジンになるため、次の検査で拒否される。

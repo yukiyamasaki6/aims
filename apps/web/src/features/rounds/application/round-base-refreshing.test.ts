@@ -8,13 +8,15 @@ import {
 } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
 import { createRoundBaseRefreshing } from "./round-base-refreshing";
-import type {
-  FetchedRoundDetail,
-  FetchedRoundDetails,
-  RoundDetailResult,
-  RoundFetching,
-} from "./round-fetching";
+import type { FetchedRoundDetails, RoundFetching } from "./round-fetching";
 import { createTestRoundHub } from "./round-record-test-helpers";
+
+// 公開の契約(取得の戻り値)から、取得の結果の型を得る。
+type RoundDetailResult = Awaited<ReturnType<RoundFetching["fetchRoundDetail"]>>;
+type FetchedRoundDetail =
+  FetchedRoundDetails["rounds"] extends Map<string, infer Detail>
+    ? Detail
+    : never;
 
 const NOT_FOUND = {
   status: "not-found",

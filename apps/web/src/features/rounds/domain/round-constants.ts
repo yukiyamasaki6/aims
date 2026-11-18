@@ -14,7 +14,7 @@ export type BowTypeOption = (typeof BOW_TYPE_OPTIONS)[number];
 // 制約がある）。
 export const NAME_MAX_LENGTH = 50;
 
-// 距離(m)・総エンド数・射数/エンドの実用上の上限。DBの`distances`・`preset_distances`のCHECK制約と、判定関数`distance_config_over_limit`の値と一致させる(単体テストが一致を検査する)。
+// 距離(m)・総エンド数・射数/エンドの実用上の上限。DBの`distances`・`preset_distances`のCHECK制約と、判定関数`distance_config_over_limit`の値と一致させる。
 export const DISTANCE_LIMITS = {
   distance: 100,
   totalEnds: 60,

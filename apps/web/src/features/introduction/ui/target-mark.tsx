@@ -2,7 +2,7 @@
 import { BLUE, GOLD, BLACK as OUTLINE, RED, TARGET_LINE } from "./target-style";
 
 // 外側の輪から順に、色と半径(的の半径を50としたとき)。
-export const RINGS = {
+const RINGS = {
   // 6点的(アウトドア・80cm): 色ごとの外縁が 黄1/3・赤2/3・青1
   six: [
     [BLUE, 50],

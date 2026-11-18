@@ -75,7 +75,8 @@ describe("useSettingsRoute", () => {
     it("開くと、分類「アカウント」のハッシュで段数1の状態を積む", () => {
       // Given
       const { result } = setup();
-      const length = window.history.length;
+      const { pathname, search } = window.location;
+      const pushState = vi.spyOn(window.history, "pushState");
 
       // When
       act(() => result.current.open());
@@ -83,8 +84,18 @@ describe("useSettingsRoute", () => {
       // Then
       expect(result.current.view).toBe("account");
       expect(window.location.hash).toBe(SETTINGS_ACCOUNT_HASH);
-      expect(window.location.pathname).toBe("/rounds");
-      expect(window.history.length).toBe(length + 1);
+      expect(window.location.pathname).toBe(pathname);
+      expect(window.location.search).toBe(search);
+      expect(pushState).toHaveBeenCalledTimes(1);
+      expect(pushState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          settingsDepth: 1,
+          settingsDocumentId: expect.stringMatching(/\S/),
+        }),
+        "",
+        `${pathname}${search}${SETTINGS_ACCOUNT_HASH}`,
+      );
+      expect(window.history.state).toEqual(pushState.mock.calls[0][0]);
       expect(window.history.state).toMatchObject({ settingsDepth: 1 });
     });
 

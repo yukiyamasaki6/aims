@@ -5,12 +5,11 @@ import {
   roundCreated,
   roundDisabled,
 } from "./round-op-test-helpers";
-import {
-  isUnknownToServer,
-  type OpeningInput,
-  roundOpening,
-} from "./round-opening";
+import { isUnknownToServer, roundOpening } from "./round-opening";
 import type { TargetFaceOption } from "./target-face";
+
+// 公開の契約(詳細を開く判断)の引数から、入力の型を得る。
+type OpeningInput = Parameters<typeof roundOpening>[0];
 
 const faces: TargetFaceOption[] = [
   {

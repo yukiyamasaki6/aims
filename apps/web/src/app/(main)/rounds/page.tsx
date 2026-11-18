@@ -1,5 +1,1 @@
-import { RoundsHome } from "@/features/rounds/ui/rounds-home";
-
-export default function RoundsPage() {
-  return <RoundsHome />;
-}
+export { RoundsHome as default } from "@/features/rounds/ui/rounds-home";

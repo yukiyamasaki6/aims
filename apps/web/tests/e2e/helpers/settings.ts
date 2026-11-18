@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { ROUNDS_PATH, SETTINGS_ACCOUNT_HASH } from "@/routes";
 import { waitForHydration } from "./auth";
@@ -9,13 +9,6 @@ const settingsText = translatorFor("settings");
 // 設定パネル。名前は「設定」の対話の領域である。
 export function settingsPanel(page: Page) {
   return page.getByRole("dialog", { name: settingsText("title") });
-}
-
-// 幅768px以上の縦の列の項目。パネルが開いている間は背景が支援技術から隠れるため、隠れていても探す。
-export function railItem(page: Page, name: string) {
-  return page
-    .locator("aside:visible")
-    .getByRole("link", { name, includeHidden: true });
 }
 
 // ホーム(水和の後)で「設定」項目を押して、設定パネルを分類「アカウント」で開く。
@@ -51,39 +44,12 @@ export function accountCategory(page: Page) {
   });
 }
 
-// 要素の中心を、座標で押す。パネルが開いている間、背景は支援技術から隠れて押下を受けないため、要素への押下でなく画面上の点を押す。
-// 押す場所を決めるために、要素の寸法を使う。
-export async function pressAtCenter(page: Page, target: Locator) {
-  const box = await target.boundingBox();
-  if (box === null) throw new Error("押す要素の位置が得られません");
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-}
-
 // 背景のホームの現在地の見出し。背景がホームであることの目印に使う。
 export function homeHeading(page: Page) {
   return page.getByRole("heading", {
     level: 1,
     name: translatorFor("rounds")("homeTitle"),
   });
-}
-
-// 設定パネルの外側の点を、座標で押す。外側の点は、パネルの領域とビューポートの寸法から、左右の余白の中央として求める。
-// 他の機能の要素の位置や形に頼らない。パネルが画面全体を覆う幅(外側の余白がない)では、押す点がないため例外にする。
-export async function pressOutsidePanel(page: Page) {
-  const box = await settingsPanel(page).boundingBox();
-  const viewport = page.viewportSize();
-  if (box === null || viewport === null)
-    throw new Error("パネルの領域かビューポートが得られません");
-  const rightMargin = viewport.width - (box.x + box.width);
-  const leftMargin = box.x;
-  const y = viewport.height / 2;
-  if (rightMargin > 0) {
-    await page.mouse.click(box.x + box.width + rightMargin / 2, y);
-  } else if (leftMargin > 0) {
-    await page.mouse.click(leftMargin / 2, y);
-  } else {
-    throw new Error("パネルの外側に押す点がありません");
-  }
 }
 
 // 設定パネルの中の項目の画面の水和が済むまで待つ。背景のホームも目印を持つため、パネルの中に絞る。

@@ -45,14 +45,14 @@ export type RoundQueries = {
 };
 
 // `startedAt`は取得の開始時刻、`userId`は取得に使ったセッションの利用者。端末へ保存するベースの記録に付ける。
-export type FetchedRoundDetail = {
+type FetchedRoundDetail = {
   base: RoundBaseRecord;
   startedAt: number;
   userId: string;
 };
 
 // 1つのラウンドの取得の結果。not-foundにも、取得の開始時刻と利用者を付ける。
-export type RoundDetailResult =
+type RoundDetailResult =
   | Exclude<FetchResult<FetchedRoundDetail>, { status: "not-found" }>
   | { status: "not-found"; startedAt: number; userId: string };
 

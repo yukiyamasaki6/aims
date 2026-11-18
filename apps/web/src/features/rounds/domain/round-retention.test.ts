@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { StreamEntry } from "@/lib/local-op-log/contract/op-log-store";
+import type { StreamRules } from "@/lib/local-op-log/contract/op-log-store";
 import type { RoundBaseRecord } from "./round-base";
 import { roundTablesFromServer } from "./round-op-test-helpers";
 import {
   isRetainedForRefresh,
   isRoundInProgress,
-  keepsRoundBase,
   roundStreamRules,
 } from "./round-retention";
 import type { SyncOperation } from "./sync-events";
+
+// 公開の契約(規則の引数)から、列の操作の型を得る。
+type StreamEntry<Op extends { eventId: string }> = Parameters<
+  StreamRules<Op, unknown>["reflects"]
+>[1];
 
 function record(
   overrides: {
@@ -82,11 +86,11 @@ describe("isRoundInProgress", () => {
   });
 });
 
-describe("keepsRoundBase", () => {
+describe("roundStreamRules.keeps", () => {
   it("入力中のベースは、操作が無くても保持する", () => {
     // Given
     // When
-    const result = keepsRoundBase(record(), []);
+    const result = roundStreamRules.keeps(record(), []);
 
     // Then
     expect(result).toBe(true);
@@ -97,10 +101,14 @@ describe("keepsRoundBase", () => {
     const completed = record({ status: "completed" });
 
     // When
-    const noOperations = keepsRoundBase(completed, []);
-    const reflected = keepsRoundBase(completed, [entry(roundUpdated, 1)]);
-    const unsent = keepsRoundBase(completed, [entry(roundUpdated)]);
-    const notReflected = keepsRoundBase(completed, [entry(roundUpdated, 4)]);
+    const noOperations = roundStreamRules.keeps(completed, []);
+    const reflected = roundStreamRules.keeps(completed, [
+      entry(roundUpdated, 1),
+    ]);
+    const unsent = roundStreamRules.keeps(completed, [entry(roundUpdated)]);
+    const notReflected = roundStreamRules.keeps(completed, [
+      entry(roundUpdated, 4),
+    ]);
 
     // Then
     expect(noOperations).toBe(false);
@@ -118,8 +126,8 @@ describe("keepsRoundBase", () => {
     });
 
     // When
-    const staleKept = keepsRoundBase(stale, [entry(completedOp, 2)]);
-    const reflectedKept = keepsRoundBase(reflectedBase, [
+    const staleKept = roundStreamRules.keeps(stale, [entry(completedOp, 2)]);
+    const reflectedKept = roundStreamRules.keeps(reflectedBase, [
       entry(completedOp, 2),
     ]);
 
@@ -131,13 +139,16 @@ describe("keepsRoundBase", () => {
   it("操作を重ねた状態で判定する。未送信の完了は、確定済みの入力中への戻しを含め、重ねた状態が完了のとき、未送信があれば保持する", () => {
     // Given
     // When
-    const confirmedCompletion = keepsRoundBase(record(), [
+    const confirmedCompletion = roundStreamRules.keeps(record(), [
       entry(completedOp, 1),
     ]);
-    const unsentCompletion = keepsRoundBase(record(), [entry(completedOp)]);
-    const unsentReopen = keepsRoundBase(record({ status: "completed" }), [
-      entry(reopenedOp),
+    const unsentCompletion = roundStreamRules.keeps(record(), [
+      entry(completedOp),
     ]);
+    const unsentReopen = roundStreamRules.keeps(
+      record({ status: "completed" }),
+      [entry(reopenedOp)],
+    );
 
     // Then
     expect(confirmedCompletion).toBe(false);
@@ -148,32 +159,12 @@ describe("keepsRoundBase", () => {
   it("ラウンドの削除が重なっても、未送信なら保持し、確定済みでもベースがあるあいだは(反映済みでないため)保持する", () => {
     // Given
     // When
-    const unsent = keepsRoundBase(record(), [entry(disabledOp)]);
-    const confirmed = keepsRoundBase(record(), [entry(disabledOp, 5)]);
+    const unsent = roundStreamRules.keeps(record(), [entry(disabledOp)]);
+    const confirmed = roundStreamRules.keeps(record(), [entry(disabledOp, 5)]);
 
     // Then
     expect(unsent).toBe(true);
     expect(confirmed).toBe(true);
-  });
-});
-
-describe("roundStreamRules", () => {
-  it("反映済みの判定、保持の規則、ベースの新旧の判定を、端末の保存へ束ねて渡す", () => {
-    // Given
-    const base = record();
-
-    // When
-    const reflected = roundStreamRules.reflects(base, entry(roundUpdated, 1));
-    const kept = roundStreamRules.keeps(base, []);
-    const older = roundStreamRules.isOlder(
-      record({ revisions: { round: 3 } }),
-      record({ revisions: { round: 2 } }),
-    );
-
-    // Then
-    expect(reflected).toBe(true);
-    expect(kept).toBe(true);
-    expect(older).toBe(true);
   });
 });
 

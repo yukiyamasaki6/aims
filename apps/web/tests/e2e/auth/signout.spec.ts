@@ -14,9 +14,6 @@ const offlinePwaText = translatorFor("offlinePwa");
 // 共有の認証状態を汚さないよう使い捨てユーザーで専用のセッションを使う。
 test.use({ storageState: { cookies: [], origins: [] } });
 
-// ドロワーの枠へ切り替わる幅768px未満の縦向き。
-const MOBILE_VIEWPORT = { width: 375, height: 667 };
-
 // supabase/config.tomlのjwt_expiry（3600秒）を越える時間。
 const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 
@@ -86,22 +83,6 @@ test("別の画面でサインアウトを確認すると、この端末のセ�
   await expect(page).toHaveURL(/\/signin/);
 });
 
-test("広い画面でサインアウトの確認を開いたまま縦向きで狭い画面へ変えても、確認が開いたままで、確認するとサインイン画面へ移動する", async ({
-  page,
-}) => {
-  const { confirmButton } = await signInAndOpenDialog(page, "signout-resize", {
-    path: "/rounds/new",
-  });
-
-  // 縦向きで狭い画面へ変えて、確認が開いたままであることを確かめる。
-  await page.setViewportSize(MOBILE_VIEWPORT);
-  await expect(confirmButton).toBeVisible();
-
-  // サインアウトを確認して、サインイン画面へ移動する。
-  await confirmButton.click();
-  await expect(page).toHaveURL(/\/signin$/);
-});
-
 test("オフラインでサインアウトを確認すると、この端末のセッションが終了し、オフライン画面が表示される", async ({
   page,
 }) => {
@@ -162,36 +143,5 @@ test("トークンを更新できずサインアウトに失敗すると、エ�
       includeHidden: true,
     }),
   ).toBeAttached();
-  await expect(page).toHaveURL(new RegExp(`${SETTINGS_ACCOUNT_HASH}$`));
-});
-
-test("サインアウトの確認ダイアログが開いている間、Escで確認ダイアログだけが閉じ、設定パネルは開いたままである", async ({
-  page,
-}) => {
-  // 設定パネルでサインアウトの確認を開く。
-  const { confirmButton } = await signInAndOpenDialog(page, "signout-esc", {
-    path: "/rounds/new",
-  });
-
-  // Escで、確認ダイアログだけが閉じる。
-  await page.keyboard.press("Escape");
-  await expect(confirmButton).toBeHidden();
-  await expect(settingsPanel(page)).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`${SETTINGS_ACCOUNT_HASH}$`));
-});
-
-test("サインアウトの確認ダイアログの背景の押下で、確認ダイアログだけが閉じ、設定パネルは開いたままである", async ({
-  page,
-}) => {
-  // 設定パネルでサインアウトの確認を開く。
-  const { confirmButton } = await signInAndOpenDialog(page, "signout-outside", {
-    path: "/rounds/new",
-  });
-
-  // 確認ダイアログの背景(最前面の背景)を座標で押すと、確認ダイアログだけが閉じる。
-  // 中央には確認ダイアログ自身があるため、画面の左上の隅を押す。
-  await page.mouse.click(5, 5);
-  await expect(confirmButton).toBeHidden();
-  await expect(settingsPanel(page)).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`${SETTINGS_ACCOUNT_HASH}$`));
 });

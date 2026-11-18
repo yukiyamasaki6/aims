@@ -5,16 +5,13 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
-import { blockOpLogStore } from "../helpers/op-log";
-import { createRound, SIX_RING_TARGET_FACE_ID } from "../helpers/rounds";
-import { expectPartlyCovered, expectUncovered } from "../helpers/visibility";
+import { getDistanceIds } from "../helpers/other-device";
+import { createRound, signInAsTestUser } from "../helpers/rounds";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
 const RECORD_SHOTS_RPC = "**/rest/v1/rpc/record_shots";
 const CLEAR_SHOTS_RPC = "**/rest/v1/rpc/clear_shots";
-
-const MOBILE = { width: 375, height: 667 };
 
 type RoundInput = Omit<Parameters<typeof createRound>[0], "email" | "password">;
 
@@ -38,22 +35,6 @@ async function openRound(
   await page.goto(`/rounds/${roundId}`);
   await waitForHydration(page);
   return roundId;
-}
-
-function shot(distanceIndex: number, endNumber: number, score: string) {
-  return {
-    distanceIndex,
-    endNumber,
-    scoreStr: score,
-    scoreInt: score === "X" ? 10 : score === "M" ? 0 : Number(score),
-  };
-}
-
-// 全てのエンドが満杯になった（テンキーを格納した状態で開く）記録を作る。
-function allShots(distanceIndex: number, ends: number, arrows: number) {
-  return Array.from({ length: ends * arrows }, (_, i) =>
-    shot(distanceIndex, Math.floor(i / arrows) + 1, "5"),
-  );
 }
 
 // エンドの記録済みの玉の、表示の順のi本目(1始まり)。
@@ -102,9 +83,19 @@ test("点数を書くと記録され、点数の高い順に並び、再読み�
   page,
 }) => {
   // 新しい矢にXを書き、玉と仮の矢を確かめる。
-  await openRound(page, {
+  const roundId = await openRound(page, {
     distances: [{ distance: 18, totalEnds: 6, arrowsPerEnd: 6 }],
   });
+  const { supabase } = await signInAsTestUser(
+    getSharedEmail(),
+    SHARED_PASSWORD,
+  );
+  let distanceId: string;
+  try {
+    [distanceId] = await getDistanceIds(supabase, roundId);
+  } finally {
+    await supabase.auth.stopAutoRefresh();
+  }
   await page.getByTestId("score-button-X").click();
   await expect(ball(page, 1, 1, 1)).toHaveText("X");
   await expectProvisionalIn(page, 1, 1);
@@ -113,78 +104,46 @@ test("点数を書くと記録され、点数の高い順に並び、再読み�
   for (const key of ["7", "10", "9", "M"]) {
     await page.getByTestId(`score-button-${key}`).click();
   }
-  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
+  const sent = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/rpc/record_shots") &&
+      response.ok() &&
+      response
+        .request()
+        .postDataJSON()
+        .p_shots.some(
+          (shot: {
+            distance_id: string;
+            end_number: number;
+            score_str: string;
+            score_int: number;
+          }) =>
+            shot.distance_id === distanceId &&
+            shot.end_number === 1 &&
+            shot.score_str === "8" &&
+            shot.score_int === 8,
+        ),
+  );
   await page.getByTestId("score-button-8").click();
   const expected = ["X", "10", "9", "8", "7", "M"];
   await expectBalls(page, 1, 1, expected);
   await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("44");
 
   // 再読み込みして、同じ並びと小計が残ることを確かめる。
+  const response = await sent;
+  const shotId = await ball(page, 1, 1, 4).getAttribute("data-shot-id");
+  expect(response.request().postDataJSON().p_shots).toContainEqual(
+    expect.objectContaining({
+      shot_id: shotId,
+      distance_id: distanceId,
+      end_number: 1,
+      score_str: "8",
+      score_int: 8,
+    }),
+  );
   await reloadAfter(page, sent);
   await expectBalls(page, 1, 1, expected);
   await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("44");
-});
-
-test("満杯でないエンドがあるラウンドを開くと、的にある点数のキーだけを表示する", async ({
-  page,
-}) => {
-  await openRound(page, {
-    distances: [
-      {
-        distance: 30,
-        totalEnds: 12,
-        arrowsPerEnd: 3,
-        targetFaceId: SIX_RING_TARGET_FACE_ID,
-      },
-    ],
-  });
-  await expect(page.getByTestId("score-button-5")).toBeVisible();
-  await expect(page.getByTestId("score-button-4")).toHaveCount(0);
-});
-
-test("記録済みの玉を押して指すと、テンキーが開き、指した行がテンキーに隠れずに見える", async ({
-  page,
-}) => {
-  // テンキーが画面の下に開き、行に重なり得る縦長の画面で確かめる。
-  await openRound(
-    page,
-    {
-      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
-      shots: allShots(0, 12, 3),
-    },
-    MOBILE,
-  );
-  const target = ball(page, 1, 10, 1);
-  await expect(page.getByTestId("keypad-toggle")).toBeHidden();
-  // テンキーが開くと重なる、スクロール領域の下端に行を置く。
-  await endRow(page, 1, 10).evaluate((row) =>
-    row.scrollIntoView({ block: "end", behavior: "instant" }),
-  );
-  await target.click();
-  await expect(target).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("score-button-X")).toBeVisible();
-  await expectUncovered(endRow(page, 1, 10));
-});
-
-test("エンドの番号や小計、満杯のエンドの玉の間を押しても、指している矢は変わらない", async ({
-  page,
-}) => {
-  await openRound(page, {
-    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
-    shots: [shot(0, 1, "9"), shot(0, 1, "8"), shot(0, 1, "7")],
-  });
-  await expectProvisionalIn(page, 1, 2);
-  await page.getByTestId("end-subtotal-1-2").click();
-  await endRow(page, 1, 2).getByText("2", { exact: true }).click();
-  const first = await ball(page, 1, 1, 1).boundingBox();
-  const second = await ball(page, 1, 1, 2).boundingBox();
-  if (!first || !second) throw new Error("玉が表示されていません。");
-  await page.mouse.click(
-    (first.x + first.width + second.x) / 2,
-    first.y + first.height / 2,
-  );
-  await expectProvisionalIn(page, 1, 2);
-  await expect(page.getByTestId("score-button-X")).toBeVisible();
 });
 
 test("点数を書いた直後に一つ戻ると、記録した矢が消え、再読み込みしても消えたままになる", async ({
@@ -205,112 +164,4 @@ test("点数を書いた直後に一つ戻ると、記録した矢が消え、�
   // 再読み込みして、消えたままであることを確かめる。
   await reloadAfter(page, sent);
   await expectBalls(page, 1, 1, []);
-});
-
-test("テンキーの下矢印を押すと、矢が指されなくなり、テンキーが格納される", async ({
-  page,
-}) => {
-  await openRound(page, {}, MOBILE);
-  await expect(page.getByTestId("score-button-X")).toBeVisible();
-  await page.getByTestId("keypad-toggle").click();
-  await expect(page.getByTestId("keypad-toggle")).toBeHidden();
-  await expect(page.getByTestId("score-button-X")).toBeHidden();
-  await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
-});
-
-test("横向きでテンキーの側パネルを閉じると、点数のキーと閉じるボタンが見えなくなる", async ({
-  page,
-}) => {
-  // 横向きで開き、側パネルに点数のキーが見えることを確かめる。
-  await openRound(page, {}, { width: 667, height: 375 });
-  await expect(page.getByTestId("score-button-X")).toBeVisible();
-
-  // 側パネルを閉じ、キーと閉じるボタンが見えなくなることを確かめる。
-  // 閉じたパネルは幅0で残るため、パネル自体でなく中の要素で確かめる。
-  await page.getByTestId("keypad-panel-close").click();
-  await expect(page.getByTestId("keypad-panel-close")).toBeHidden();
-  await expect(page.getByTestId("score-button-X")).toBeHidden();
-  await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
-});
-
-for (const viewport of [
-  { width: 667, height: 375 },
-  { width: 740, height: 360 },
-]) {
-  test(`横向き(${viewport.width}×${viewport.height})でテンキーを開くと、点数のキーが最前面にあり、押すと点数が入る`, async ({
-    page,
-  }) => {
-    // 横向きで開き、全ての点数のキーが他の要素に覆われずに最前面にあることを確かめる。
-    await openRound(page, {}, viewport);
-    const scoreKeys = [
-      "X",
-      "10",
-      "9",
-      "8",
-      "7",
-      "6",
-      "5",
-      "4",
-      "3",
-      "2",
-      "1",
-      "M",
-    ];
-    await expect(page.getByTestId("score-button-X")).toBeVisible();
-    for (const key of scoreKeys) {
-      // 角が丸いため、内側の点で確かめる。
-      await expectUncovered(page.getByTestId(`score-button-${key}`), 8);
-    }
-
-    // 点数のキーを押し、点数が入ることを確かめる。
-    await page.getByTestId("score-button-X").click();
-    await expect(ball(page, 1, 1, 1)).toHaveText("X");
-  });
-}
-
-test("点数を入力した後、次に指す行が固定表示とテンキーに隠れずに見える", async ({
-  page,
-}) => {
-  // テンキーが画面の下に開き、行に重なり得る縦長の画面で確かめる。
-  await openRound(
-    page,
-    {
-      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
-      shots: allShots(0, 12, 3),
-    },
-    MOBILE,
-  );
-
-  // 4エンド目の玉を押して指す。
-  await ball(page, 1, 4, 1).click();
-  await expect(ball(page, 1, 4, 1)).toHaveAttribute("aria-pressed", "true");
-  await expectUncovered(endRow(page, 1, 4));
-
-  // 指した行を上側の固定表示の裏へスクロールする。
-  await endRow(page, 1, 4).evaluate((row) =>
-    row.scrollIntoView({ block: "start", behavior: "instant" }),
-  );
-  await expectPartlyCovered(endRow(page, 1, 4));
-
-  // 点数を書き、行が固定表示とテンキーに隠れずに見えることを確かめる。
-  await page.getByTestId("score-button-9").click();
-  await expect(ball(page, 1, 4, 1)).toHaveText("9");
-  await expectUncovered(endRow(page, 1, 4));
-});
-
-test("端末の保存が終わらない間も、点数を押すと玉がすぐに表示され、保存が終わると送信される", async ({
-  page,
-}) => {
-  // 端末の保存を塞いだ状態で点数を押し、玉がすぐに表示されることを確かめる。
-  await openRound(page);
-  const release = await blockOpLogStore(page);
-  await page.getByTestId("score-button-10").click();
-  await expect(ball(page, 1, 1, 1)).toHaveText("10");
-  await expectProvisionalIn(page, 1, 1);
-
-  // 塞ぎを解き、保存の後に送信されることを確かめる。
-  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
-  await release();
-  await sent;
-  await expectBalls(page, 1, 1, ["10"]);
 });

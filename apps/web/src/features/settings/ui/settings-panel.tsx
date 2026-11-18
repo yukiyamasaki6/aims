@@ -26,7 +26,7 @@ export type SettingsItemControls = {
 };
 
 // 項目の画面を描く関数。入口が認証の部品を組み立てて渡す。
-export type SettingsItemRenderer = (
+type SettingsItemRenderer = (
   view: SettingsItemView,
   controls: SettingsItemControls,
 ) => ReactNode;

@@ -8,7 +8,7 @@ import {
   historyConditionOf,
 } from "../domain/history-view-state";
 
-export type HistoryViewControls = {
+type HistoryViewControls = {
   // 入力値と、そこから導出されるフィルター。記憶を読み終えるまではnull。
   input: HistoryInput | null;
   condition: HistoryCondition | null;

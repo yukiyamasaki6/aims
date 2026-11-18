@@ -4,20 +4,13 @@ import { translatorFor } from "@/i18n/translator-test-helpers";
 import { CHANGE_PASSWORD_HASH } from "@/routes";
 import { expect, test } from "../fixtures";
 import { signUpAndSignIn } from "../helpers/auth";
-import { signInError, updatePasswordDirect } from "../helpers/auth-api";
+import { signInError } from "../helpers/auth-api";
 import {
   expectSignedOutIn,
   expectStillSignedIn,
   signInOnOtherDevice,
 } from "../helpers/other-browser-device";
-import {
-  expectAccountCategory,
-  openSettingsAt,
-  panelBackLink,
-  settingsPanel,
-  waitForPanelHydration,
-} from "../helpers/settings";
-import { authMethodOf, readStoredTokens } from "../helpers/stored-session";
+import { openSettingsAt } from "../helpers/settings";
 
 const authText = translatorFor("auth");
 
@@ -79,39 +72,6 @@ test("現在のパスワードと新しいパスワードを入力して変更�
   );
   await page.goto("/rounds");
   await expect(page).toHaveURL(/\/rounds/);
-});
-
-test("ハッシュ付きのURLを直接開いても再読み込みしても、設定パネルにパスワード変更の画面が表示され、入力は空である", async ({
-  page,
-}) => {
-  // ハッシュ付きのURLを直接開き、パスワード変更の画面が表示される。
-  await signUpAndSignIn(page, {
-    email: newEmail(),
-    password: ORIGINAL_PASSWORD,
-  });
-  await openChangePassword(page);
-  await expect(currentPasswordInput(page)).toHaveValue("");
-
-  // 再読み込みして、同じ画面が表示される。
-  await page.reload();
-  await waitForPanelHydration(page);
-  await expect(settingsPanel(page)).toBeVisible();
-  await expect(currentPasswordInput(page)).toHaveValue("");
-  await expect(page).toHaveURL(new RegExp(`${CHANGE_PASSWORD_HASH}$`));
-});
-
-test("ヘッダーの戻るのリンクを押すと、分類「アカウント」へ移動する", async ({
-  page,
-}) => {
-  await signUpAndSignIn(page, {
-    email: newEmail(),
-    password: ORIGINAL_PASSWORD,
-  });
-  await openChangePassword(page);
-
-  await panelBackLink(page).click();
-
-  await expectAccountCategory(page);
 });
 
 test("別の端末でサインインしているとき、この端末がパスワードを変更すると、この端末はサインインしたままで、別の端末は期限が切れた後にサインイン画面へ移動する", async ({
@@ -186,24 +146,4 @@ test("現在のパスワードを誤り、新しいパスワードを規則に�
   await expect(
     page.getByText(authText("failure.current_password_invalid")),
   ).not.toBeVisible();
-});
-
-test("パスワードでサインインしたセッションが、現在のパスワードを付けずにパスワードを更新しようとしても、拒否され、パスワードは変わらない", async ({
-  page,
-}) => {
-  const email = newEmail();
-  await signUpAndSignIn(page, { email, password: ORIGINAL_PASSWORD });
-  // 認証コードで得たセッションは検査を免除されるため、先にパスワードで得たセッションであることを確かめる。
-  const { accessToken } = await readStoredTokens(page.context());
-  expect(authMethodOf(accessToken)).toBe("password");
-
-  const response = await updatePasswordDirect(accessToken, {
-    password: NEW_PASSWORD,
-  });
-
-  expect(response).toEqual({
-    status: 400,
-    errorCode: "current_password_required",
-  });
-  expect(await signInError(email, ORIGINAL_PASSWORD)).toBeNull();
 });

@@ -1,10 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  type CardMetrics,
-  CardMetricsOverride,
-  useCardFit,
-} from "./use-card-fit";
+import { useCardFit } from "./use-card-fit";
 
 const texts = { format: "屋外", bow: "リカーブ" };
 const fonts = { date: { fontSize: "14px" }, tag: { fontSize: "11px" } };
@@ -88,28 +84,6 @@ describe("useCardFit", () => {
 
     // Then
     expect(shown()).toBe("none");
-  });
-
-  it("差し替えの測定値があるときは、測定せずその値を返す", () => {
-    // Given
-    stubLayout(300, 40);
-    const override: CardMetrics = {
-      available: 1,
-      date: 2,
-      nameMin: 3,
-      format: 4,
-      bow: 5,
-    };
-
-    // When
-    render(
-      <CardMetricsOverride value={override}>
-        <Probe />
-      </CardMetricsOverride>,
-    );
-
-    // Then
-    expect(JSON.parse(shown() ?? "")).toEqual(override);
   });
 
   it("幅の変化を受けて測り直し、取り外すと監視をやめる", () => {

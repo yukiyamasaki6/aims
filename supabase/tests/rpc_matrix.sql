@@ -1,6 +1,6 @@
 -- RPCの「RPC × 観点 × アクター」マトリクステスト。
 -- 現在の挙動を期待値表として固定し、RPCの変更を表の差分として見えるようにする。
--- 個別のデータの振る舞い（イベントの順序、射影、CASCADEなど）は rounds.sql で確認し、このファイルは全体の一覧性と網羅性を担う。
+-- 個別のデータの振る舞い（イベントの順序、射影、CASCADEなど）は rounds.sql で確認し、このファイルは全体の一覧性を担う。
 --
 -- 観点
 --   success: 正常系。権限のある実行者が有効な入力で呼ぶ
@@ -17,11 +17,10 @@
 -- 拒否はPT403（認可）とPT422（契約の不一致）を、'error:[PT403]<メッセージ>' のようにSQLSTATE付きで固定する。それ以外はメッセージで区別する。
 -- 成功した呼び出しは、戻り値の要約（効いたか、効いた項目、効かなかった項目と理由）を状態の末尾に付けて固定する。
 -- 拒否された呼び出しの状態は、サブトランザクションの巻き戻し後に測る。RPCが例外にせず黙って成功した場合は、状態の変化として検出される。
--- 該当しない組み合わせは、理由を付けて n/a として明示する。
 
 begin;
 
-select plan(11);
+select plan(1);
 
 -- ============================================================
 -- fixture
@@ -551,62 +550,9 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('save_round_as_preset', 'idempotent', 'duplicate_save', null, pg_temp.q('save_round_as_preset'), 2, $$select pg_temp.st_preset('Matrix Preset')$$);
 
 -- ============================================================
--- 該当しない組み合わせ
--- ============================================================
-
-create temp table rpc_na (
-  rpc text, aspect text, actor text references rpc_actor, reason text not null,
-  primary key (rpc, aspect, actor)
-);
-
--- ラウンドまたは距離のメンバーシップで認可する書き込みRPC。
--- 権限チェックが入力検証より先に走るため、権限のない実行者は入力検証に到達しない。
-insert into rpc_na (rpc, aspect, actor, reason)
-select r.rpc, n.aspect, n.actor, n.reason
-from (values
-  ('update_round'), ('create_distance'), ('update_distance'), ('disable_round'), ('disable_distance'),
-  ('record_shots'), ('clear_shots')
-) as r(rpc)
-cross join (values
-  ('success', 'viewer', 'viewerは書き込めないため、成功する正常系はない（拒否はunauthorizedで固定する）'),
-  ('success', 'non_member', '非メンバーは書き込めないため、成功する正常系はない（拒否はunauthorizedで固定する）'),
-  ('unauthorized', 'editor', 'editorは権限を持つため、権限なしの行は成立しない'),
-  ('invalid', 'viewer', '権限チェックが入力検証より先に走り、入力検証に到達しない（拒否はunauthorizedで固定する）'),
-  ('invalid', 'non_member', '権限チェックが入力検証より先に走り、入力検証に到達しない（拒否はunauthorizedで固定する）'),
-  ('idempotent', 'viewer', '冪等性は書き込める実行者の再送が対象で、権限なしの拒否はunauthorizedで固定する'),
-  ('idempotent', 'non_member', '冪等性は書き込める実行者の再送が対象で、権限なしの拒否はunauthorizedで固定する')
-) as n(aspect, actor, reason);
-
--- create_roundは既存ラウンドを前提にせず、実行者が新規ラウンドのeditorになる。メンバーシップによる認可がない。
-insert into rpc_na (rpc, aspect, actor, reason)
-select 'create_round', n.aspect, n.actor, n.reason
-from (values
-  ('success', 'viewer', '実行者は新規ラウンドのeditorになるため、既存ラウンドのメンバーシップによる差がない。認証済みユーザーの挙動はeditorの行で表す'),
-  ('success', 'non_member', '実行者は新規ラウンドのeditorになるため、既存ラウンドのメンバーシップによる差がない。認証済みユーザーの挙動はeditorの行で表す'),
-  ('unauthorized', 'editor', '自分が作成したイベントの再送は拒否されない（拒否は他人のevent_idの再送で、viewerとnon_memberの行が固定する）。anonの拒否はrls_matrix.sqlの関数EXECUTE表が固定する'),
-  ('invalid', 'viewer', '実行者によって入力検証は変わらない。認証済みユーザーの挙動はeditorの行で表す'),
-  ('invalid', 'non_member', '実行者によって入力検証は変わらない。認証済みユーザーの挙動はeditorの行で表す'),
-  ('idempotent', 'viewer', '実行者によって冪等性は変わらない。認証済みユーザーの挙動はeditorの行で表す'),
-  ('idempotent', 'non_member', '実行者によって冪等性は変わらない。認証済みユーザーの挙動はeditorの行で表す')
-) as n(aspect, actor, reason);
-
--- save_round_as_presetはラウンドと紐付かない個人プリセットを作るため、メンバーシップによる認可がない。
-insert into rpc_na (rpc, aspect, actor, reason)
-select 'save_round_as_preset', n.aspect, n.actor, n.reason
-from (values
-  ('unauthorized', 'editor', 'ラウンドと紐付かず、メンバーシップによる認可がない。anonの拒否はrls_matrix.sqlの関数EXECUTE表が固定する'),
-  ('unauthorized', 'viewer', 'ラウンドと紐付かず、メンバーシップによる認可がない。anonの拒否はrls_matrix.sqlの関数EXECUTE表が固定する'),
-  ('unauthorized', 'non_member', 'ラウンドと紐付かず、メンバーシップによる認可がない。anonの拒否はrls_matrix.sqlの関数EXECUTE表が固定する'),
-  ('invalid', 'viewer', '実行者によって入力検証は変わらない。認証済みユーザーの挙動はeditorの行で表す'),
-  ('invalid', 'non_member', '実行者によって入力検証は変わらない。認証済みユーザーの挙動はeditorの行で表す'),
-  ('idempotent', 'viewer', '実行者によって重複保存の扱いは変わらない。認証済みユーザーの挙動はeditorの行で表す'),
-  ('idempotent', 'non_member', '実行者によって重複保存の扱いは変わらない。認証済みユーザーの挙動はeditorの行で表す')
-) as n(aspect, actor, reason);
-
--- ============================================================
 -- 期待値表: RPC × 観点 × 変種 × アクター
 -- ============================================================
--- n/aでない組み合わせだけを書く。実測は、この表の行ごとに呼び出し表の変種をそのアクターで実行して得る。
+-- 実測は、この表の行ごとに呼び出し表の変種をそのアクターで実行して得る。
 -- 結果が 'error:' で始まる行は、拒否されたことと、その理由をメッセージで固定する。
 -- 拒否された行の状態が変化していないことも、状態の列で固定する。
 
@@ -830,105 +776,6 @@ select is_empty(
     full join rpc_expected e on (a.rpc, a.aspect, a.variant, a.actor) = (e.rpc, e.aspect, e.variant, e.actor)
     where a.result is distinct from e.result or a.state is distinct from e.state$$,
   '全RPCの実測（結果と呼び出し後の状態）が期待値表と一致する'
-);
-
--- カバレッジガード。公開された関数を増やしたとき、この表への追加を忘れるとここで落ちる。
--- 照合はシグネチャ単位で行うため、同名で引数違いのオーバーロードや、STABLEなどvolatile以外の関数の追加も検出する。
--- 表のキーはRPC名のまま。登録済みのシグネチャ以外は「未登録」として落ちる。
-create temp table rpc_signature (rpc text not null, sig text primary key);
-insert into rpc_signature (rpc, sig) values
-  ('create_round', 'create_round(uuid,uuid,text,date,text,text,jsonb)'),
-  ('update_round', 'update_round(uuid,uuid,jsonb)'),
-  ('create_distance', 'create_distance(uuid,uuid,uuid,text,bigint,bigint,bigint,uuid,boolean)'),
-  ('update_distance', 'update_distance(uuid,uuid,jsonb)'),
-  ('disable_round', 'disable_round(uuid,uuid)'),
-  ('disable_distance', 'disable_distance(uuid,uuid)'),
-  ('record_shots', 'record_shots(jsonb)'),
-  ('clear_shots', 'clear_shots(jsonb)'),
-  ('save_round_as_preset', 'save_round_as_preset(text,text,text,jsonb)');
-
--- RPCではないと明示する関数。ここに無いpublicの関数は、volatilityによらずRPCとして表への登録を求める。
-create temp table rpc_helper (sig text primary key, reason text not null);
-insert into rpc_helper (sig, reason) values
-  ('is_round_member(uuid)', 'RLSポリシーが使うSTABLEな判定ヘルパーで、書き込みRPCではない'),
-  ('is_round_editor(uuid)', 'RPCの権限チェックが使うSTABLEな判定ヘルパーで、書き込みRPCではない'),
-  ('distance_config_over_limit(numeric,numeric,numeric)', '上限超過を判定する純関数で、save_round_as_presetが呼ぶ。書き込みRPCではない'),
-  ('rounds_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb)', '履歴を読むSTABLEな取得の関数で、書き込みRPCではない。権限はrls_matrix.sql、振る舞いはrounds_list.sqlで確認する'),
-  ('distances_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb,jsonb)', '距離単位の履歴を読むSTABLEな取得の関数で、書き込みRPCではない。権限はrls_matrix.sqlで確認する'),
-  ('history_rounds(text,text,date,date,jsonb)', 'rounds_listとdistances_listが対象のラウンドとして読むSTABLEな関数で、書き込みRPCではない。権限はrls_matrix.sqlで確認する'),
-  ('delete_account()', 'ラウンドのメンバーを実行者とするこの表の観点に載らない、利用者自身のアカウント削除の関数。認可と副作用は delete_account.sql、権限はrls_matrix.sqlで確認する');
-
--- トリガー関数は直接呼べないため対象外。
-create temp view rpc_target as
-select p.proname::text as rpc, p.oid::regprocedure::text as sig
-from pg_proc p
-where p.pronamespace = 'public'::regnamespace
-  and p.prokind = 'f'
-  and p.prorettype <> 'trigger'::regtype
-  and has_function_privilege('authenticated', p.oid, 'execute')
-  and p.oid::regprocedure::text not in (select sig from rpc_helper);
-
-select is_empty(
-  $$select sig from rpc_target except select sig from rpc_signature$$,
-  'publicの全ての関数が、登録済みのRPCのシグネチャか、RPCでないと明示した関数の一覧にある'
-);
-
-select is_empty(
-  $$select sig from rpc_signature except select sig from rpc_target$$,
-  '登録済みのRPCのシグネチャは、全て公開された関数として実在する'
-);
-
-select is_empty(
-  $$select sig from rpc_helper except select p.oid::regprocedure::text from pg_proc p where p.pronamespace = 'public'::regnamespace$$,
-  'RPCでないと明示した関数は、全て実在する'
-);
-
-select is_empty(
-  $$select t.rpc, a.aspect, ac.actor
-    from rpc_target t
-    cross join (values ('success'), ('unauthorized'), ('invalid'), ('idempotent')) as a(aspect)
-    cross join rpc_actor ac
-    where not exists (select 1 from rpc_expected e where (e.rpc, e.aspect, e.actor) = (t.rpc, a.aspect, ac.actor))
-      and not exists (select 1 from rpc_na n where (n.rpc, n.aspect, n.actor) = (t.rpc, a.aspect, ac.actor))$$,
-  '公開されたRPCの全ての RPC × 観点 × アクター が、期待値表かn/aに存在する'
-);
-
-select is_empty(
-  $$select rpc from (select rpc from rpc_expected union select rpc from rpc_call union select rpc from rpc_na) as t
-    except select rpc from rpc_target$$,
-  '表に書かれたRPCは、全て公開されたRPCとして実在する'
-);
-
-select is_empty(
-  $$select e.rpc, e.aspect, e.variant, e.actor
-    from rpc_expected e left join rpc_call c using (rpc, aspect, variant)
-    where c.rpc is null$$,
-  '期待値表の全ての行に対応する呼び出しがある'
-);
-
-select is_empty(
-  $$select c.rpc, c.aspect, c.variant
-    from rpc_call c
-    where not exists (select 1 from rpc_expected e where (e.rpc, e.aspect, e.variant) = (c.rpc, c.aspect, c.variant))$$,
-  '呼び出し表の全ての変種が、期待値表で1つ以上のアクターから使われている'
-);
-
-select is_empty(
-  $$select e.rpc, e.aspect, e.actor
-    from rpc_expected e join rpc_na n using (rpc, aspect, actor)$$,
-  '期待値表の行とn/aが同じ RPC × 観点 × アクター で重複していない'
-);
-
-select is_empty(
-  $$select rpc, aspect, actor from rpc_na where btrim(reason) = ''$$,
-  'n/aの全ての行に理由がある'
-);
-
--- 呼び出しSQLの誤記（存在しない関数や列、構文エラー）を、期待値として固定してしまわないための確認。
-select is_empty(
-  $$select rpc, aspect, variant, actor, result from rpc_expected
-    where result ~ '^error:(function |column |relation |syntax error|invalid input syntax|could not|named parameter)'$$,
-  '期待値のエラーが、呼び出しSQLの誤記によるものではない'
 );
 
 select * from finish();

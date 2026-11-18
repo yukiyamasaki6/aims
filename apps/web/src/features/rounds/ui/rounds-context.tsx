@@ -15,7 +15,7 @@ import type { UniqueIds } from "../application/unique-ids";
 import type { WhenOnline } from "../application/when-online";
 
 // 画面が窓口を通さずに使う手続き。離れる(完了、削除)、ラウンドの削除(一覧)、開始、プリセットの保存・削除・取得、IDの払い出し、オンライン復帰の通知、履歴の条件の記憶、戻ったときの履歴の表示の記憶。
-export type RoundProcedures = {
+type RoundProcedures = {
   leaving: RoundLeaving;
   deletion: RoundDeletion;
   roundStart: RoundStart;

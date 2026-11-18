@@ -3,11 +3,9 @@
 import { useRouter } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { type ReactNode, useEffect, useState } from "react";
-import {
-  createDeleteAccount,
-  type LocalRecordsEraser,
-} from "@/features/auth/application/delete-account";
+import { createDeleteAccount } from "@/features/auth/application/delete-account";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
+import { createLocalRecordsEraser } from "@/features/auth/application/local-records-eraser";
 import { createSession } from "@/features/auth/application/session";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
@@ -70,7 +68,6 @@ import { useAppHeight } from "@/hooks/use-app-height";
 import { intlConfig } from "@/i18n/messages";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
-import type { OpLogStore } from "@/lib/local-op-log/contract/op-log-store";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import {
   createRouterPageNavigation,
@@ -256,21 +253,6 @@ function composeSession(inputs: Inputs, records: Records) {
   });
 }
 
-// この端末にある、指定した利用者の記録の消去。操作の列、参照データ、このタブの履歴の表示条件を、それぞれ独立に消す(1つの失敗が他を止めない)。
-function composeEraser(
-  store: OpLogStore<SyncOperation, RoundBaseRecord>,
-): LocalRecordsEraser {
-  return {
-    async erase(userId) {
-      await Promise.allSettled([
-        store.erase(userId),
-        Promise.resolve().then(() => eraseReferenceSnapshots(userId)),
-        Promise.resolve().then(() => eraseHistoryViewMemory(userId)),
-      ]);
-    },
-  };
-}
-
 // アカウント削除(再認証、削除、端末の記録の消去、セッションの終了)。
 function composeAccount(
   inputs: Inputs,
@@ -282,7 +264,12 @@ function composeAccount(
     account: createSupabaseAccountDeletion(
       createSupabaseDatabase<AccountDeletionDbSchema>(createClient),
     ),
-    eraser: composeEraser(records.store),
+    // この端末にある、指定した利用者の記録の消去。操作の列、参照データ、このタブの履歴の表示条件を、それぞれ独立に消す(1つの失敗が他を止めない)。
+    eraser: createLocalRecordsEraser([
+      records.store.erase,
+      eraseReferenceSnapshots,
+      eraseHistoryViewMemory,
+    ]),
     session,
     connectivity: inputs.connectivity,
   });

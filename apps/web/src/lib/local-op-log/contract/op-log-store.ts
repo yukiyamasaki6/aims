@@ -19,7 +19,7 @@ export type OpLogEntry<Op extends OpBase> = {
   operation: Op;
 };
 
-export type NewOpLogEntry<Op extends OpBase> = Omit<
+type NewOpLogEntry<Op extends OpBase> = Omit<
   OpLogEntry<Op>,
   "seq" | "ackedRevision" | "ackedFields"
 >;
@@ -36,7 +36,7 @@ export type StreamGroup<Op extends OpBase, Base> = {
 };
 
 // 反映済みと保持の判定が使う、列の1件の項目。
-export type StreamEntry<Op extends OpBase> = Pick<
+type StreamEntry<Op extends OpBase> = Pick<
   OpLogEntry<Op>,
   "operation" | "ackedRevision" | "ackedFields"
 >;

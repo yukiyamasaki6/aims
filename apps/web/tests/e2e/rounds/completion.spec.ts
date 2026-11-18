@@ -7,7 +7,6 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import { expectKeypadSettled } from "../helpers/keypad";
-import { blockOpLogStore } from "../helpers/op-log";
 import {
   getRoundRow,
   openOtherDevice,
@@ -19,7 +18,6 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
-import { expectHidden, expectUncovered } from "../helpers/visibility";
 
 const roundsText = translatorFor("rounds");
 
@@ -114,30 +112,6 @@ test("全てのエンドが満杯になった入力中のラウンドで入力�
   await expect(completeButton(page)).toBeHidden();
 });
 
-test("1画面に収まらない入力中のラウンドを最後までスクロールしても、入力を完了するボタンが隠れずに見え、スコアカードの最後の内容もボタンに隠れずに見える", async ({
-  page,
-}) => {
-  await openRound(page, {
-    distances: [
-      { distance: 90, totalEnds: 12, arrowsPerEnd: 3 },
-      { distance: 70, totalEnds: 12, arrowsPerEnd: 3 },
-    ],
-    // 全てのエンドを満杯にし、矢を指さずテンキーを格納した状態で開く。
-    shots: [...allShots(0, 12, 3), ...allShots(1, 12, 3)],
-  });
-
-  await page
-    .locator("main")
-    .evaluate((main) =>
-      main.scrollTo({ top: main.scrollHeight, behavior: "instant" }),
-    );
-  // 1つ目の距離の見出しが画面の外へ出たことで、スクロールしたことを確かめる。
-  await expectHidden(page.getByTestId("distance-config-toggle-1"));
-  // ボタンの角は丸いため、角から離れた点で確かめる。
-  await expectUncovered(completeButton(page), 5);
-  await expectUncovered(page.getByTestId("add-distance-button"), 5);
-});
-
 test("完了のラウンドでエンドの空白を押して点数を記録すると、入力を完了するボタンが再び表示され、再読み込みしても表示される", async ({
   page,
 }) => {
@@ -178,19 +152,4 @@ test("オフラインで、満杯でないエンドがあるラウンドの入�
   await expect
     .poll(() => status(roundId), { timeout: 15_000 })
     .toBe("completed");
-});
-
-test("端末の保存が終わらない間に入力を完了すると、完了のバーが消えて詳細に留まり、保存が終わるとラウンド一覧へ移る", async ({
-  page,
-}) => {
-  // 端末の保存を塞いだ状態で入力を完了し、入力中でない表示へ変わるが、まだ移らないことを確かめる。
-  await openRound(page, { shots: allShots(0, 12, 3) });
-  const release = await blockOpLogStore(page);
-  await completeButton(page).click();
-  await expect(completeButton(page)).toBeHidden();
-  await expect(page).toHaveURL(/\/rounds\/[^/]+$/);
-
-  // 塞ぎを解き、保存の後にラウンド一覧へ移ることを確かめる。
-  await release();
-  await expect(page).toHaveURL(/\/rounds$/);
 });

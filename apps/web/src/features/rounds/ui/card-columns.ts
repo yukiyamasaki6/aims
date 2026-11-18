@@ -25,7 +25,7 @@ export interface CardWidths {
   bow: number;
 }
 
-export interface CardContent {
+interface CardContent {
   hasName: boolean;
   hasDistances: boolean;
 }

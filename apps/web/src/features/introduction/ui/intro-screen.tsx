@@ -1,3 +1,5 @@
+"use client";
+
 import { useTranslations } from "next-intl";
 import { CloudFigure } from "./cloud-figure";
 import { HistoryFigure } from "./history-figure";

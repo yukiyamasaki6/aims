@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  comparePresets,
   type PresetRecord,
   presetDistancesInOrder,
   presetsOf,
@@ -45,10 +44,11 @@ function preset({
 }
 
 function sortedIds(presets: PresetRecord[]) {
-  return [...presets].sort(comparePresets).map((p) => p.id);
+  // 並びは公開の関数(presetsOf)の結果で確かめる。owner_idが全て同じ(公式)なので、並びは公式の側に出る。
+  return presetsOf(presets).global.map((p) => p.id);
 }
 
-describe("comparePresets", () => {
+describe("presetsOf: 並び順", () => {
   it("種別をアウトドア・インドア・フィールドの順に並べる", () => {
     // Given
 

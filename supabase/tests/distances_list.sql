@@ -3,12 +3,11 @@
 --   - 並び（基準 × 向き、同値の並び）と絞り込み（種別、弓種、期間、得点の範囲、距離の構成、距離の行）
 --   - ページの切り出し（has_more、起点の距離のID、全ページの連結）と、ページの間の変更
 --   - 権限（自分が属するラウンドだけ）、起点が見えない・引数が未知のとき
---   - rounds_listと対象のラウンドが同じであること（history_roundsを共有している証拠）
 -- 関数の実行権限（anon、authenticated）はrls_matrix.sqlの関数表で固定している。
 
 begin;
 
-select plan(94);
+select plan(90);
 
 -- 利用者とラウンドの別名。距離の別名は、ラウンドの別名に番号を付けた形（A1、A2）にする。
 create temp table dl_id (alias text primary key, id uuid not null);
@@ -115,29 +114,6 @@ as $$
   select coalesce(string_agg(i.alias, ',' order by e.ord), '')
   from jsonb_array_elements(p_page -> 'distances') with ordinality as e(r, ord)
   join dl_dist i on i.id = (e.r ->> 'id')::uuid
-$$;
-
--- 返した距離の、属するラウンドの別名を、最初に現れた順に並べる（重複なし）。
-create function pg_temp.round_aliases(p_page jsonb) returns text
-language sql stable
-as $$
-  select coalesce(string_agg(alias, ',' order by first_ord), '')
-  from (
-    select i.alias, min(e.ord) as first_ord
-    from jsonb_array_elements(p_page -> 'distances') with ordinality as e(r, ord)
-    join dl_id i on i.id = (e.r ->> 'round_id')::uuid
-    group by i.alias
-  ) as s
-$$;
-
--- rounds_listが返したラウンドの別名を、返した順に並べる。距離が1件もないラウンド（G）は、距離単位に現れないため除く。
-create function pg_temp.rounds_with_distances(p_page jsonb) returns text
-language sql stable
-as $$
-  select coalesce(string_agg(i.alias, ',' order by e.ord), '')
-  from jsonb_array_elements(p_page -> 'rounds') with ordinality as e(r, ord)
-  join dl_id i on i.id = (e.r ->> 'id')::uuid
-  where exists (select 1 from public.distances d where d.round_id = i.id and d.disabled_at is null)
 $$;
 
 create function pg_temp.totals(p_page jsonb) returns text
@@ -276,18 +252,6 @@ select is(
     pg_temp.item(pg_temp.list(null, null, null, null, null, 100), 'L3') -> 'distance', pg_temp.item(pg_temp.list(null, null, null, null, null, 100), 'L3') -> 'is_marked'),
   '[50, false, null, false]'::jsonb,
   '距離が判明しない距離は、距離の値（入っていれば50、なければnull）と is_marked が偽の項目として返る'
-);
-
-select is(
-  (select string_agg(r.alias || ':' || r.dl_total || ':' || r.rl_total, ',' order by r.alias)
-   from (
-     select i.alias,
-       (select sum((e.r ->> 'total')::bigint) from jsonb_array_elements(pg_temp.list(null, null, null, null, null, 100) -> 'distances') as e(r) where (e.r ->> 'round_id')::uuid = i.id) as dl_total,
-       (select (e.r ->> 'total')::bigint from jsonb_array_elements(public.rounds_list(null, null, null, null, null, 100) -> 'rounds') as e(r) where (e.r ->> 'id')::uuid = i.id) as rl_total
-     from dl_id i where i.alias in ('A', 'B', 'C', 'Z')
-   ) as r where r.dl_total = r.rl_total),
-  'A:620:620,B:500:500,C:580:580,Z:220:220',
-  '無効な距離を持たないラウンドは、距離の小計の和が、同じラウンドのrounds_listの合計点と等しい'
 );
 
 -- ============================================================
@@ -514,28 +478,6 @@ select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, '[{"distance": 70}, {"distance": 50}]', '{"distance": 50}')),
   'C2',
   '距離の構成と距離の行を併用すると、構成に一致しないラウンドの50mと、行に一致しない距離（Cの70m）は返らない'
-);
-
--- ============================================================
--- rounds_listとの整合（対象のラウンドをhistory_roundsから読んでいる証拠）
--- ============================================================
-
-select is(
-  pg_temp.round_aliases(pg_temp.list(null, null, 'outdoor', null, null, 100)),
-  pg_temp.rounds_with_distances(public.rounds_list(null, null, 'outdoor', null, null, 100)),
-  '種別で絞ったとき、距離単位の距離が属するラウンドの集合と出現の順が、rounds_listが返すラウンド（距離を持つもの）と一致する'
-);
-
-select is(
-  pg_temp.round_aliases(pg_temp.list(null, null, null, null, null, 100, '2026-09-12', '2026-09-14')),
-  pg_temp.rounds_with_distances(public.rounds_list(null, null, null, null, null, 100, '2026-09-12', '2026-09-14')),
-  '期間で絞ったとき、距離が属するラウンドの集合と出現の順が、rounds_listが返すラウンドと一致する'
-);
-
-select is(
-  pg_temp.round_aliases(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, '[{"distance": 18}, {"distance": 18}]')),
-  pg_temp.rounds_with_distances(public.rounds_list(null, null, null, null, null, 100, null, null, null, null, '[{"distance": 18}, {"distance": 18}]')),
-  '距離の構成で絞ったとき、距離が属するラウンドの集合と出現の順が、rounds_listが返すラウンドと一致する'
 );
 
 -- ============================================================

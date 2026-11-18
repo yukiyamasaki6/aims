@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { Page } from "@playwright/test";
-import { signUpAndSignIn } from "./auth";
-import { openOtherDevice, updateRound } from "./other-device";
-import { createRound } from "./rounds";
+import { type Page, test } from "@playwright/test";
+import { prepareConfirmedUserSession, signUpAndSignIn } from "./auth";
+import { updateRound } from "./other-device";
+import { createRoundWithClient, signInAsTestUser } from "./rounds";
 
 export type Credentials = { email: string; password: string };
 
@@ -16,6 +16,22 @@ export async function signInFreshUser(
     password: `password-${prefix}`,
   };
   await signUpAndSignIn(page, credentials);
+  return credentials;
+}
+
+// 画面を移らず、ケース固有の利用者を新しいcontextへ用意する。
+export async function createPreparedUser(
+  page: Page,
+  prefix = "e2e-rounds",
+): Promise<Credentials> {
+  const appUrl = test.info().project.use.baseURL;
+  if (!appUrl) throw new Error("Missing application URL in e2e helper.");
+  const credentials = {
+    email: `${prefix}-${Date.now()}-${randomUUID().slice(0, 8)}@example.com`,
+    password: `password-${prefix}`,
+  };
+  await test.step("利用者のセッションを準備する", () =>
+    prepareConfirmedUserSession(page.context(), appUrl, credentials));
   return credentials;
 }
 
@@ -45,31 +61,55 @@ export async function addRound(
     }[];
   } = {},
 ): Promise<string> {
-  const roundId = await createRound({
-    ...credentials,
-    name,
-    roundDate,
-    format: options.format,
-    bowType: options.bowType,
-    distances: options.distances ?? [
-      {
-        distance: 18,
-        totalEnds: options.format === "indoor" ? 10 : 12,
-        arrowsPerEnd: 3,
-      },
-    ],
-    shots: options.shots?.map((shot) => ({
-      distanceIndex: 0,
-      endNumber: 1,
-      ...shot,
-    })),
-  });
-  if (options.completed) {
-    const { supabase } = await openOtherDevice(
+  return createRoundFixture(credentials, (fixture) =>
+    fixture.addRound(name, roundDate, options),
+  );
+}
+
+// 準備の認証と資源の寿命をケース内へ閉じる。他端末のセッションを失効させるsignOutは使わない。
+export async function createRoundFixture<T>(
+  credentials: Credentials,
+  prepare: (fixture: {
+    addRound: (
+      name: string,
+      roundDate: string,
+      options?: NonNullable<Parameters<typeof addRound>[3]>,
+    ) => Promise<string>;
+  }) => Promise<T>,
+): Promise<T> {
+  return test.step("ラウンドのデータを準備する", async () => {
+    const { supabase } = await signInAsTestUser(
       credentials.email,
       credentials.password,
     );
-    await updateRound(supabase, roundId, { status: "completed" });
-  }
-  return roundId;
+    try {
+      return await prepare({
+        async addRound(name, roundDate, options = {}) {
+          const roundId = await createRoundWithClient(supabase, {
+            name,
+            roundDate,
+            format: options.format,
+            bowType: options.bowType,
+            distances: options.distances ?? [
+              {
+                distance: 18,
+                totalEnds: options.format === "indoor" ? 10 : 12,
+                arrowsPerEnd: 3,
+              },
+            ],
+            shots: options.shots?.map((shot) => ({
+              distanceIndex: 0,
+              endNumber: 1,
+              ...shot,
+            })),
+          });
+          if (options.completed)
+            await updateRound(supabase, roundId, { status: "completed" });
+          return roundId;
+        },
+      });
+    } finally {
+      await supabase.auth.stopAutoRefresh();
+    }
+  });
 }

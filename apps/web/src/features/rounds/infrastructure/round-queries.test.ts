@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type {
   DatabaseGateway,
   DbResponse,
-  DbSelect,
 } from "@/lib/supabase/contract/database";
 import {
   DEFAULT_HISTORY_CONDITION,
@@ -14,10 +13,7 @@ import { createRoundQueries } from "./round-queries";
 import type { RoundsDbSchema } from "./rounds-db-schema";
 
 // 問い合わせの値が検証対象で、表の名前の型引数は区別しない。
-type Query = DbSelect<
-  RoundsDbSchema,
-  "rounds" | "distances" | "target_faces" | "preset_rounds"
->;
+type Query = Parameters<DatabaseGateway<RoundsDbSchema>["select"]>[0];
 
 const listRequest = {
   condition: DEFAULT_HISTORY_CONDITION,

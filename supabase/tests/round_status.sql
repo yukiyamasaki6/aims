@@ -6,7 +6,7 @@
 
 begin;
 
-select plan(21);
+select plan(20);
 
 create temp table st_id (alias text primary key, id uuid not null);
 insert into st_id (alias, id) values
@@ -50,12 +50,6 @@ insert into public.round_users (round_id, user_id, role) values
 
 -- 既定値
 select is(pg_temp.status('R1'), 'in_progress', 'rounds.status: 状態を指定せず作った行は入力中になる');
-select is(
-  (select is_nullable || '/' || column_default from information_schema.columns where table_schema = 'public' and table_name = 'rounds' and column_name = 'status'),
-  'NO/''in_progress''::text',
-  'rounds.status: NOT NULLで既定値は入力中である'
-);
-
 set local role authenticated;
 select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
 

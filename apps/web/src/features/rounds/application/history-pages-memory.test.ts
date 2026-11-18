@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import {
-  createHistoryPagesMemory,
-  type HistoryPagesSnapshot,
-} from "./history-pages-memory";
+import { createHistoryPagesMemory } from "./history-pages-memory";
+
+// 公開の契約(記憶の書き込み)の引数から、表示の記憶の型を得る。
+type HistoryPagesSnapshot = Parameters<
+  ReturnType<typeof createHistoryPagesMemory>["write"]
+>[0];
 
 const snapshot = (id: string): HistoryPagesSnapshot => ({
   list: {

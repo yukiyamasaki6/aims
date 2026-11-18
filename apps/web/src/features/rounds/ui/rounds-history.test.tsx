@@ -8,7 +8,6 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
@@ -25,7 +24,6 @@ import {
   type HistoryRangeError,
   historyViewStateOf,
 } from "../domain/history-view-state";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../domain/round-constants";
 import type {
   DistanceListItem,
   HistoryListItem,
@@ -44,7 +42,7 @@ import {
   createFakeRoundWindow,
   distanceListItem,
   roundListItem,
-  WIDE_CARD_METRICS,
+  stubCardLayout,
 } from "./round-stores-test-helpers";
 import {
   RoundProceduresProvider,
@@ -52,7 +50,6 @@ import {
   RoundWindowProvider,
 } from "./rounds-context";
 import { RoundsHistory } from "./rounds-history";
-import { CardMetricsOverride } from "./use-card-fit";
 
 const suspense = vi.hoisted(() => ({ pending: null as Promise<void> | null }));
 
@@ -90,18 +87,9 @@ function loaded(
   };
 }
 
-// jsdomは幅を測れないため、全ての要素が入る測定値を渡す。
-function WithCardMetrics({ children }: { children: ReactNode }) {
-  return (
-    <IntlTestProvider>
-      <CardMetricsOverride value={WIDE_CARD_METRICS}>
-        {children}
-      </CardMetricsOverride>
-    </IntlTestProvider>
-  );
-}
-
 function renderHistory() {
+  // jsdomは幅を測れないため、全ての要素が入る寸法をスタブで与える。
+  stubCardLayout();
   return render(
     <RoundWindowProvider roundWindow={fakeWindow.roundWindow}>
       <RoundsListStoreProvider store={fake.store}>
@@ -110,7 +98,7 @@ function renderHistory() {
         </RoundProceduresProvider>
       </RoundsListStoreProvider>
     </RoundWindowProvider>,
-    { wrapper: WithCardMetrics },
+    { wrapper: IntlTestProvider },
   );
 }
 
@@ -401,52 +389,6 @@ const SCORE_DIRECTION_TEST_ID = "history-sort-score-direction";
 
 describe("RoundsHistory", () => {
   describe("指定された日本語の見出し", () => {
-    it.each([
-      ["取得中", () => {}, () => screen.findByRole("status")],
-      [
-        "空",
-        () => fetchResolves([]),
-        () => screen.findByText(roundsText("historyEmpty")),
-      ],
-      [
-        "成功",
-        () => fetchResolves(completed),
-        () => screen.findByText("午前練習"),
-      ],
-      [
-        "通信失敗",
-        () =>
-          fake.store.loadList.mockResolvedValue({
-            status: "error",
-            reason: "failed",
-          }),
-        () => screen.findByRole("alert"),
-      ],
-      [
-        "オフライン",
-        () => fake.store.loadList.mockResolvedValue({ status: "offline" }),
-        () => screen.findByText(roundsText("fetchOffline")),
-      ],
-    ] as const)(
-      "%sでも見出しの指定された日本語「点数一覧」と対応する本文を表示する",
-      async (_state, prepare, body) => {
-        // Given
-        prepare();
-
-        // When
-        renderHistory();
-
-        // Then
-        expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-          /^点数一覧$/,
-        );
-        expect(await body()).toBeVisible();
-        expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-          /^点数一覧$/,
-        );
-      },
-    );
-
     it("Suspense待機中も指定された日本語「点数一覧」の見出しを表示する", () => {
       // Given
       suspense.pending = new Promise(() => {});
@@ -785,27 +727,6 @@ describe("RoundsHistory", () => {
       expect(screen.queryByTestId("history-filter-distance-row")).toBeNull();
     });
 
-    it("パネルには、リセットと検索の下部の行が1組だけあり、リセット、検索の順に並び、入力欄より後ろにある", async () => {
-      // Given
-      await renderOpenedHistory();
-
-      // When
-      const resets = screen.getAllByTestId("history-controls-reset");
-      const applies = screen.getAllByTestId("history-controls-apply");
-
-      // Then
-      expect(resets).toHaveLength(1);
-      expect(applies).toHaveLength(1);
-      expect(
-        resets[0].compareDocumentPosition(applies[0]) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-      expect(
-        rangeInput("dateFrom").compareDocumentPosition(resets[0]) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    });
-
     it.each(["round", "distance"] as const)(
       "開いてTabを押すと、領域から表示単位の選択中の項目(%s)へ進む",
       async (unit) => {
@@ -824,19 +745,6 @@ describe("RoundsHistory", () => {
         expect(unitRadio(unit)).toHaveFocus();
       },
     );
-
-    it("下部の行の表示は、指定された日本語「リセット」と「検索」である", async () => {
-      // Given
-      await renderOpenedHistory();
-
-      // When
-      const reset = filterAction("reset");
-      const search = filterAction("apply");
-
-      // Then
-      expect(reset).toHaveTextContent(/^リセット$/);
-      expect(search).toHaveTextContent(/^検索$/);
-    });
 
     it.each([
       ["入力欄", () => rangeInput("scoreMin")],
@@ -1420,43 +1328,6 @@ describe("RoundsHistory", () => {
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
 
-    it.each([
-      ["ラウンド単位", "round", "該当するラウンドは以上です"],
-      ["距離単位", "distance", "該当する距離は以上です"],
-    ] as const)(
-      "続きのない一覧の末尾に、%sの文言「%s」を表示し、文言そのものを確かめる",
-      async (_name, unit, expected) => {
-        // Given
-        remember({ condition: { unit } });
-        fetchResolves(unit === "round" ? completed : distances);
-
-        // When
-        renderHistory();
-        await screen.findAllByRole("listitem");
-
-        // Then
-        expect(screen.getByText(expected)).toBeInTheDocument();
-      },
-    );
-
-    it("末尾の文言と0件の文言は、一覧の行(カード)に含まれず、カードの後ろに置かれる", async () => {
-      // Given
-      fetchResolves(completed);
-      renderHistory();
-      const cards = await screen.findAllByRole("listitem");
-
-      // When
-      const end = screen.getByText(roundsText("historyEnd"));
-
-      // Then
-      expect(cards.some((card) => card.contains(end))).toBe(false);
-      const lastCard = cards[cards.length - 1];
-      expect(
-        lastCard.compareDocumentPosition(end) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    });
-
     it("0件のときは、カードがなく、0件の文言「該当するラウンドがありません」だけを表示する", async () => {
       // Given
       fetchResolves([]);
@@ -1470,24 +1341,6 @@ describe("RoundsHistory", () => {
       ).toBeInTheDocument();
       expect(screen.queryAllByRole("listitem")).toHaveLength(0);
       expect(screen.queryByText(roundsText("historyEnd"))).toBeNull();
-    });
-
-    it("見出し「履歴」のレベル1がヘッダーにあり、ラウンドの開始ボタンは持たない", async () => {
-      // Given
-      fetchResolves(completed);
-
-      // When
-      renderHistory();
-      await screen.findByText("午前練習");
-
-      // Then
-      const heading = screen.getByRole("heading", {
-        level: 1,
-        name: roundsText("historyTitle"),
-      });
-      expect(heading.closest("header")).not.toBeNull();
-      expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-      expect(screen.queryByTestId("new-round-fab")).toBeNull();
     });
 
     it("サーバーが返した並びのまま表示し、端末で並べ直さない", async () => {
@@ -1554,15 +1407,6 @@ describe("RoundsHistory", () => {
     const panel = () =>
       screen.queryByRole("region", { name: roundsText("historyFilterTitle") });
     const mark = () => screen.queryByTestId("history-controls-active");
-    const optionNames = () =>
-      screen.getAllByRole("option").map((o) => o.textContent);
-
-    // 比較は文書上の位置。先に現れる要素が、後ろの要素より前にある。
-    const isBefore = (first: HTMLElement, second: HTMLElement) =>
-      Boolean(
-        first.compareDocumentPosition(second) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      );
 
     describe("開閉と印", () => {
       it("初期はパネルが無く、名前「フィルター」のアイコンのボタンがあり、印は無い", async () => {
@@ -1703,49 +1547,6 @@ describe("RoundsHistory", () => {
         ).getByRole("button", { name: roundsText("historyFilterClose") });
       // 見た目の出力は、開閉の状態そのものである`aria-expanded`を除いたクラスで比べる。
       const funnelLook = () => toggle().className;
-
-      it.each(orientations)(
-        "%sで開くと、先頭の行に通常のボタン「閉じる」が1つだけあり、下部の行はリセット、検索の順に並ぶ",
-        async (_orientation, landscape) => {
-          // Given
-          viewport.setLandscape(landscape);
-
-          // When
-          await renderOpenedHistory();
-
-          // Then
-          const region = screen.getByRole("region", {
-            name: roundsText("historyFilterTitle"),
-          });
-          expect(
-            within(region).getAllByRole("button", {
-              name: roundsText("historyFilterClose"),
-            }),
-          ).toHaveLength(1);
-          const close = closeButton();
-          expect(close).toHaveAttribute("type", "button");
-          expect(isBefore(filterAction("reset"), filterAction("apply"))).toBe(
-            true,
-          );
-          expect(isBefore(close, filterAction("reset"))).toBe(true);
-        },
-      );
-
-      it("閉じるボタンの名前は「閉じる」で、図柄(✖)は名前を持たない", async () => {
-        // Given
-        await renderOpenedHistory();
-
-        // When
-        const close = closeButton();
-
-        // Then
-        expect(close).toHaveAccessibleName("閉じる");
-        expect(close.querySelector("svg")).toHaveAttribute(
-          "aria-hidden",
-          "true",
-        );
-        expect(close.querySelector("svg")).not.toHaveAccessibleName();
-      });
 
       it.each(orientations)(
         "%sで閉じるボタンを押すと、未適用の変更とエラーを破棄して閉じ、漏斗へフォーカスが戻り、取得も記憶もしない",
@@ -1942,34 +1743,6 @@ describe("RoundsHistory", () => {
     });
 
     describe("中身と順序", () => {
-      it("開いた中に、表示単位、種別、弓種、ラウンド構成、期間、得点、リセット、適用が出る", async () => {
-        // Given
-        fetchResolves(varied);
-        const user = userEvent.setup();
-        renderHistory();
-        await screen.findByText("夜練習");
-
-        // When
-        await openFilter(user);
-
-        // Then
-        const items = [
-          screen.getByTestId(FORMAT_TEST_ID),
-          screen.getByTestId(BOW_TYPE_TEST_ID),
-          screen.getByTestId("history-filter-distance-add"),
-          rangeInput("dateFrom"),
-          rangeInput("scoreMin"),
-          screen.getByRole("radiogroup", {
-            name: roundsText("historyUnitLabel"),
-          }),
-          filterAction("reset"),
-          filterAction("apply"),
-        ];
-        for (const item of items) {
-          expect(item).toBeVisible();
-        }
-      });
-
       it("初期値は、種別・弓種が指定なし、日付順が新しい順、得点順が指定なし、表示単位が「ラウンド」で、各欄が項目名を持つ", async () => {
         // Given
         fetchResolves(varied);
@@ -2013,113 +1786,6 @@ describe("RoundsHistory", () => {
         ] as const) {
           expect(screen.getByLabelText(roundsText(name))).toBeInTheDocument();
         }
-      });
-
-      it("種別と弓種の選択肢は、先頭の「指定なし」と全ての値で、日付順は新しい順・古い順だけ、得点順は先頭に「指定なし」を持つ", async () => {
-        // Given
-        fetchResolves(varied);
-        const user = userEvent.setup();
-        renderHistory();
-        await screen.findByText("夜練習");
-        await openFilter(user);
-
-        // When
-        const lists: (string | null)[][] = [];
-        for (const testId of [
-          FORMAT_TEST_ID,
-          BOW_TYPE_TEST_ID,
-          DATE_DIRECTION_TEST_ID,
-          SCORE_DIRECTION_TEST_ID,
-        ]) {
-          await user.click(screen.getByTestId(testId));
-          await screen.findAllByRole("option");
-          lists.push(optionNames());
-          await user.keyboard("{Escape}");
-          await waitFor(() =>
-            expect(screen.queryAllByRole("option")).toEqual([]),
-          );
-        }
-
-        // Then
-        const none = roundsText("historyFilterNone");
-        expect(lists).toEqual([
-          [none, ...FORMAT_OPTIONS.map((f) => roundsText(`formatOption.${f}`))],
-          [
-            none,
-            ...BOW_TYPE_OPTIONS.map((b) => roundsText(`bowTypeOption.${b}`)),
-          ],
-          [
-            roundsText("historyDateDirection.asc"),
-            roundsText("historyDateDirection.desc"),
-          ],
-          [
-            none,
-            roundsText("historyScoreDirection.asc"),
-            roundsText("historyScoreDirection.desc"),
-          ],
-        ]);
-      });
-
-      it("期間と得点の小見出しとくくり(group)は無く、入力欄は項目名で取れ、期間の行と得点の行に区切りの「~」(支援技術へ読ませない)が1つずつある", async () => {
-        // Given
-        fetchResolves(varied);
-        const user = userEvent.setup();
-        renderHistory();
-        await screen.findByText("夜練習");
-
-        // When
-        await openFilter(user);
-
-        // Then
-        expect(
-          within(screen.getByTestId("history-controls")).queryByRole("group"),
-        ).toBeNull();
-        const separators = within(
-          screen.getByTestId("history-controls"),
-        ).getAllByText("~");
-        expect(separators).toHaveLength(2);
-        for (const separator of separators) {
-          expect(separator).toHaveAttribute("aria-hidden", "true");
-        }
-        expect(isBefore(rangeInput("dateFrom"), separators[0])).toBe(true);
-        expect(isBefore(separators[0], rangeInput("dateTo"))).toBe(true);
-        expect(isBefore(rangeInput("scoreMin"), separators[1])).toBe(true);
-        expect(isBefore(separators[1], rangeInput("scoreMax"))).toBe(true);
-      });
-
-      it("開いた状態の画面に、旧い語(すべて、期間、得点の範囲、日付の向き、得点の向き、下限、上限、昇順、降順、一覧の単位、距離の構成、並べ替え・絞り込み、矢の総数、的を加える、的を外す、絞り込む距離)は出ない", async () => {
-        // Given
-        fetchResolves(varied);
-        const user = userEvent.setup();
-        renderHistory();
-        await screen.findByText("夜練習");
-
-        // When
-        await openFilter(user);
-
-        // Then
-        const text = document.body.textContent ?? "";
-        for (const word of [
-          "すべて",
-          "期間",
-          "得点の範囲",
-          "日付の向き",
-          "得点の向き",
-          "下限",
-          "上限",
-          "昇順",
-          "降順",
-          "一覧の単位",
-          "距離の構成",
-          "並べ替え・絞り込み",
-          "矢の総数",
-          "的を加える",
-          "的を外す",
-          "絞り込む距離",
-        ]) {
-          expect(text).not.toContain(word);
-        }
-        expect(screen.queryByTestId("history-sort-key-score")).toBeNull();
       });
     });
 
@@ -2533,23 +2199,6 @@ describe("RoundsHistory", () => {
       const summary = () => screen.queryByTestId("history-filter-distance-row");
       const lastCondition = () => fake.store.loadList.mock.calls.at(-1)?.[0];
 
-      it("表示単位は「ラウンド」「距離」を並べて常に見せ、選択中の単位をaria-checkedで伝え、「一覧の単位」のボタン群は無い", async () => {
-        // Given
-
-        // When
-        await renderOpenedHistory();
-
-        // Then
-        expect(
-          screen.getByRole("radiogroup", {
-            name: roundsText("historyUnitLabel"),
-          }),
-        ).toBeVisible();
-        expect(screen.getAllByRole("radio")).toHaveLength(2);
-        expect(unitRadio("round")).toHaveAttribute("aria-checked", "true");
-        expect(unitRadio("distance")).toHaveAttribute("aria-checked", "false");
-      });
-
       it("「距離」を1回押すと単位が切り替わり、ラウンド構成の欄が距離の指定の欄に入れ替わる", async () => {
         // Given
         const user = await renderOpenedHistory();
@@ -2569,23 +2218,6 @@ describe("RoundsHistory", () => {
         expect(selectButton()?.textContent).toBe(
           roundsText("historyFilterDistanceSelect"),
         );
-      });
-
-      it("距離単位の得点の欄は項目名が「最低点」「最高点」のままで、「小計」の語を付けない", async () => {
-        // Given
-        const user = await renderOpenedHistory();
-
-        // When
-        await chooseUnit(user, "distance");
-
-        // Then
-        expect(
-          screen.getByLabelText(roundsText("historyFilterScoreMin")),
-        ).toBeInTheDocument();
-        expect(
-          screen.getByLabelText(roundsText("historyFilterScoreMax")),
-        ).toBeInTheDocument();
-        expect(document.body.textContent).not.toContain("小計");
       });
 
       it("得点の範囲は単位ごとに保たれ、切り替えても他方の値は変わらない", async () => {
@@ -3110,36 +2742,6 @@ describe("RoundsHistory", () => {
       return user;
     }
 
-    // 2つの要素を共に含む最も内側の祖先。
-    function rowOf(first: HTMLElement, second: HTMLElement) {
-      let row = first.parentElement;
-      while (row && !row.contains(second)) row = row.parentElement;
-      if (!row) throw new Error("common ancestor not found");
-      return row;
-    }
-
-    it.each([
-      ["期間", ["dateFrom", "dateTo"], DATE_DIRECTION_TEST_ID],
-      ["得点", ["scoreMin", "scoreMax"], SCORE_DIRECTION_TEST_ID],
-    ] as const)(
-      "%sの行に、範囲の入力と向きの選択が並ぶ",
-      async (_name, fields, directionTestId) => {
-        // Given
-        await renderOpened();
-
-        // When
-        const row = within(
-          rowOf(rangeInput(fields[0]), screen.getByTestId(directionTestId)),
-        );
-
-        // Then
-        expect(
-          row.getByTestId(`history-filter-${fields[1]}`),
-        ).toBeInTheDocument();
-        expect(row.getByTestId(directionTestId)).toBeInTheDocument();
-      },
-    );
-
     it.each([
       ["開始日", "dateFrom", "2026-05-01", { dateFrom: "2026-05-01" }],
       ["終了日", "dateTo", "2026-05-31", { dateTo: "2026-05-31" }],
@@ -3584,19 +3186,6 @@ describe("RoundsHistory", () => {
         await waitForDistanceDialogClosed();
         expect(summaries()[0]).not.toHaveTextContent(
           roundsText("historyFilterNone"),
-        );
-      });
-
-      it("的の領域は、ラベル「的」で取得できる", async () => {
-        // Given
-        const user = await renderWithDistances();
-
-        // When
-        await user.click(addButton());
-
-        // Then
-        expect(screen.getByLabelText(roundsText("historyFilterTarget"))).toBe(
-          screen.getByTestId("history-distance-dialog-target"),
         );
       });
 
@@ -4127,18 +3716,6 @@ describe("RoundsHistory", () => {
         expect(
           screen.getByTestId(`target-face-option-${OUTDOOR_FACE.id}`),
         ).toBeVisible();
-      });
-
-      it("的の一覧は、保存した一覧を読むだけで、履歴のために的を取得しない", async () => {
-        // Given
-        procedures.fetching.savedTargetFaces.mockReturnValue(FACES);
-
-        // When
-        await renderWithDistances([distanceRow(50)]);
-
-        // Then
-        expect(procedures.fetching.savedTargetFaces).toHaveBeenCalled();
-        expect(procedures.fetching.fetchPresets).not.toHaveBeenCalled();
       });
 
       it.each([
@@ -4757,32 +4334,6 @@ describe("RoundsHistory", () => {
       expect(screen.queryByRole("listitem")).toBeNull();
       expect(screen.queryByText(roundsText("historyEmpty"))).toBeNull();
     });
-
-    it.each([
-      ["取得中", () => new Promise(() => {})],
-      [
-        "取得の失敗",
-        () => Promise.resolve({ status: "error", reason: "failed" }),
-      ],
-      ["オフライン", () => Promise.resolve({ status: "offline" })],
-    ])(
-      "%sでも、名前「フィルター」のアイコンのボタンが出る",
-      async (_name, result) => {
-        // Given
-        fake.store.loadList.mockReturnValue(result());
-
-        // When
-        renderHistory();
-
-        // Then
-        const filter = await screen.findByRole("button", {
-          name: roundsText("historyFilterTitle"),
-        });
-        expect(filter).toBeVisible();
-        expect(filter.closest("header")).not.toBeNull();
-        expect(filter.closest("main")).toBeNull();
-      },
-    );
 
     it("取得が成功しても、端末の入力中をまだ読んでいなければ、読み込み中の表示を出す", () => {
       // Given

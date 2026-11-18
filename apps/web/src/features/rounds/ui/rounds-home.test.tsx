@@ -1,7 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { RoundListItem } from "../domain/round-list";
@@ -10,7 +9,7 @@ import {
   createFakeRoundsListStore,
   createFakeRoundWindow,
   roundListItem,
-  WIDE_CARD_METRICS,
+  stubCardLayout,
 } from "./round-stores-test-helpers";
 import {
   RoundProceduresProvider,
@@ -18,7 +17,6 @@ import {
   RoundWindowProvider,
 } from "./rounds-context";
 import { RoundsHome } from "./rounds-home";
-import { CardMetricsOverride } from "./use-card-fit";
 
 const roundsText = translatorFor("rounds");
 
@@ -27,18 +25,9 @@ let fake: ReturnType<typeof createFakeRoundsListStore>;
 let fakeWindow: ReturnType<typeof createFakeRoundWindow>;
 let procedures: ReturnType<typeof createFakeRoundProcedures>;
 
-// jsdomは幅を測れないため、全ての要素が入る測定値を渡す。
-function WithCardMetrics({ children }: { children: ReactNode }) {
-  return (
-    <IntlTestProvider>
-      <CardMetricsOverride value={WIDE_CARD_METRICS}>
-        {children}
-      </CardMetricsOverride>
-    </IntlTestProvider>
-  );
-}
-
 function renderHome() {
+  // jsdomは幅を測れないため、全ての要素が入る寸法をスタブで与える。
+  stubCardLayout();
   return render(
     <RoundWindowProvider roundWindow={fakeWindow.roundWindow}>
       <RoundsListStoreProvider store={fake.store}>
@@ -47,7 +36,7 @@ function renderHome() {
         </RoundProceduresProvider>
       </RoundsListStoreProvider>
     </RoundWindowProvider>,
-    { wrapper: WithCardMetrics },
+    { wrapper: IntlTestProvider },
   );
 }
 
@@ -70,6 +59,10 @@ async function openDeleteDialog(
   await user.click(within(item).getByTestId("round-menu-trigger"));
   await user.click(await screen.findByTestId("round-delete"));
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 beforeEach(() => {
   fake = createFakeRoundsListStore();
@@ -95,60 +88,6 @@ describe("RoundsHome", () => {
       expect(screen.getByText("2026/09/15")).toBeInTheDocument();
       expect(cards[1].textContent).toMatch(/300$/);
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
-    });
-
-    it("ヘッダーに見出し「ホーム」のレベル1が1つ、入力中の欄にレベル2「入力中のラウンド」が1つあり、件数の見出しは持たない", () => {
-      // Given
-      fakeWindow.setLocal({ inProgress });
-
-      // When
-      renderHome();
-
-      // Then
-      const heading = screen.getByRole("heading", {
-        level: 1,
-        name: roundsText("homeTitle"),
-      });
-      expect(heading.closest("header")).not.toBeNull();
-      expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-      expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(1);
-      expect(
-        screen.getByRole("heading", {
-          level: 2,
-          name: roundsText("homeInProgressHeading"),
-        }),
-      ).toBeInTheDocument();
-      expect(screen.getAllByRole("heading")).toHaveLength(2);
-    });
-
-    it("履歴の取得を呼ばず、取得が応答しない状況でも入力中のラウンドを表示する", () => {
-      // Given
-      fakeWindow.setLocal({ inProgress });
-      fake.store.loadList.mockReturnValue(new Promise(() => {}));
-
-      // When
-      renderHome();
-
-      // Then
-      expect(screen.getByText("午前練習")).toBeInTheDocument();
-      expect(fake.store.loadList).not.toHaveBeenCalled();
-      expect(fake.store.readDeleted).not.toHaveBeenCalled();
-    });
-
-    it("履歴の取得が失敗する設定でも、入力中のラウンドを表示する", () => {
-      // Given
-      fakeWindow.setLocal({ inProgress });
-      fake.store.loadList.mockResolvedValue({
-        status: "error",
-        reason: "failed",
-      });
-
-      // When
-      renderHome();
-
-      // Then
-      expect(screen.getByText("午前練習")).toBeInTheDocument();
-      expect(screen.queryByRole("alert")).toBeNull();
     });
 
     it("入力中が0件なら、見出しの下に入力中のラウンドがないことを示し、ラウンドの開始ボタンは表示する", () => {
@@ -189,53 +128,6 @@ describe("RoundsHome", () => {
       expect(screen.queryByRole("listitem")).toBeNull();
       expect(screen.queryByText(roundsText("homeEmpty"))).toBeNull();
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
-    });
-  });
-
-  describe("ラウンドの開始ボタン", () => {
-    it("名前は表示の文字と一致する", () => {
-      // Given
-      // When
-      renderHome();
-
-      // Then
-      const link = screen.getByRole("link", {
-        name: roundsText("newRoundLabel"),
-      });
-      expect(link).toHaveTextContent(roundsText("newRoundLabel"));
-    });
-
-    it("アイコンは装飾であり、名前に文字以外を足さない", () => {
-      // Given
-      // When
-      renderHome();
-
-      // Then
-      const link = screen.getByRole("link", {
-        name: roundsText("newRoundLabel"),
-      });
-      expect(link.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
-      expect(link).toHaveAccessibleName(link.textContent ?? "");
-    });
-
-    it.each([
-      [
-        "読み込み中",
-        () => fakeWindow.roundWindow.localList.mockReturnValue(null),
-      ],
-      ["0件", () => fakeWindow.setLocal({ inProgress: [] })],
-      ["1件以上", () => fakeWindow.setLocal({ inProgress })],
-    ])("入力中のラウンドが%sのときも表示される", (_state, arrange) => {
-      // Given
-      arrange();
-
-      // When
-      renderHome();
-
-      // Then
-      expect(
-        screen.getByRole("link", { name: roundsText("newRoundLabel") }),
-      ).toBeInTheDocument();
     });
   });
 

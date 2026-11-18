@@ -1,11 +1,9 @@
 // フィールド的(簡略化した描き方)。外から、黒の面、黄の中心の同心円と、黒の面の上の白い細い線1本。色と、色ごとの外縁の半径の比は、アプリの的の定義(target_face_ringsの「フィールド的（60cm）」。supabase/migrations/20261016000100_target_faces.sql)と同じ。
 // アプリの白は、黒の面を区切る細い境界線(半径の比 0.5・2/3・5/6・1)で、この図では、そのうち 2/3 の位置の1本だけを、白い線として描く。
 import { BLACK, WHITE, GOLD as YELLOW } from "./target-style";
-// 色(黒・黄はアプリの定義と同じ)
-export const FIELD_COLORS = { yellow: YELLOW, black: BLACK } as const;
 
 // 色ごとの外縁の半径の比(的の半径に対する比)。アプリの定義と同じ。
-export const FIELD_EDGES = { yellow: 1 / 3, black: 1 } as const;
+const FIELD_EDGES = { yellow: 1 / 3, black: 1 } as const;
 // 白い境界線の位置(アプリの白い境界線 0.5・2/3・5/6・1 のうち、2/3)
 const FIELD_WHITE_BORDER = 2 / 3;
 

@@ -77,12 +77,12 @@
 
 ### 文言
 
-- 利用者に届く文字列(画面の文言、`aria-label`・`placeholder`・`title`・`alt`などの属性値、`metadata`・`manifest`の文字列、利用者に示すエラーと検証の文言)は、言語を問わず直書きしない。コメント、ログ、開発者向けの例外、識別子、テストのデータ、`lang`などの技術的な設定値は対象外とする。開発者向けの例外でも、利用者に示される経路にあるものは対象とする。
+- 利用者に届く文字列(画面の文言、`aria-label`・`placeholder`・`title`・`alt`などの属性値、`metadata`の文字列、利用者に示すエラーと検証の文言)は、言語を問わず直書きしない。コメント、ログ、開発者向けの例外、識別子、テストのデータ、`lang`などの技術的な設定値は対象外とする。開発者向けの例外でも、利用者に示される経路にあるものは対象とする。
 - 文言の解決には`next-intl`を使う。ルーティング(URLのロケール)とミドルウェアは使わない。
 - 文言を足す手順は1通りである。その機能のUI層の文言の一覧(共有の画面部品は`components/screen-messages.ts`)にキーと本文を足し、UI層の部品から`useTranslations("<名前空間>")`(サーバーの非同期の部品は`getTranslations`)のキーで参照する。業務の結果の文言は、ドメイン層の部品が結果の種類を返し、一覧が種類ごとに本文を持つ。ドメイン層とアプリケーション層には、文言もキーも書かない。新しい一覧は`src/i18n/messages.ts`に名前空間として登録する。
 - 一覧はTypeScriptで書き(JSONにしない)、種類ごとの文言には、種類の型に対する`satisfies`を付ける。本文はICUの書式で、差し込みは`{名前}`、`'`と`{`は書式の規則でエスケープする。
 - 存在しないキーと名前空間は、`next-intl`の`AppConfig`に登録した型により、型の検査(`pnpm typecheck`)で失敗する。実行時に見つからないとき、書式に失敗したときは、`src/i18n/messages.ts`の設定が空の文字列を返し、キーを利用者に出さない。開発時は`console.error`で知らせ、テストでは例外にする。
-- `metadata`と`manifest`は、`src/i18n/messages.ts`の設定から`createTranslator`で解決する。
+- `metadata`は、`src/i18n/messages.ts`の設定から`createTranslator`で解決する。マニフェストは静的ファイル(`src/app/manifest.webmanifest`)で、その文字列は対象外とする。
 - `pnpm lint`の文言の検査(`apps/web/scripts/check-hardcoded-text.mjs`)が、テストと生成物と文言の一覧を除く`apps/web/src`の直書きを検出する。検出の対象は、JSXのテキスト、利用者に届く属性(`aria-label`、`aria-description`、`aria-placeholder`、`aria-roledescription`、`aria-valuetext`、`placeholder`、`title`、`alt`、`label`と、名前が`Label`・`Title`・`Text`・`Message`・`Description`・`Placeholder`で終わる属性)の文字列、利用者に届く名前のプロパティ(`label`、`title`、`description`、`message`、`placeholder`、`alt`、`name`、`short_name`)の文字列、非ASCIIの文字を含む全ての文字列である。`console.*`と例外の生成(`new Error`など)の引数は対象外とする。
 - D1とD2の境界の例外は、`apps/web/scripts/hardcoded-text-exceptions.json`に、ファイルと文字列と理由を書く。どの直書きにも当たらない例外の行があると、検査は失敗する。
 - `pnpm lint`の未使用キーの検査(`apps/web/scripts/check-unused-message-keys.mjs`)が、文言の一覧のうち本番のコードから参照されないキーを、キーの完全な経路で報告して失敗する。

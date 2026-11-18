@@ -1,24 +1,19 @@
 import {
   type CSSProperties,
-  createContext,
   type RefObject,
-  useContext,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
 
 // カードの実際の寸法。availableは、枠と左右の余白を除いた、列を並べられる幅。dateは日付の文字の幅(カードによらない基準の文字で測る)、nameMinはラウンド名の最小の幅(全角4文字)、format・bowはタグの文字の幅。
-export interface CardMetrics {
+interface CardMetrics {
   available: number;
   date: number;
   nameMin: number;
   format: number;
   bow: number;
 }
-
-/** @public 測定の代わりに値を渡す(単体テストが使う)。nullなら測定する。 */
-export const CardMetricsOverride = createContext<CardMetrics | null>(null);
 
 export interface CardTexts {
   format: string;
@@ -87,7 +82,6 @@ export function useCardFit(
   texts: CardTexts,
   fonts: CardFonts,
 ): { ref: RefObject<HTMLAnchorElement | null>; metrics: CardMetrics | null } {
-  const override = useContext(CardMetricsOverride);
   const ref = useRef<HTMLAnchorElement>(null);
   const [measured, setMeasured] = useState<CardMetrics | null>(null);
   const { format, bow } = texts;
@@ -97,7 +91,7 @@ export function useCardFit(
   fontsRef.current = fonts;
   useLayoutEffect(() => {
     const element = ref.current;
-    if (override !== null || element === null) return;
+    if (element === null) return;
     const update = () => {
       const next = measureCard(element, { format, bow }, fontsRef.current);
       if (sameMetrics(latest.current, next)) return;
@@ -116,6 +110,6 @@ export function useCardFit(
       active = false;
       observer?.disconnect();
     };
-  }, [override, format, bow]);
-  return { ref, metrics: override ?? measured };
+  }, [format, bow]);
+  return { ref, metrics: measured };
 }

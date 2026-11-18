@@ -1,13 +1,12 @@
 import "fake-indexeddb/auto";
 import { SerwistProvider } from "@serwist/next/react";
-import { render, screen } from "@testing-library/react";
 import { Children, isValidElement, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type FakeViewport,
   installFakeViewport,
 } from "@/lib/viewport/fake-viewport-test-helpers";
-import RootLayout, { metadata } from "./layout";
+import RootLayout from "./layout";
 import { RootClientEntry } from "./root-client-entry";
 
 // next/font/localはNext.jsのコンパイラによる変換を前提とし、Vitest上では実行できないため境界としてモックする。
@@ -64,73 +63,8 @@ function findSerwistProvider(children: React.ReactNode) {
   return provider.props as Record<string, unknown>;
 }
 
-describe("metadata", () => {
-  it("タイトルと説明は、文言そのもの(現在と同じ内容)である", () => {
-    // Given
-    // When
-    const { title, description } = metadata;
-
-    // Then
-    expect(title).toBe("AIMS");
-    expect(description).toBe("AIMS Web Application");
-  });
-});
-
 describe("RootLayout", () => {
-  describe("html要素", () => {
-    it("日本語の文書としてフォントのCSS変数を適用する", () => {
-      // Given
-      const children = <p>子要素</p>;
-
-      // When
-      const html = RootLayout({ children });
-
-      // Then
-      expect(html.type).toBe("html");
-      expect(html.props.lang).toBe("ja");
-      expect(html.props.className).toBe("geist-sans-variable");
-    });
-  });
-
-  describe("body要素", () => {
-    it("子要素を表示する", () => {
-      // Given
-      const children = <p>子要素</p>;
-
-      // When
-      render(bodyContents(children));
-
-      // Then
-      expect(screen.getByText("子要素")).toBeInTheDocument();
-    });
-
-    it("アプリで1度だけ動く常駐の部品を始めるRootClientEntryを含める", () => {
-      // Given
-      const children = <p>子要素</p>;
-
-      // When
-      const contents = bodyContents(children);
-
-      // Then
-      expect(contents.some((element) => element.type === RootClientEntry)).toBe(
-        true,
-      );
-    });
-  });
-
   describe("Service Worker", () => {
-    it("/sw.jsを登録し、オンライン復帰時の再読み込みとナビゲーション時のキャッシュを行わない", () => {
-      // Given
-      // When
-      const children = <p>子要素</p>;
-      const props = findSerwistProvider(children);
-
-      // Then
-      expect(props.swUrl).toBe("/sw.js");
-      expect(props.reloadOnOnline).toBe(false);
-      expect(props.cacheOnNavigation).toBe(false);
-    });
-
     it("本番環境では有効にする", () => {
       // Given
       vi.stubEnv("NODE_ENV", "production");

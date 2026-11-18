@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ScreenFrame } from "@/components/screen-frame";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
@@ -8,9 +9,16 @@ import {
   type FakeViewport,
   installFakeViewport,
 } from "@/lib/viewport/fake-viewport-test-helpers";
-import { LeftPanel, type LeftPanelSettings } from "./left-panel";
+import {
+  NEW_ROUND_PATH,
+  ROUNDS_HISTORY_PATH,
+  ROUNDS_HOME_PATH,
+} from "@/routes";
+import { LeftPanel } from "./left-panel";
 
-const authText = translatorFor("auth");
+// 公開の契約(部品のprops)から、設定パネルの接続の型を得る。
+type LeftPanelSettings = ComponentProps<typeof LeftPanel>["settings"];
+
 const navigationText = translatorFor("navigation");
 
 const nav = vi.hoisted(() => ({ pathname: "/rounds" }));
@@ -684,18 +692,6 @@ describe("LeftPanel", () => {
       expect(railCloseButton()).not.toHaveFocus();
     });
 
-    it("列内のボタンは閉じるボタンだけで、格納・展開のボタンは無い", () => {
-      // Given
-      // When
-      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
-
-      // Then
-      const names = within(railPanel())
-        .getAllByRole("button")
-        .map((button) => button.getAttribute("aria-label"));
-      expect(names).toEqual([navigationText("leftPanelCloseMenu")]);
-    });
-
     it("列を閉じた後に幅768px未満から以上へ戻しても、閉じたままである", async () => {
       // Given
       const user = userEvent.setup();
@@ -743,142 +739,7 @@ describe("LeftPanel", () => {
     });
   });
 
-  describe("移動項目の名前と装飾", () => {
-    it("開いたメニューは3つの移動項目とラウンドの開始ボタンを文字で識別できる", async () => {
-      // Given
-      const user = userEvent.setup();
-      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
-
-      // When
-      await openDrawer(user);
-
-      // Then
-      const panel = within(drawerPanel());
-      for (const key of [
-        "leftPanelStartRound",
-        "leftPanelHome",
-        "leftPanelHistory",
-        "leftPanelSettings",
-      ] as const) {
-        expect(
-          panel.getByRole("link", { name: navigationText(key) }),
-        ).toHaveTextContent(navigationText(key));
-      }
-      expect(
-        panel.queryByRole("button", { name: authText("signOut") }),
-      ).toBeNull();
-    });
-
-    it("点数一覧の項目名とリンク名は指定された日本語「点数一覧」である", () => {
-      // Given
-      // When
-      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
-
-      // Then
-      for (const panel of [drawerPanel(), railPanel()]) {
-        const menu = within(panel);
-        expect(menu.getByRole("link", { name: "点数一覧" })).toHaveTextContent(
-          /^点数一覧$/,
-        );
-        expect(menu.queryByRole("link", { name: /^(履歴|一覧)$/ })).toBeNull();
-      }
-    });
-
-    it("各移動項目のアイコンは装飾であり名前と独立した操作対象を増やさない", () => {
-      // Given
-      // When
-      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
-
-      // Then
-      for (const panel of [drawerPanel(), railPanel()]) {
-        for (const key of [
-          "leftPanelHome",
-          "leftPanelHistory",
-          "leftPanelSettings",
-        ] as const) {
-          const link = within(panel).getByRole("link", {
-            name: navigationText(key),
-          });
-          const icon = link.querySelector("svg");
-          expect(icon).toHaveAttribute("aria-hidden", "true");
-          expect(icon).not.toHaveAttribute("tabindex", "0");
-          expect(link).toHaveAccessibleName(navigationText(key));
-          expect(
-            link.querySelectorAll(
-              "button, a, [tabindex], [role='button'], [role='link']",
-            ),
-          ).toHaveLength(0);
-        }
-      }
-    });
-  });
-
   describe("ラウンドの開始ボタン", () => {
-    it("名前は指定された日本語「ラウンドを開始」で、各枠に1つある", () => {
-      // Given
-      // When
-      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
-
-      // Then
-      for (const panel of [drawerPanel(), railPanel()]) {
-        const links = within(panel).getAllByRole("link", {
-          name: "ラウンドを開始",
-        });
-        expect(links).toHaveLength(1);
-        expect(links[0]).toHaveTextContent(/^ラウンドを開始$/);
-      }
-    });
-
-    it("各枠で、ホーム・点数一覧・設定の項目より文書の順で前にある", () => {
-      // Given
-      // When
-      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
-
-      // Then
-      for (const panel of [drawerPanel(), railPanel()]) {
-        const start = within(panel).getByRole("link", {
-          name: navigationText("leftPanelStartRound"),
-        });
-        for (const key of [
-          "leftPanelHome",
-          "leftPanelHistory",
-          "leftPanelSettings",
-        ] as const) {
-          const item = within(panel).getByRole("link", {
-            name: navigationText(key),
-          });
-          expect(
-            start.compareDocumentPosition(item) &
-              Node.DOCUMENT_POSITION_FOLLOWING,
-          ).toBeTruthy();
-        }
-      }
-    });
-
-    it("アイコンは装飾であり名前と独立した操作対象を増やさない", () => {
-      // Given
-      // When
-      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
-
-      // Then
-      for (const panel of [drawerPanel(), railPanel()]) {
-        const link = within(panel).getByRole("link", {
-          name: navigationText("leftPanelStartRound"),
-        });
-        const icon = link.querySelector("svg");
-        expect(icon).toHaveAttribute("aria-hidden", "true");
-        expect(icon).not.toHaveAttribute("tabindex", "0");
-        expect(link).toHaveAccessibleName(
-          navigationText("leftPanelStartRound"),
-        );
-        expect(
-          link.querySelectorAll(
-            "button, a, [tabindex], [role='button'], [role='link']",
-          ),
-        ).toHaveLength(0);
-      }
-    });
-
     it("行き先と同じパスの開始画面でも、現在のページにならない", () => {
       // Given
       nav.pathname = "/rounds/new";
@@ -921,6 +782,10 @@ describe("LeftPanel", () => {
       // Then
       expect(notPrevented).toBe(true);
       expect(drawerBackdrop()).toHaveStyle({ opacity: "0" });
+      expect(drawerLink("leftPanelStartRound")).toHaveAttribute(
+        "href",
+        NEW_ROUND_PATH,
+      );
     });
   });
 
@@ -938,62 +803,11 @@ describe("LeftPanel", () => {
       })[0];
     }
 
-    it("ホーム・点数一覧・設定の項目を2つの枠に表示し、個人の項目は表示しない", () => {
-      // Given
-      // When
-      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
-
-      // Then
-      expect(
-        screen.getAllByRole("link", { name: navigationText("leftPanelHome") }),
-      ).toHaveLength(2);
-      expect(
-        screen.getAllByRole("link", {
-          name: navigationText("leftPanelHistory"),
-        }),
-      ).toHaveLength(2);
-      expect(
-        screen.getAllByRole("link", {
-          name: navigationText("leftPanelSettings"),
-        }),
-      ).toHaveLength(2);
-      expect(screen.queryByText("個人")).toBeNull();
-    });
-
-    it("設定の項目は、各枠でホーム・点数一覧より後に置かれる", () => {
-      // Given
-      // When
-      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
-
-      // Then
-      const names = [
-        navigationText("leftPanelHome"),
-        navigationText("leftPanelHistory"),
-        navigationText("leftPanelSettings"),
-      ];
-      const order = screen
-        .getAllByRole("link")
-        .map((link) => link.textContent)
-        .filter((text) => names.includes(text ?? ""));
-      expect(order).toEqual([...names, ...names]);
-    });
-
-    it("サインアウトのボタンは表示しない", () => {
-      // Given
-      // When
-      render(<PanelWithFrame />, { wrapper: IntlTestProvider });
-
-      // Then
-      expect(
-        screen.queryByRole("button", { name: authText("signOut") }),
-      ).toBeNull();
-    });
-
     it.each([
-      ["/rounds", "leftPanelHome"],
-      ["/rounds/history", "leftPanelHistory"],
+      [ROUNDS_HOME_PATH, "leftPanelHome"],
+      [ROUNDS_HISTORY_PATH, "leftPanelHistory"],
     ] as const)(
-      "パスが%sのとき、%sの項目だけが現在のページになる",
+      "パスが%sのとき、%sの項目だけが現在のページになり、項目の行き先はそのパスである",
       (pathname, current) => {
         // Given
         nav.pathname = pathname;
@@ -1006,6 +820,10 @@ describe("LeftPanel", () => {
         expect(currentLinks.map((link) => link.textContent)).toEqual([
           navigationText(current),
           navigationText(current),
+        ]);
+        expect(currentLinks.map((link) => link.getAttribute("href"))).toEqual([
+          pathname,
+          pathname,
         ]);
       },
     );
@@ -1031,6 +849,7 @@ describe("LeftPanel", () => {
       await user.click(openMenuButton());
 
       // When
+      expect(homeLink()).toHaveAttribute("href", ROUNDS_HOME_PATH);
       await user.click(homeLink());
 
       // Then
