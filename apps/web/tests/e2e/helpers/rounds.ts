@@ -1,11 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点的（アウトドア・122cm）
-export const SIX_RING_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000003"; // 6点的（アウトドア・80cm）: X,10,9,8,7,6,5のみ
-export const TRIPLE_SPOT_TARGET_FACE_ID =
-  "a1000000-0000-0000-0000-000000000008"; // 6点的（インドア・40cm・3つ目トライアングル）: 3スポット、各スポット同一の10,9,8,7,6（Xリングを持たない）
 
 // ローカル・CIのTURNSTILE_SECRET_KEYはCloudflareのテスト専用
 // シークレット（常に検証を通過する）のため、captchaTokenの値自体は
@@ -18,15 +15,18 @@ export async function signInAsTestUser(email: string, password: string) {
   }
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-    options: { captchaToken: "test-captcha-token" },
-  });
-  if (error) {
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken: "test-captcha-token" },
+    });
+    if (error) throw error;
+    return { supabase, userId: data.user.id };
+  } catch (error) {
+    await supabase.auth.stopAutoRefresh();
     throw error;
   }
-  return { supabase, userId: data.user.id };
 }
 
 // スコア入力等のUI検証には/rounds/newのプリセット選択では用意できない任意の
@@ -59,7 +59,17 @@ export async function createRound(input: {
   }[];
 }): Promise<string> {
   const { supabase } = await signInAsTestUser(input.email, input.password);
+  try {
+    return await createRoundWithClient(supabase, input);
+  } finally {
+    await supabase.auth.stopAutoRefresh();
+  }
+}
 
+export async function createRoundWithClient(
+  supabase: SupabaseClient,
+  input: Omit<Parameters<typeof createRound>[0], "email" | "password">,
+): Promise<string> {
   const roundId = randomUUID();
   const distanceIds = input.distances.map(() => randomUUID());
 

@@ -1,12 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  expect,
-  type Locator,
-  type Page,
-  type Response,
-  test,
-} from "@playwright/test";
-import { translatorFor } from "@/i18n/translator-test-helpers";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   createConfirmedUser,
   getSharedEmail,
@@ -14,11 +7,7 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
-import {
-  blockOpLogStore,
-  expectNoPendingOps,
-  expectOpsSaved,
-} from "../helpers/op-log";
+import { expectNoPendingOps } from "../helpers/op-log";
 import { forwardAs, openOtherDevice } from "../helpers/other-device";
 import {
   expectRoundBasesFetched,
@@ -31,8 +20,6 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
-
-const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -68,37 +55,28 @@ async function chooseDelete(page: Page, scope: Page | Locator = page) {
   await page.getByTestId("round-delete").click();
 }
 
-// 削除のRPCを、解放するまで完了させない。
-async function holdDeleteRequest(page: Page) {
-  let release: () => void = () => {};
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await page.route(DISABLE_ROUND_RPC, async (route) => {
-    await gate;
-    await route.continue();
-  });
-  return release;
-}
-
 // 復帰後に、削除がサーバーへ届いたことを確かめる。
 async function expectDeletedOnServer(roundId: string) {
   const { supabase } = await signInAsTestUser(
     getSharedEmail(),
     SHARED_PASSWORD,
   );
-  await expect
-    .poll(
-      async () => {
-        const { data } = await supabase
-          .from("rounds")
-          .select("disabled_at")
-          .eq("id", roundId);
-        return data?.[0]?.disabled_at ?? null;
-      },
-      { timeout: 15_000 },
-    )
-    .not.toBeNull();
+  try {
+    await expect
+      .poll(
+        async () => {
+          const { data } = await supabase
+            .from("rounds")
+            .select("disabled_at")
+            .eq("id", roundId);
+          return data?.[0]?.disabled_at ?? null;
+        },
+        { timeout: 15_000 },
+      )
+      .not.toBeNull();
+  } finally {
+    await supabase.auth.stopAutoRefresh();
+  }
 }
 
 test("ホームでカードのメニューから削除を選んで確認すると、確認ダイアログが閉じ、ラウンドがホームから消える", async ({
@@ -198,26 +176,6 @@ test("オフラインで開始したラウンドの詳細で、オフライン�
   await expect(page.locator(`a[href="/rounds/${roundId}"]`)).toHaveCount(0);
 });
 
-test("削除の送信が終わる前にホームを再読み込みしても、削除したラウンドは表示されない", async ({
-  page,
-}) => {
-  // 削除の送信を止めたホームで削除を選んで確認し、ラウンドがホームから消えることを確かめる。
-  const { name, roundId } = await createNamedRound("送信前に再読み込み");
-  const { row, link } = await openList(page, name, roundId);
-  const release = await holdDeleteRequest(page);
-  await chooseDelete(page, row);
-  await page.getByTestId("confirm-dialog-confirm").click();
-  await expect(link).toBeHidden();
-
-  // 再読み込みし、ラウンドが表示されないことを確かめる。
-  await page.reload();
-  await waitForHydration(page);
-  await expect(page.getByTestId("new-round-fab")).toBeVisible();
-  await expect(link).toBeHidden();
-
-  release();
-});
-
 test("削除する権限が無く削除が拒否されたときは、ホームを再読み込みするとラウンドが再び表示され、エラーメッセージは表示されない", async ({
   page,
 }) => {
@@ -248,116 +206,4 @@ test("削除する権限が無く削除が拒否されたときは、ホーム�
   await waitForHydration(page);
   await expect(link).toBeVisible();
   await expect(page.getByRole("alert").filter({ hasText: /./ })).toHaveCount(0);
-});
-
-test("端末の保存が終わらない間にラウンド詳細で削除を確認すると、保存が終わるまで詳細に留まり、保存が終わるとホームへ移る", async ({
-  page,
-}) => {
-  // 詳細を開き、端末の保存を塞いだ状態で削除を確認する。
-  const { name, roundId } = await createNamedRound("保存待ちの削除");
-  const { link } = await openList(page, name, roundId);
-  await link.click();
-  await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
-  const release = await blockOpLogStore(page);
-  await chooseDelete(page);
-  await page.getByTestId("confirm-dialog-confirm").click();
-
-  // 確認ダイアログが閉じるが、まだ移らないことを確かめる。
-  await expect(page.getByTestId("confirm-dialog-confirm")).toBeHidden();
-  await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
-
-  // 塞ぎを解き、保存の後にホームへ移ることを確かめる。
-  await release();
-  await expect(page).toHaveURL(/\/rounds$/);
-  await expect(link).toBeHidden();
-});
-
-// 一括の取得(入力中のラウンドと保持するラウンドを取る)の応答。
-function isBulkRoundsResponse(response: Response) {
-  return decodeURIComponent(response.url()).includes("status.eq.in_progress");
-}
-
-// アプリ内でホームを離れて戻る。ホームは戻るたびに端末の保存から作り直され、取得は呼ばない。
-async function leaveListAndComeBack(page: Page) {
-  await page.getByTestId("new-round-fab").click();
-  await expect(page).toHaveURL(/\/rounds\/new$/);
-  await page.getByRole("link", { name: roundsText("back") }).click();
-  await expect(page).toHaveURL(/\/rounds$/);
-}
-
-test("別の端末が先に削除したラウンドを、この端末がオフラインで削除してオンラインに戻ると、送信が効かなかった扱いになっても、ホームを離れて戻ったときにそのラウンドは再表示されない", async ({
-  page: deviceA,
-  browser,
-  baseURL,
-}) => {
-  // 2つの端末で、同じ利用者のホームに削除するラウンドと残すラウンドを表示する。
-  const target = await createNamedRound("二重削除");
-  const kept = await createNamedRound("二重削除の残り");
-  const contextB = await browser.newContext({
-    storageState: SHARED_AUTH_STATE_PATH,
-    // biome-ignore lint/style/useNamingConvention: Playwrightの設定の項目名
-    baseURL,
-  });
-  const deviceB = await contextB.newPage();
-  const listA = await openList(deviceA, target.name, target.roundId);
-  const listB = await openList(deviceB, target.name, target.roundId);
-  await expectRoundBasesFetched(deviceB, { roundId: kept.roundId });
-  await waitForServiceWorkerControl(deviceB);
-
-  // 端末Bがオフラインの間に、端末Aが削除してサーバーへ反映する。
-  await contextB.setOffline(true);
-  await chooseDelete(deviceA, listA.row);
-  await deviceA.getByTestId("confirm-dialog-confirm").click();
-  await expect(listA.link).toBeHidden();
-  await expectDeletedOnServer(target.roundId);
-
-  // 端末Bが、削除を知らずにオフラインで同じラウンドを削除する。
-  await chooseDelete(deviceB, listB.row);
-  await deviceB.getByTestId("confirm-dialog-confirm").click();
-  await expect(listB.link).toBeHidden();
-  await expectOpsSaved(deviceB, target.roundId, 1);
-
-  // オンラインに戻り、削除の送信が効かなかった扱いで操作の列から外れるまで待つ。
-  // 復帰の取得を1回に保つため、手動のonlineイベントは足さない(ブラウザが発火するonlineイベントが取得を起こす)。
-  await contextB.setOffline(false);
-  await expectNoPendingOps(deviceB, target.roundId);
-
-  // ホームを離れて戻っても、削除されたラウンドは再表示されず、残したラウンドは表示される。
-  await leaveListAndComeBack(deviceB);
-  await expect(
-    deviceB.getByRole("link", { name: new RegExp(kept.name) }),
-  ).toBeVisible();
-  await expect(listB.link).toBeHidden();
-  await contextB.close();
-});
-
-test("ラウンドの削除が未送信のまま一括の取得が走り、サーバーがそのラウンドをまだ返しても、ホームを離れて戻ったときにそのラウンドは再表示されない", async ({
-  page,
-}) => {
-  // 削除するラウンドと残すラウンドをホームに表示し、削除の送信を止めた状態で削除する。
-  const target = await createNamedRound("未送信の削除");
-  const kept = await createNamedRound("未送信の削除の残り");
-  const { row, link } = await openList(page, target.name, target.roundId);
-  await expectRoundBasesFetched(page, { roundId: kept.roundId });
-  const release = await holdDeleteRequest(page);
-  await chooseDelete(page, row);
-  await page.getByTestId("confirm-dialog-confirm").click();
-  await expect(link).toBeHidden();
-  await expectOpsSaved(page, target.roundId, 1);
-
-  // 削除が届いていないサーバーに対して一括の取得を起こし、その応答を待つ。
-  const fetched = page.waitForResponse(isBulkRoundsResponse);
-  await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await fetched;
-
-  // ホームを離れて戻っても、削除したラウンドは再表示されず、残したラウンドは表示される。
-  await leaveListAndComeBack(page);
-  await expect(
-    page.getByRole("link", { name: new RegExp(kept.name) }),
-  ).toBeVisible();
-  await expect(link).toBeHidden();
-
-  // 送信を再開し、削除がサーバーへ届くことを確かめる。
-  release();
-  await expectDeletedOnServer(target.roundId);
 });

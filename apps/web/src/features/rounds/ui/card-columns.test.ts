@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  type CardContent,
   type CardKind,
   type CardWidths,
   type ColumnSelection,
   selectCardColumns,
 } from "./card-columns";
+
+// 公開の契約(列の選択)の引数から、カードの内容の型を得る。
+type CardContent = Parameters<typeof selectCardColumns>[3];
 
 // 固定の幅は寸法の定数と同じ値、文字の幅(日付・ラウンド名の最小幅・種別・弓種)は、境界を作りやすい値にする。
 const widths: CardWidths = {

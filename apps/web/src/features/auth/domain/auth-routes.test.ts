@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { ROUNDS_HOME_PATH } from "@/routes";
 import {
-  allowedReturnTo,
   destinationOf,
   redirectFor,
   returnToWithHash,
@@ -10,7 +10,7 @@ import {
 // 保護の範囲の根は使う側が渡す引数のため、既存の件は一覧の経路で確かめる。
 const _ROUNDS = "/rounds";
 
-describe("allowedReturnTo", () => {
+describe("destinationOf: 遷移元の検証", () => {
   describe("保護範囲(/rounds)の相対パスの場合", () => {
     it.each([
       ["/rounds", "/rounds"],
@@ -31,7 +31,7 @@ describe("allowedReturnTo", () => {
       // Given
 
       // When
-      const result = allowedReturnTo(raw);
+      const result = destinationOf(raw);
 
       // Then
       expect(result).toBe(expected);
@@ -42,7 +42,7 @@ describe("allowedReturnTo", () => {
 
       // When
       const raw = "/rounds/x/../new";
-      const result = allowedReturnTo(raw);
+      const result = destinationOf(raw);
 
       // Then
       expect(result).toBe("/rounds/new");
@@ -52,7 +52,7 @@ describe("allowedReturnTo", () => {
       // Given
 
       // When
-      const result = allowedReturnTo("/rounds/x/../new#settings/account");
+      const result = destinationOf("/rounds/x/../new#settings/account");
 
       // Then
       expect(result).toBe("/rounds/new#settings/account");
@@ -62,7 +62,6 @@ describe("allowedReturnTo", () => {
   describe("拒否する値の場合(型・別オリジン・保護範囲の外)", () => {
     it.each([
       ["null", null],
-      ["undefined", undefined],
       ["空文字", ""],
       ["スキームなしの外部ホスト(//)", "//evil.com"],
       ["スキームなしの外部ホスト(//rounds)", "//rounds/new"],
@@ -96,14 +95,14 @@ describe("allowedReturnTo", () => {
         "/settings配下から/signinへ抜けるドットセグメント",
         "/settings/../signin",
       ],
-    ])("%sは拒否してnullを返す", (_name, raw) => {
+    ])("%sは拒否して既定の行き先を返す", (_name, raw) => {
       // Given
 
       // When
-      const result = allowedReturnTo(raw);
+      const result = destinationOf(raw);
 
       // Then
-      expect(result).toBeNull();
+      expect(result).toBe(ROUNDS_HOME_PATH);
     });
   });
 
@@ -120,7 +119,7 @@ describe("allowedReturnTo", () => {
         // Given
 
         // When
-        const result = allowedReturnTo(raw);
+        const result = destinationOf(raw);
 
         // Then
         expect(result).toBe(expected);
@@ -132,7 +131,7 @@ describe("allowedReturnTo", () => {
 
       // When
       const raw = `/rounds/${"a".repeat(3000)}`;
-      const result = allowedReturnTo(raw);
+      const result = destinationOf(raw);
 
       // Then
       expect(result).toBe(raw);

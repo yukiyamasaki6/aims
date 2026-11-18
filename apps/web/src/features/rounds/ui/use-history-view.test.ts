@@ -7,7 +7,10 @@ import {
   DEFAULT_HISTORY_VIEW_STATE,
   type HistoryInput,
 } from "../domain/history-view-state";
-import { type HistoryViewControls, useHistoryView } from "./use-history-view";
+import { useHistoryView } from "./use-history-view";
+
+// 公開の契約(hook)の戻り値から、操作の型を得る。
+type HistoryViewControls = ReturnType<typeof useHistoryView>;
 
 async function setup(initial = DEFAULT_HISTORY_VIEW_STATE) {
   const fake = createFakeHistoryViewMemory(initial);

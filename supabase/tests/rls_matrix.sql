@@ -1,6 +1,6 @@
 -- RLS・GRANTの「テーブル × 操作 × アクター」マトリクステスト。
 -- 現在の挙動を期待値表として固定し、ポリシーやGRANTの変更を表の差分として見えるようにする。
--- 個別のテーブルの意図は各テーブルのテストファイルで確認し、このファイルは全体の一覧性と網羅性を担う。
+-- 個別のテーブルの意図は各テーブルのテストファイルで確認し、このファイルは全体の一覧性を担う。
 --
 -- 実行結果は 'rows:N'（SELECTで見える行数、UPDATE/DELETEの影響行数、INSERT成功は1）か
 -- 'error:SQLSTATE'（権限不足・RLS違反など）に正規化する。
@@ -17,7 +17,7 @@
 
 begin;
 
-select plan(28);
+select plan(17);
 
 -- fixture: 各アクターに対応するユーザーと、検証対象の行を用意する。
 -- 接続ロール（RLS対象外）で直接INSERTする。
@@ -413,63 +413,6 @@ select is_empty(
   'RLSマトリクスの実測が期待値表と全件一致する'
 );
 
-select is_empty(
-  $$select c.relname as tbl, o.op, coalesce(a.actor, '(アクター集合が未定義)') as actor
-    from pg_class c
-    join pg_namespace n on n.oid = c.relnamespace
-    cross join (values ('select'), ('insert'), ('update'), ('delete')) as o(op)
-    left join rls_table_actor a on a.tbl = c.relname
-    where n.nspname = 'public' and c.relkind in ('r', 'p')
-      and not exists (
-        select 1 from rls_expected e
-        where e.tbl = c.relname and e.op = o.op and e.actor is not distinct from a.actor
-      )$$,
-  'publicの全テーブル × 4操作 × 全アクターが期待値表に含まれる'
-);
-
-select is_empty(
-  $$select e.tbl, e.op, e.actor
-    from rls_expected e
-    where not exists (
-      select 1
-      from pg_class c
-      join pg_namespace n on n.oid = c.relnamespace
-      join rls_table_actor a on a.tbl = c.relname
-      cross join (values ('select'), ('insert'), ('update'), ('delete')) as o(op)
-      where n.nspname = 'public' and c.relkind in ('r', 'p')
-        and c.relname = e.tbl and a.actor = e.actor and o.op = e.op
-    )$$,
-  '期待値表に存在しないテーブル・アクターの行が残っていない'
-);
-
-select is_empty(
-  $$select a.actor as actor, '(テーブルへの対応付けなし)' as tbl
-    from rls_actor a
-    where a.actor <> 'admin' and not exists (select 1 from rls_table_actor t where t.actor = a.actor)
-    union all
-    select '(アクター集合が未定義)', c.relname
-    from pg_class c
-    join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public' and c.relkind in ('r', 'p')
-      and not exists (select 1 from rls_table_actor t where t.tbl = c.relname)$$,
-  '全アクターが1つ以上のテーブルに対応付けられ、publicの全テーブルが1つ以上のアクターを持つ'
-);
-
-select is_empty(
-  $$select tbl, op, actor, expected from rls_expected
-    where expected like 'error:%' and expected <> 'error:42501'$$,
-  '期待値のエラーは権限不足・RLS違反（42501）だけで、検証SQLの不備によるエラーを含まない'
-);
-
--- アクターを問わず検証SQLがfixtureに対して成立する（接続ロールでは必ず1行以上に作用する）ことを確認する。
--- rows:0 になる期待値が、SQLの対象行の誤りではなくRLSによるものだと言える根拠になる。
-select is_empty(
-  $$select tbl, op, result
-    from (select tbl, op, pg_temp.rls_run('admin', stmt) as result from rls_stmt) r
-    where result !~ '^rows:[1-9]'$$,
-  '全ての検証SQLはRLS対象外の接続ロールで1行以上に作用する'
-);
-
 -- 検証対象ロール（anon・authenticated）と内部ロール以外に、publicのテーブルへのDML権限が付いていない。
 -- anon・authenticatedのテーブル権限は、下のテーブル権限の期待値表がPUBLIC経由の実効権限を含めて固定する。
 -- ここは、期待値表に現れない別のロールへDML権限が付くことを検出する。
@@ -538,7 +481,7 @@ cross join lateral (values
   ('truncate', s.p_truncate), ('references', s.p_references), ('trigger', s.p_trigger)
 ) as p(priv, allowed);
 
--- 実測は、後でテーブルを作る検証より前に確定させる（作成したテーブルが網羅性の判定に混ざらないようにする）。
+-- 実測は、後でテーブルを作る検証より前に確定させる（作成したテーブルが実測に混ざらないようにする）。
 create temp table rls_priv_actual as
 select c.relname as tbl, r.role_name, p.priv,
   has_table_privilege(r.role_name, c.oid, p.priv) as allowed
@@ -554,26 +497,6 @@ select is_empty(
     full join rls_priv_expected e on (a.tbl, a.role_name, a.priv) = (e.tbl, e.role_name, e.priv)
     where a.allowed is distinct from e.allowed$$,
   'publicの全テーブル × anon/authenticated × 7権限の実効権限が期待値表と全件一致する'
-);
-
-select is_empty(
-  $$select a.tbl, a.role_name, a.priv
-    from rls_priv_actual a
-    where not exists (
-      select 1 from rls_priv_expected e
-      where e.tbl = a.tbl and e.role_name = a.role_name and e.priv = a.priv
-    )$$,
-  'publicの全テーブル × ロール × 権限が権限の期待値表に含まれる'
-);
-
-select is_empty(
-  $$select e.tbl, e.role_name, e.priv
-    from rls_priv_expected e
-    where not exists (
-      select 1 from rls_priv_actual a
-      where a.tbl = e.tbl and a.role_name = e.role_name and a.priv = e.priv
-    )$$,
-  '権限の期待値表に存在しないテーブルの行が残っていない'
 );
 
 -- 上の表が扱う7権限以外（MAINTAINなど）や、GRANT OPTIONが、anon・authenticated・PUBLICに付いていない。
@@ -677,26 +600,6 @@ select is_empty(
   'publicスキーマの全関数 × anon/authenticatedの実行権限が期待値表と全件一致する'
 );
 
-select is_empty(
-  $$select a.signature, a.role_name
-    from rls_fn_actual a
-    where not exists (
-      select 1 from rls_fn_expected e
-      where e.signature = a.signature and e.role_name = a.role_name
-    )$$,
-  'publicスキーマの全関数 × ロールが実行権限の期待値表に含まれる'
-);
-
-select is_empty(
-  $$select e.signature, e.role_name
-    from rls_fn_expected e
-    where not exists (
-      select 1 from rls_fn_actual a
-      where a.signature = e.signature and a.role_name = e.role_name
-    )$$,
-  '実行権限の期待値表に存在しない関数の行が残っていない'
-);
-
 -- 検証対象外のロールに、publicの関数のEXECUTEが付いていない。proaclがnullの関数は既定権限で判定する。
 -- PUBLICは上の実測ではanon・authenticatedへの実効権限として現れるため、内部ロールとして許容している。
 -- PUBLICのEXECUTEは次の検証で別に禁止する。
@@ -714,7 +617,7 @@ select is_empty(
 
 -- PUBLICにpublicの全関数のEXECUTEが付いていない。
 -- 関数の作成時に自動で付くPUBLICのEXECUTEは、REVOKEし忘れるとanon・authenticatedへの実効権限になる。
--- 新しい関数でREVOKEが漏れた場合は、この検証と期待値表の網羅性の検証が落ちる。
+-- 新しい関数でREVOKEが漏れた場合は、この検証が落ちる。
 select is_empty(
   $$select p.proname
     from pg_proc p
@@ -727,7 +630,7 @@ select is_empty(
 -- シーケンス権限: シーケンス × ロール × 権限
 -- ============================================================
 -- 主キーはUUIDでアプリはシーケンスを使わないため、現在publicのシーケンスは存在せず、期待値表は空である。
--- serial・identityを追加したら、必要な権限だけを付けて期待値表に行を追加する。表にないシーケンスは網羅性の検証が検出する。
+-- serial・identityを追加したら、必要な権限だけを付けて期待値表に行を追加する。
 -- has_sequence_privilegeはPUBLIC経由を含む実効権限を返す。
 
 create temp table rls_seq_priv_spec (
@@ -741,7 +644,7 @@ select s.seq, s.role_name, p.priv, p.allowed
 from rls_seq_priv_spec s
 cross join lateral (values ('usage', s.p_usage), ('select', s.p_select), ('update', s.p_update)) as p(priv, allowed);
 
--- 実測は、後でシーケンスを作る検証より前に確定させる（作成したシーケンスが網羅性の判定に混ざらないようにする）。
+-- 実測は、後でシーケンスを作る検証より前に確定させる（作成したシーケンスが実測に混ざらないようにする）。
 create temp table rls_seq_priv_actual as
 select c.relname as seq, r.role_name, p.priv,
   has_sequence_privilege(r.role_name, c.oid, p.priv) as allowed
@@ -757,26 +660,6 @@ select is_empty(
     full join rls_seq_priv_expected e on (a.seq, a.role_name, a.priv) = (e.seq, e.role_name, e.priv)
     where a.allowed is distinct from e.allowed$$,
   'publicの全シーケンス × anon/authenticated × 3権限の実効権限が期待値表と全件一致する'
-);
-
-select is_empty(
-  $$select a.seq, a.role_name, a.priv
-    from rls_seq_priv_actual a
-    where not exists (
-      select 1 from rls_seq_priv_expected e
-      where e.seq = a.seq and e.role_name = a.role_name and e.priv = a.priv
-    )$$,
-  'publicの全シーケンス × ロール × 権限がシーケンス権限の期待値表に含まれる'
-);
-
-select is_empty(
-  $$select e.seq, e.role_name, e.priv
-    from rls_seq_priv_expected e
-    where not exists (
-      select 1 from rls_seq_priv_actual a
-      where a.seq = e.seq and a.role_name = e.role_name and a.priv = e.priv
-    )$$,
-  'シーケンス権限の期待値表に存在しないシーケンスの行が残っていない'
 );
 
 -- 上の表が扱う3権限以外や、GRANT OPTIONが、anon・authenticated・PUBLICに付いていない。

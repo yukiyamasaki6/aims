@@ -15,7 +15,7 @@ import {
 } from "../domain/history-view-state";
 import type { PresetRecord, Presets } from "../domain/preset";
 import type { QueryFailure, QueryOutcome } from "../domain/query-outcome";
-import type { ServerRoundsPage } from "../domain/round-list";
+import type { ServerHistoryPage } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { TargetFaceOption } from "../domain/target-face";
 import { createRoundQueries } from "../infrastructure/round-queries";
@@ -23,6 +23,9 @@ import type { RoundsDbSchema } from "../infrastructure/rounds-db-schema";
 import { createContentFetcher } from "./content-fetcher";
 import type { ReferenceKind, ReferenceSnapshots } from "./reference-snapshots";
 import { createRoundFetching, type RoundQueries } from "./round-fetching";
+
+// 公開の契約(履歴の1ページ)から、ラウンド単位のページの型を得る。
+type ServerRoundsPage = Extract<ServerHistoryPage, { rounds: unknown }>;
 
 function face(
   id: string,

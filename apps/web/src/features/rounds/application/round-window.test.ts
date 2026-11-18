@@ -9,7 +9,11 @@ import {
 } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
-import type { RoundDetailResult } from "./round-fetching";
+import type { RoundFetching } from "./round-fetching";
+
+// 公開の契約(取得の戻り値)から、取得の結果の型を得る。
+type RoundDetailResult = Awaited<ReturnType<RoundFetching["fetchRoundDetail"]>>;
+
 import { createTestRounds } from "./round-record-test-helpers";
 
 const STREAM = roundStreamId("round-1");

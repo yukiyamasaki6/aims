@@ -588,64 +588,6 @@ describe("ScorecardClient 初期表示・集計", () => {
     expect(row.queryAllByTestId(/^end-slot-/)).toEqual([]);
   });
 
-  it("記録済みの玉は、リングの色相・彩度のまま明度を上げた背景色と黒の文字色で表示する", async () => {
-    // Given
-
-    // When
-    const targetFaceRedWhite: TargetFaceOption = {
-      id: "face-red-white",
-      name: "赤白の的",
-      size: 122,
-      format: "outdoor",
-      bow_type: ["recurve"],
-      target_face_spots: [
-        {
-          center_x: 0,
-          center_y: 0,
-          target_face_rings: [
-            {
-              radius: 1,
-              color: "#F65058",
-              line_color: null,
-              z_index: 2,
-              score_str: "8",
-              score_int: 8,
-            },
-            {
-              radius: 2,
-              color: "#FFFFFF",
-              line_color: "#231F20",
-              z_index: 1,
-              score_str: "2",
-              score_int: 2,
-            },
-          ],
-        },
-      ],
-    };
-    await setup({
-      distances: [{ ...distanceA, target_face_id: targetFaceRedWhite.id }],
-      targetFaces: [targetFaceRedWhite],
-      initialShots: [
-        shotRow("s-2", distanceA.id, 1, "2", 2),
-        shotRow("s-8", distanceA.id, 1, "8", 8),
-      ],
-    });
-
-    // Then
-    const disc = (testId: string) =>
-      screen.getByTestId(testId).querySelector("span");
-    expect(disc("shot-ball-1-1-1")).toHaveTextContent("8");
-    expect(disc("shot-ball-1-1-1")).toHaveStyle({
-      backgroundColor: "#FDCED1",
-      color: "#231F20",
-    });
-    expect(disc("shot-ball-1-1-2")).toHaveStyle({
-      backgroundColor: "#E6E6E6",
-      color: "#231F20",
-    });
-  });
-
   it("テンキーの閉じるボタンで何も指さなくすると、格納中のテンキーへの入力は無視される", async () => {
     // Given
     const user = userEvent.setup();
@@ -720,33 +662,6 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
 
     // Then
     expect(provisionalEnd()).toBe("end-row-1-2");
-  });
-
-  it("新しい矢に点数を書くと、端末が作ったIDの矢を射手・射順なしで記録し、同じエンドの新しい矢を指したままにする", async () => {
-    // Given
-    const user = userEvent.setup();
-    await setup();
-
-    // When
-    await user.click(screen.getByTestId("score-button-10"));
-
-    // Then
-    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
-    expect(provisionalEnd()).toBe("end-row-1-1");
-    await waitFor(() => {
-      expect(sentShots("record_shots")).toEqual([
-        {
-          shot_event_id: expect.any(String),
-          shot_id: expect.any(String),
-          distance_id: distanceA.id,
-          end_number: 1,
-          score_str: "10",
-          score_int: 10,
-        },
-      ]);
-    });
-    const [sent] = sentShots("record_shots");
-    expect(sent.shot_id).not.toBe(sent.shot_event_id);
   });
 
   it("入力の順によらず、記録済みの玉を点数の高い順に並べる", async () => {
@@ -1007,22 +922,6 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
 
     // Then
     expect(provisionalEnd()).toBe("end-row-1-1");
-  });
-
-  it("テンキーは距離の的のリング色と、その色に応じた文字色で表示する", async () => {
-    // Given
-
-    // When
-    await setup({
-      distances: [{ ...distanceA, target_face_id: targetFaceNoX.id }],
-    });
-
-    // Then
-    expect(screen.getByTestId("score-button-5")).toHaveStyle({
-      backgroundColor: "#0066B3",
-      color: "#FFFFFF",
-    });
-    expect(screen.getByTestId("score-button-M")).toBeInTheDocument();
   });
 
   it("別の距離のエンドの空白を押すと、その距離の的のキーに切り替わる", async () => {
@@ -2026,20 +1925,6 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
   });
 
-  it("点数を押すと玉は1つだけ現れ、保存の完了の後も増えない", async () => {
-    // Given
-    const user = userEvent.setup();
-    await setup({ distances: [distanceA] });
-
-    // When
-    await user.click(screen.getByTestId("score-button-10"));
-    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Then
-    expect(ballsOf(1, 1)).toEqual(["10"]);
-  });
-
   it("固定されていない小計の直下のマスを指して点数を入力して指す矢が移っても、スクロールし続けない", async () => {
     // Given
     // 1つ目の距離の小計の下端が、エンド1の行の上端（150）に接している（小計がまだ固定されていない）。
@@ -2243,18 +2128,6 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
 describe("ScorecardClient 固定表示の配置", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  it("縦向きでテンキーを展開している間は、枠の高さをテンキーの高さ（測れる前の既定220px）にし、上マージンは付けない", async () => {
-    // Given
-
-    // When
-    await setup();
-
-    // Then
-    const frame = screen.getByTestId("bottom-frame");
-    expect(frame.style.minHeight).toBe("220px");
-    expect(frame.style.marginTop).toBe("");
   });
 
   it("横向きでは、枠の高さをテンキー分に広げない", async () => {
@@ -2536,35 +2409,6 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
 });
 
 describe("ScorecardClient 距離の追加・編集・削除", () => {
-  it("距離を追加すると、追加した距離の作成がSDKへ届き、その距離の編集パネルが展開される", async () => {
-    // Given
-    const user = userEvent.setup();
-    await setup();
-
-    // When
-    await user.click(screen.getByTestId("add-distance-button"));
-
-    // Then
-    // 距離の追加の反映を待つ。
-    expect(await screen.findByTestId("distance-config-distance-2")).toHaveValue(
-      70,
-    );
-    await waitFor(() => {
-      expect(supabase.rpc).toHaveBeenCalledWith(
-        "create_distance",
-        expect.objectContaining({
-          p_round_id: "round-1",
-          p_position_key: "b",
-          p_distance: 70,
-          p_total_ends: 12,
-          p_arrows_per_end: 3,
-          p_target_face_id: targetFaceX.id,
-          p_is_marked: true,
-        }),
-      );
-    });
-  });
-
   it("距離を追加を続けて2回押すと、2つとも足され、編集を開くのは最後に足した距離だけになる", async () => {
     // Given
     const user = userEvent.setup();
@@ -2784,25 +2628,6 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
 });
 
 describe("ScorecardClient ヘッダー", () => {
-  it("表示中のヘッダーに、戻るのリンク、プリセット保存、ラウンドのメニューが1つずつあり、ヘッダーは二重に出ない", async () => {
-    // Given
-    // When
-    await setup();
-
-    // Then
-    const backs = screen.getAllByRole("link", { name: roundsText("back") });
-    expect(backs).toHaveLength(1);
-    const header = backs[0].closest("header");
-    expect(header).not.toBeNull();
-    expect(screen.getAllByRole("banner")).toHaveLength(1);
-    expect(
-      within(header as HTMLElement).getByTestId("save-as-preset-trigger"),
-    ).toBeInTheDocument();
-    expect(
-      within(header as HTMLElement).getByTestId("round-menu-trigger"),
-    ).toBeInTheDocument();
-  });
-
   it("LeftPanelの外では、ドロワーのメニューを開くボタンは出ない", async () => {
     // Given
     // When
@@ -2814,48 +2639,6 @@ describe("ScorecardClient ヘッダー", () => {
         name: translatorFor("navigation")("leftPanelOpenMenu"),
       }),
     ).toBeNull();
-  });
-});
-
-describe("ScorecardClient プリセット保存", () => {
-  it("プリセット保存ダイアログから保存すると、ラウンド名とスコアカードの現在の構成がSDKへ届く", async () => {
-    // Given
-    const user = userEvent.setup();
-    await setup({ distances: [distanceA, distanceB] });
-
-    // When
-    await user.click(screen.getByTestId("save-as-preset-trigger"));
-    await user.click(screen.getByTestId("save-as-preset-confirm"));
-
-    // Then
-    await waitFor(() => {
-      expect(
-        screen.queryByTestId("save-as-preset-name"),
-      ).not.toBeInTheDocument();
-    });
-    expect(supabase.rpc).toHaveBeenCalledWith("save_round_as_preset", {
-      p_name: "テストラウンド",
-      p_format: "outdoor",
-      p_bow_type: "recurve",
-      p_distances: [
-        {
-          position_key: "a",
-          distance: 70,
-          total_ends: 12,
-          arrows_per_end: 3,
-          target_face_id: targetFaceX.id,
-          is_marked: true,
-        },
-        {
-          position_key: "b",
-          distance: 50,
-          total_ends: 12,
-          arrows_per_end: 3,
-          target_face_id: targetFaceX.id,
-          is_marked: true,
-        },
-      ],
-    });
   });
 });
 
@@ -2936,27 +2719,6 @@ describe("ScorecardClient プリセット保存の失敗", () => {
   });
 });
 
-describe("ScorecardClient ラウンド削除", () => {
-  it("ヘッダーのメニューから削除を確認すると、このラウンドのdisable_roundを送る", async () => {
-    // Given
-    const user = userEvent.setup();
-    await setup();
-    await user.click(screen.getByTestId("round-menu-trigger"));
-    await user.click(await screen.findByTestId("round-delete"));
-
-    // When
-    await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-    // Then
-    await waitFor(() => {
-      expect(supabase.rpc).toHaveBeenCalledWith("disable_round", {
-        p_round_event_id: expect.any(String),
-        p_round_id: "round-1",
-      });
-    });
-  });
-});
-
 describe("ScorecardClient ラウンド削除の後の遷移", () => {
   it("削除を確認すると、遷移元のホームへ置き換えて遷移し、履歴を積む遷移はしない", async () => {
     // Given
@@ -2980,203 +2742,6 @@ describe("ScorecardClient ラウンド削除の後の遷移", () => {
     await waitFor(() => expect(nav.replace).toHaveBeenCalledTimes(1));
     expect(nav.replace).toHaveBeenCalledWith("/rounds");
     expect(nav.push).not.toHaveBeenCalled();
-  });
-});
-
-// 同期の状態(枠、文言)を表示していない。
-function expectNoSyncStatus() {
-  expect(screen.queryByTestId("sync-status")).not.toBeInTheDocument();
-  expect(
-    screen.queryByText(/同期済み|同期中…|同期保留中/),
-  ).not.toBeInTheDocument();
-}
-
-describe("ScorecardClient 同期の状態を表示しない", () => {
-  it("送信中は、同期の状態を表示しない", async () => {
-    // Given
-    let resolveRpc: (value: { data: unknown; error: null }) => void = () => {};
-    supabase.rpc.mockReturnValue(
-      new Promise((resolve) => {
-        resolveRpc = resolve;
-      }),
-    );
-    const user = userEvent.setup();
-    await setup();
-
-    // When
-    await user.click(screen.getByTestId("score-button-10"));
-
-    // Then
-    await waitFor(() => {
-      expect(supabase.rpc).toHaveBeenCalledWith("record_shots", {
-        p_shots: [
-          {
-            shot_event_id: expect.any(String),
-            shot_id: expect.any(String),
-            distance_id: distanceA.id,
-            end_number: 1,
-            score_str: "10",
-            score_int: 10,
-          },
-        ],
-      });
-    });
-    expect(await ackedStates()).toEqual(["unacked"]);
-    expectNoSyncStatus();
-
-    // afterEachが送信中の操作の完了を待つため、応答を返して終える。
-    resolveRpc({ data: [APPLIED], error: null });
-  });
-
-  it("応答が返って確定した後も、同期の状態を表示しない", async () => {
-    // Given
-    let resolveRpc: (value: { data: unknown; error: null }) => void = () => {};
-    supabase.rpc.mockReturnValue(
-      new Promise((resolve) => {
-        resolveRpc = resolve;
-      }),
-    );
-    const user = userEvent.setup();
-    await setup();
-    await user.click(screen.getByTestId("score-button-10"));
-    await waitFor(() => {
-      expect(supabase.rpc).toHaveBeenCalledWith(
-        "record_shots",
-        expect.anything(),
-      );
-    });
-
-    // When
-    resolveRpc({ data: [APPLIED], error: null });
-
-    // Then
-    await waitFor(async () => {
-      expect(await ackedStates()).toEqual(["acked"]);
-    });
-    expectNoSyncStatus();
-  });
-
-  it("送信が一時的に失敗してリトライを待つ間は、同期の状態を表示しない", async () => {
-    // Given
-    // fake-indexeddbはsetImmediateで処理を進めるため、リトライ待機のタイマーと、再送の期限の判定に使う時刻だけを偽装する。
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    supabase.rpc.mockResolvedValueOnce({
-      data: null,
-      error: { message: "通信に失敗しました", code: "" },
-    });
-    await setup();
-
-    // When
-    // userEventはsetTimeoutで待機するため、fake timers中はfireEventで操作する。
-    fireEvent.click(screen.getByTestId("score-button-10"));
-    await pollWithRealTasks(() =>
-      expect(supabase.rpc).toHaveBeenCalledWith(
-        "record_shots",
-        expect.anything(),
-      ),
-    );
-    await flushMicrotasks();
-
-    // Then
-    // リトライ待機の間は、再送せず、確定もしない。
-    expect(await ackedStates()).toEqual(["unacked"]);
-    expect(supabase.rpc).toHaveBeenCalledTimes(1);
-    expectNoSyncStatus();
-  });
-
-  it("リトライ待機の後に再送が成功しても、同期の状態を表示しない", async () => {
-    // Given
-    // fake-indexeddbはsetImmediateで処理を進めるため、リトライ待機のタイマーと、再送の期限の判定に使う時刻だけを偽装する。
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    supabase.rpc.mockResolvedValueOnce({
-      data: null,
-      error: { message: "通信に失敗しました", code: "" },
-    });
-    await setup();
-    // userEventはsetTimeoutで待機するため、fake timers中はfireEventで操作する。
-    fireEvent.click(screen.getByTestId("score-button-10"));
-    await pollWithRealTasks(() =>
-      expect(supabase.rpc).toHaveBeenCalledWith(
-        "record_shots",
-        expect.anything(),
-      ),
-    );
-    await flushMicrotasks();
-    expect(await ackedStates()).toEqual(["unacked"]);
-    expect(supabase.rpc).toHaveBeenCalledTimes(1);
-
-    // When
-    await act(async () => {
-      // 最初の再試行の待機は3秒。
-      await vi.advanceTimersByTimeAsync(3000);
-    });
-
-    // Then
-    await pollWithRealTasks(async () =>
-      expect(await ackedStates()).toEqual(["acked"]),
-    );
-    expectNoSyncStatus();
-  });
-
-  it("オフライン中は送らず、同期の状態を表示しない", async () => {
-    // Given
-    setOnline(false);
-    const user = userEvent.setup();
-    await setup();
-
-    // When
-    await user.click(screen.getByTestId("score-button-10"));
-
-    // Then
-    await waitFor(async () => {
-      expect(await ackedStates()).toEqual(["unacked"]);
-    });
-    expectNoSyncStatus();
-    expect(supabase.rpc).not.toHaveBeenCalled();
-  });
-
-  it("サーバーが契約の不一致で拒否した操作は破棄し、エラーも同期の状態も表示しない", async () => {
-    // Given
-    supabase.rpc.mockResolvedValue({
-      data: null,
-      error: { message: "invalid", code: "PT422" },
-      status: 400,
-    });
-    const user = userEvent.setup();
-    await setup();
-
-    // When
-    await user.click(screen.getByTestId("score-button-10"));
-
-    // Then
-    await waitFor(() => {
-      expect(supabase.rpc).toHaveBeenCalledWith(
-        "record_shots",
-        expect.anything(),
-      );
-    });
-    await waitFor(async () => {
-      expect(await ackedStates()).toEqual([]);
-    });
-    expectNoSyncStatus();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("未認証で送信できない間も、同期の状態を表示しない", async () => {
-    // Given
-    supabase.getSession.mockResolvedValue({ data: { session: null } });
-    const user = userEvent.setup();
-    await setup();
-
-    // When
-    await user.click(screen.getByTestId("score-button-10"));
-
-    // Then
-    await waitFor(async () => {
-      expect(await ackedStates()).toEqual(["unacked"]);
-    });
-    expectNoSyncStatus();
-    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 });
 

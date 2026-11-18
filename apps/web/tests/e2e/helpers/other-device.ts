@@ -35,24 +35,6 @@ export async function getRoundRow(supabase: SupabaseClient, roundId: string) {
   return data;
 }
 
-// 削除されていない距離の、同期で変わる項目を、位置キー、IDの順で返す。
-export async function getLiveDistances(
-  supabase: SupabaseClient,
-  roundId: string,
-) {
-  const { data, error } = await supabase
-    .from("distances")
-    .select(
-      "id, distance, is_marked, total_ends, arrows_per_end, target_face_id, position_key",
-    )
-    .eq("round_id", roundId)
-    .is("disabled_at", null)
-    .order("position_key")
-    .order("id");
-  if (error) throw error;
-  return data;
-}
-
 // 保存された(削除されていない)ラウンドの件数。
 export async function savedRoundCount(supabase: SupabaseClient, id: string) {
   const { data, error } = await supabase
@@ -74,18 +56,6 @@ async function call(
   return data;
 }
 
-export function updateDistance(
-  supabase: SupabaseClient,
-  distanceId: string,
-  changes: Record<string, unknown>,
-) {
-  return call(supabase, "update_distance", {
-    p_distance_event_id: randomUUID(),
-    p_distance_id: distanceId,
-    p_changes: changes,
-  });
-}
-
 export function updateRound(
   supabase: SupabaseClient,
   roundId: string,
@@ -103,63 +73,6 @@ export function disableRound(supabase: SupabaseClient, roundId: string) {
     p_round_event_id: randomUUID(),
     p_round_id: roundId,
   });
-}
-
-// 矢を記録する。shotIdを省くと無作為のUUIDで新しい矢を記録し、そのIDを返す。射手と射順は、指定したときだけ送る。
-export async function recordShot(
-  supabase: SupabaseClient,
-  shot: {
-    shotId?: string;
-    distanceId: string;
-    endNumber: number;
-    scoreStr: string;
-    scoreInt: number;
-    shooterId?: string;
-    shotNumber?: number | null;
-  },
-): Promise<string> {
-  const shotId = shot.shotId ?? randomUUID();
-  await call(supabase, "record_shots", {
-    p_shots: [
-      {
-        shot_event_id: randomUUID(),
-        shot_id: shotId,
-        distance_id: shot.distanceId,
-        end_number: shot.endNumber,
-        score_str: shot.scoreStr,
-        score_int: shot.scoreInt,
-        ...(shot.shooterId === undefined ? {} : { shooter_id: shot.shooterId }),
-        ...(shot.shotNumber === undefined
-          ? {}
-          : { shot_number: shot.shotNumber }),
-      },
-    ],
-  });
-  return shotId;
-}
-
-// 距離の生きている矢を、エンド、点数の順で返す。
-export async function getLiveShots(
-  supabase: SupabaseClient,
-  distanceId: string,
-): Promise<
-  {
-    id: string;
-    end_number: number;
-    score_str: string;
-    shooter_id: string;
-    shot_number: number | null;
-  }[]
-> {
-  const { data, error } = await supabase
-    .from("shots")
-    .select("id, end_number, score_str, shooter_id, shot_number")
-    .eq("distance_id", distanceId)
-    .is("disabled_at", null)
-    .order("end_number")
-    .order("score_str");
-  if (error) throw error;
-  return data;
 }
 
 // ページの送信を、指定したユーザーとして実サーバーへ転送し、サーバーの応答をそのままページへ返す。

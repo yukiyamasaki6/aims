@@ -1,17 +1,21 @@
+import type { ComponentProps } from "react";
 import { vi } from "vitest";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createFakeHistoryViewMemory } from "../application/fake-history-view-memory-test-helpers";
 import { createHistoryPagesMemory } from "../application/history-pages-memory";
 import type { RoundScreen, RoundWindow } from "../application/round-window";
 import type { RoundsListStore } from "../application/rounds-list-store";
 import type { FetchView } from "../domain/fetch-status";
+import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../domain/round-constants";
 import type {
   DistanceListItem,
   LocalRoundsList,
   RoundListItem,
 } from "../domain/round-list";
 import type { RoundState } from "../domain/round-tables";
-import type { RoundProcedures } from "./rounds-context";
-import type { CardMetrics } from "./use-card-fit";
+import type { RoundProceduresProvider } from "./rounds-context";
+
+const roundsText = translatorFor("rounds");
 
 // 通信の復帰の合図を、テストが起こす。
 // 契約(whenOnline: 今オンラインなら直ちに1回、オフラインなら次の復帰で1回。返す関数で取り消せる)は、実物と同じにする。
@@ -156,7 +160,7 @@ export function createFakeRoundProcedures() {
         `00000000-0000-7000-8000-${String(++issued.shots).padStart(12, "0")}`,
     ),
     ...waiting,
-  } satisfies RoundProcedures;
+  } satisfies ComponentProps<typeof RoundProceduresProvider>["procedures"];
 }
 
 // 一覧のラウンド単位の1件。既定は屋外・リカーブで、距離が1つ(合計点と同じ小計)。
@@ -194,11 +198,45 @@ export function distanceListItem(
   };
 }
 
-// 全ての要素が入る測定値。jsdomは幅を測れないため、一覧の画面のテストは`CardMetricsOverride`でこの値を渡して、全要素が出る状態で内容を確かめる。
-export const WIDE_CARD_METRICS: CardMetrics = {
-  available: 2000,
-  date: 70,
-  nameMin: 56,
-  format: 40,
-  bow: 50,
-};
+// jsdomは幅を測れないため、カードの寸法を寸法のスタブで与える。呼び出し側は、テストの後に`vi.restoreAllMocks()`で戻す。
+// 既定の幅(2000)では全ての要素が入る。文字の幅は、日付70・ラウンド名の最小56・種別40・弓種50(測定の誤差の切り上げと1pxを含む)になる。
+export const WIDE_CARD_WIDTH = 2000;
+
+const TEXT_WIDTHS = new Map<string, number>([
+  ["0000/00/00", 69],
+  [String.fromCodePoint(0x3042, 0x3044, 0x3046, 0x3048), 55],
+  ...FORMAT_OPTIONS.map(
+    (value) => [roundsText(`formatOption.${value}`), 39] as const,
+  ),
+  ...BOW_TYPE_OPTIONS.map(
+    (value) => [roundsText(`bowTypeOption.${value}`), 49] as const,
+  ),
+]);
+
+// スタブを重ねて置いても元の関数を呼べるよう、置く前に控える。
+const computedStyleOf = window.getComputedStyle.bind(window);
+
+export function stubCardLayout(available = WIDE_CARD_WIDTH) {
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(
+    function (this: HTMLElement) {
+      return this instanceof HTMLAnchorElement ? available : 0;
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      return { width: TEXT_WIDTHS.get(this.textContent ?? "") ?? 0 } as DOMRect;
+    },
+  );
+  // カードの左右の余白は、スタイルシートを読まないjsdomでは決まらないため、0にする。
+  vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) => {
+    const style = computedStyleOf(element, pseudo);
+    if (!(element instanceof HTMLAnchorElement)) return style;
+    return new Proxy(style, {
+      get(target, key) {
+        if (key === "paddingLeft" || key === "paddingRight") return "0px";
+        const value = Reflect.get(target, key, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  });
+}

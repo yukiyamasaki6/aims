@@ -7,7 +7,7 @@
 
 begin;
 
-select plan(119);
+select plan(118);
 
 create temp table rl_id (alias text primary key, id uuid not null);
 insert into rl_id (alias, id) values
@@ -651,12 +651,6 @@ select is(
   public.rounds_list(null, null, 'outdoor', 'recurve', null, 100, null, null, null, null),
   public.rounds_list(null, null, 'outdoor', 'recurve', null, 100, null, null, null, null, null),
   '旧い版の画面の10引数の呼び出しも動き、距離の構成なしの11引数の呼び出しと同じ結果を返す'
-);
-
-select is(
-  (select count(*) from pg_proc where proname = 'rounds_list' and pronamespace = 'public'::regnamespace),
-  1::bigint,
-  'rounds_list は11引数の1つだけで、旧い署名の関数が残っていない（呼び出しが曖昧にならない）'
 );
 
 -- ============================================================

@@ -4,9 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import type { SignOutResult } from "../application/session";
+import type { Session } from "../application/session";
 import { UNREACHABLE } from "../domain/auth-failure";
 import { SignOutButton } from "./sign-out-button";
+
+// 公開の契約(サインアウトの手続き)の戻り値から、結果の型を得る。
+type SignOutResult = Awaited<ReturnType<Session["signOut"]>>;
 
 const authText = translatorFor("auth");
 const sharedText = translatorFor("shared");

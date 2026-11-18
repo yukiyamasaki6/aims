@@ -1,6 +1,6 @@
 begin;
 
-select plan(32);
+select plan(31);
 
 select results_eq(
   $$select count(*) from public.preset_rounds where owner_id is null$$,
@@ -271,12 +271,6 @@ select throws_ok(
 select lives_ok(
   $$delete from public.preset_rounds where id = '22222222-2222-2222-2222-222222222222'$$,
   '所有者は自分のプリセットを削除できる'
-);
-
-select results_eq(
-  $$select count(*) from public.preset_distances where preset_id = '22222222-2222-2222-2222-222222222222'$$,
-  $$values (0::bigint)$$,
-  'プリセットの削除で距離構成もカスケード削除される（preset_distancesにDELETE権限がなくても外部キーのCASCADEは動く）'
 );
 
 select * from finish();

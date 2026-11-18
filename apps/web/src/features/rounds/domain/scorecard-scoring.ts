@@ -2,7 +2,7 @@ import { comparePositionKey } from "./position-key";
 import type { Distance, Shot } from "./scorecard-types";
 
 // 採点・集計に使う的のリング（描画用の半径・境界線などは扱わない）。
-export type ScoringRing = {
+type ScoringRing = {
   score_str: string;
   score_int: number;
   z_index: number;
@@ -118,7 +118,7 @@ export function shotsFitDistance(
 }
 
 // エンドの生きている矢の数。渡す矢は生きている矢だけとする。
-export function liveCountOf(
+function liveCountOf(
   shots: Pick<Shot, "distance_id" | "end_number">[],
   distanceId: string,
   endNumber: number,

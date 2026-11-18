@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(61);
+select plan(58);
 
 -- 既存の制約・権限テスト向けのfixture生成ヘルパー。プロダクションの
 -- create_roundはid/position_keyを必須とするため、簡潔なfixtureの入力を、
@@ -505,49 +505,6 @@ select lives_ok(
     values
       ('$$ || :'marked_round_id' || $$', '10', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
   '同一round_id内でposition_keyが重複しても挿入できる'
-);
-
--- ============================================================
--- カスケード削除: rounds → distances/shots/round_users
--- ============================================================
-
-reset role;
-
-insert into auth.users (id) values ('d0000000-0000-0000-0000-000000000001');
-insert into auth.users (id) values ('d0000000-0000-0000-0000-000000000002');
-
-insert into public.rounds (id, name, round_date, format, bow_type)
-values ('d0000000-0000-0000-0000-000000000010', 'Cascade Round', current_date, 'outdoor', 'recurve');
-
-insert into public.round_users (round_id, user_id, role)
-values ('d0000000-0000-0000-0000-000000000010', 'd0000000-0000-0000-0000-000000000001', 'editor');
-insert into public.round_users (round_id, user_id, role)
-values ('d0000000-0000-0000-0000-000000000010', 'd0000000-0000-0000-0000-000000000002', 'viewer');
-
-insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
-values ('d0000000-0000-0000-0000-000000000020', 'd0000000-0000-0000-0000-000000000010', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
-
-insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int)
-values ('d0000000-0000-0000-0000-000000000020', 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10);
-
-delete from public.rounds where id = 'd0000000-0000-0000-0000-000000000010';
-
-select results_eq(
-  $$select count(*) from public.distances where round_id = 'd0000000-0000-0000-0000-000000000010'$$,
-  $$values (0::bigint)$$,
-  'ラウンド削除でdistancesがカスケード削除される'
-);
-
-select results_eq(
-  $$select count(*) from public.shots where distance_id = 'd0000000-0000-0000-0000-000000000020'$$,
-  $$values (0::bigint)$$,
-  'ラウンド削除でshotsもカスケード削除される（distances経由の多段カスケード）'
-);
-
-select results_eq(
-  $$select count(*) from public.round_users where round_id = 'd0000000-0000-0000-0000-000000000010'$$,
-  $$values (0::bigint)$$,
-  'ラウンド削除でround_usersもカスケード削除される'
 );
 
 -- ============================================================

@@ -1,9 +1,9 @@
 import { render, renderHook, screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { RoundWindow } from "../application/round-window";
 import type { RoundsListStore } from "../application/rounds-list-store";
 import {
-  type RoundProcedures,
   RoundProceduresProvider,
   RoundsListStoreProvider,
   RoundWindowProvider,
@@ -11,6 +11,11 @@ import {
   useRoundsListStore,
   useRoundWindow,
 } from "./rounds-context";
+
+// 公開の契約(提供者のprops)から、手続きの型を得る。
+type RoundProcedures = ComponentProps<
+  typeof RoundProceduresProvider
+>["procedures"];
 
 describe("rounds-context(窓口)", () => {
   it("提供された窓口を、子の部品に返す", () => {

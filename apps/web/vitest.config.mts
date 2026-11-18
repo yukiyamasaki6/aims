@@ -24,9 +24,14 @@ export default defineConfig({
       // 除外は生成物とテスト用コードに限り、理由を記載する（テストファイルはVitestが自動で除外する）。
       // - src/types/supabase.ts: 生成物
       // - src/hooks/use-hydrated.ts: E2Eの待機に使う属性を出すためのテスト用コード
+      // - src/**/*-test-helpers.{ts,tsx}: テスト補助。本番コードではない
       // パス中の()・[]はglobの特殊文字として解釈されるため、エスケープして指定する。
       include: ["src/**/*.{ts,tsx}"],
-      exclude: ["src/types/supabase.ts", "src/hooks/use-hydrated.ts"],
+      exclude: [
+        "src/types/supabase.ts",
+        "src/hooks/use-hydrated.ts",
+        "src/**/*-test-helpers.{ts,tsx}",
+      ],
       thresholds: {
         perFile: true,
         "src/**/*.{ts,tsx}": {

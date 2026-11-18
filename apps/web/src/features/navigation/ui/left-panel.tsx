@@ -182,7 +182,7 @@ type SettingsCloseFocus = "opener" | "content";
 
 // 設定パネルとの接点。入口が設定の経路の操作から渡す。
 // open: 設定パネルが開いているか。onOpen: 開く操作。closeFocus: 閉じたときの戻し先の種類。
-export type LeftPanelSettings = {
+type LeftPanelSettings = {
   open: boolean;
   onOpen: () => void;
   closeFocus: SettingsCloseFocus;

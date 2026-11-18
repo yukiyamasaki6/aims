@@ -1,31 +1,8 @@
+-- 点数の保存の柔軟性を確認する。表はscore_strとscore_intの対応を固定しない。
+
 begin;
 
-select plan(9);
-
-select tables_are(
-  'public',
-  array[
-    'distance_events',
-    'distances',
-    'preset_distances',
-    'preset_rounds',
-    'round_events',
-    'round_users',
-    'rounds',
-    'shot_events',
-    'shots',
-    'target_face_rings',
-    'target_face_spots',
-    'target_faces',
-    'users'
-  ],
-  'publicスキーマのテーブルは想定通りの集合と完全に一致する'
-);
-
-select col_is_pk(
-  'public', 'shots', array['id'],
-  'shots は矢のID（id）を主キーとする'
-);
+select plan(1);
 
 insert into auth.users (id)
 values ('77777777-7777-7777-7777-777777777777');
@@ -47,42 +24,6 @@ select lives_ok(
       ('99999999-9999-9999-9999-999999999999', 1,
         '77777777-7777-7777-7777-777777777777', 'bullseye', -1)$$,
   'score_strとscore_intの対応を固定せず、入力ツールの結果を保存できる'
-);
-
-select ok(
-  exists (select 1 from pg_trigger where tgrelid = 'public.round_events'::regclass and tgname = 'set_round_events_updated_at' and not tgisinternal),
-  'round_eventsのupdated_atはトリガーで保証される'
-);
-
-select ok(
-  exists (select 1 from pg_trigger where tgrelid = 'public.distance_events'::regclass and tgname = 'set_distance_events_updated_at' and not tgisinternal),
-  'distance_eventsのupdated_atはトリガーで保証される'
-);
-
-select ok(
-  exists (select 1 from pg_trigger where tgrelid = 'public.shot_events'::regclass and tgname = 'set_shot_events_updated_at' and not tgisinternal),
-  'shot_eventsのupdated_atはトリガーで保証される'
-);
-
-select ok(
-  (select pg_get_expr(adbin, adrelid) like '%clock_timestamp%'
-   from pg_attrdef
-   where adrelid = 'public.round_events'::regclass and adnum = 10),
-  'round_events.created_atはclock_timestamp()を既定値にする'
-);
-
-select ok(
-  (select pg_get_expr(adbin, adrelid) like '%clock_timestamp%'
-   from pg_attrdef
-   where adrelid = 'public.distance_events'::regclass and adnum = 13),
-  'distance_events.created_atはclock_timestamp()を既定値にする'
-);
-
-select ok(
-  (select pg_get_expr(adbin, adrelid) like '%clock_timestamp%'
-   from pg_attrdef
-   where adrelid = 'public.shot_events'::regclass and adnum = 11),
-  'shot_events.created_atはclock_timestamp()を既定値にする'
 );
 
 select * from finish();

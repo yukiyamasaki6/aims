@@ -33,7 +33,7 @@ type StoredRow = {
 };
 
 // 保存先の1つの列の組。
-export type StoredGroup = {
+type StoredGroup = {
   base: RecordBase | undefined;
   entries: readonly StoredRow[];
 };

@@ -4,8 +4,6 @@ import {
   distanceNumber,
   endHasRoom,
   endSubtotal,
-  liveCountOf,
-  type ScoringRing,
   type ScoringTargetFace,
   scoreKeysFor,
   shotFitsDistance,
@@ -16,6 +14,10 @@ import {
 } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
 import { shotIdAfter } from "./shot-id";
+
+// 公開の契約(的の型)から、採点に使うリングの型を得る。
+type ScoringRing =
+  ScoringTargetFace["target_face_spots"][number]["target_face_rings"][number];
 
 function ring(
   scoreStr: string,
@@ -627,7 +629,7 @@ describe("shotsFitDistance", () => {
   });
 });
 
-describe("liveCountOf・endHasRoom", () => {
+describe("endHasRoom", () => {
   const distance = { id: "d-1", arrows_per_end: 3 };
 
   it("同じ距離の同じエンドの矢だけを数える", () => {
@@ -642,8 +644,10 @@ describe("liveCountOf・endHasRoom", () => {
     ];
 
     // Then
-    expect(liveCountOf(shots, "d-1", 1)).toBe(1);
-    expect(liveCountOf(shots, "d-1", 2)).toBe(2);
+    // 他の距離・他のエンドの矢が数に混ざれば、エンド1も満杯と判定される。
+    const twoPerEnd = { id: "d-1", arrows_per_end: 2 };
+    expect(endHasRoom(twoPerEnd, shots, 1)).toBe(true);
+    expect(endHasRoom(twoPerEnd, shots, 2)).toBe(false);
   });
 
   it("満杯でないエンドには空きがある", () => {

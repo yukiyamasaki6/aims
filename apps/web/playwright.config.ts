@@ -12,6 +12,7 @@ export default defineConfig({
     // biome-ignore lint/style/useNamingConvention: Playwrightの設定の項目名
     baseURL: "http://localhost:3100",
     trace: "on-first-retry",
+    screenshot: "only-on-failure",
   },
   projects: [
     {

@@ -1,6 +1,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { expect, type Locator, type Page } from "@playwright/test";
+import {
+  type BrowserContext,
+  expect,
+  type Locator,
+  type Page,
+} from "@playwright/test";
+import { type CookieOptions, createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { waitForTurnstileToken } from "./turnstile";
@@ -72,6 +78,75 @@ export async function createConfirmedUser(input: {
   }
 }
 
+function cookieExpiry(options: CookieOptions): number {
+  if (options.maxAge !== undefined)
+    return Math.floor(Date.now() / 1000) + options.maxAge;
+  if (options.expires instanceof Date)
+    return Math.floor(options.expires.getTime() / 1000);
+  return -1;
+}
+
+function cookieSameSite(
+  value: CookieOptions["sameSite"],
+): "Strict" | "None" | "Lax" {
+  if (value === "strict" || value === true) return "Strict";
+  return value === "none" ? "None" : "Lax";
+}
+
+// UI認証が検証対象でないケースの新しいcontextへ、実SDKが作ったセッションを渡す。
+export async function prepareConfirmedUserSession(
+  context: BrowserContext,
+  appUrl: string,
+  input: { email: string; password: string },
+): Promise<void> {
+  await createConfirmedUser(input);
+  const upstreamUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publicKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!upstreamUrl || !publicKey) {
+    throw new Error("Missing Supabase environment variables in e2e helper.");
+  }
+  const origin = new URL(appUrl);
+  // Nextのローカルrewriteと揃え、Cookie名の導出・符号化・分割はSDKへ任せる。
+  const authUrl =
+    new URL(upstreamUrl).hostname === "127.0.0.1"
+      ? new URL("/supabase-api", origin).href
+      : upstreamUrl;
+  const cookies = new Map<
+    string,
+    Parameters<BrowserContext["addCookies"]>[0][number]
+  >();
+  const supabase = createServerClient(authUrl, publicKey, {
+    cookies: {
+      getAll: () =>
+        [...cookies.values()].map(({ name, value }) => ({ name, value })),
+      setAll(values) {
+        values.forEach(({ name, value, options }) => {
+          cookies.set(name, {
+            name,
+            value,
+            domain: origin.hostname,
+            path: options.path ?? "/",
+            expires: cookieExpiry(options),
+            httpOnly: options.httpOnly ?? false,
+            secure: options.secure ?? origin.protocol === "https:",
+            sameSite: cookieSameSite(options.sameSite),
+          });
+        });
+      },
+    },
+  });
+  try {
+    const { error } = await supabase.auth.signInWithPassword({
+      ...input,
+      options: { captchaToken: "test-captcha-token" },
+    });
+    if (error) throw error;
+    await context.addCookies([...cookies.values()]);
+  } finally {
+    await supabase.auth.stopAutoRefresh();
+  }
+}
+
 // サインインを押し、一覧(`/rounds`配下)へ移って水和するまで待つ。
 export async function clickSignInAndAwaitRounds(
   page: Page,
@@ -102,7 +177,7 @@ export async function signUpAndSignIn(
 }
 
 // 設定パネルは水和の後に開くため、表示された時点でハンドラが接続済みである。サインアウトのボタンを押して、確認のダイアログが開くまで待つ。
-export async function openSignOutConfirm(page: Page): Promise<void> {
+async function openSignOutConfirm(page: Page): Promise<void> {
   await page.getByRole("button", { name: authText("signOut") }).click();
   await expect(
     page.getByRole("button", { name: authText("signOutConfirmLabel") }),

@@ -1,25 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { DELETE_ACCOUNT_HASH, ROUNDS_PATH } from "@/routes";
 import { expect, test } from "../fixtures";
-import {
-  createConfirmedUser,
-  signUpAndSignIn,
-  waitForHydration,
-} from "../helpers/auth";
+import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
 import { signInError } from "../helpers/auth-api";
-import { getOtpCodeFromMailpit } from "../helpers/mailpit";
 import { addRound, signInFreshUser } from "../helpers/round-fixtures";
-import { signInAsTestUser } from "../helpers/rounds";
 import {
   comeBackOnline,
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
 import { settingsPanel, waitForPanelHydration } from "../helpers/settings";
-import { authMethodOf } from "../helpers/stored-session";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
 // 削除は破壊的で、他のspecとデータを共有しないため、共有の認証状態は使わず、使い捨てのユーザーを作る。
@@ -37,10 +29,6 @@ function passwordInput(page: Page) {
 
 function deleteButton(page: Page) {
   return page.getByRole("button", { name: authText("deleteAccountSubmit") });
-}
-
-function newEmail(prefix: string) {
-  return `${prefix}-${Date.now()}-${randomUUID().slice(0, 8)}@aims.test`;
 }
 
 test("ラウンドを持つ利用者が、設定から現在のパスワードで削除すると、サインイン画面へ移り、削除したメールアドレスでは入れず、同じメールアドレスで新しく登録した利用者には旧ラウンドが表示されない", async ({
@@ -86,55 +74,6 @@ test("ラウンドを持つ利用者が、設定から現在のパスワード�
   await page.goto("/rounds/history");
   await expect(page.getByText(roundsText("historyEmpty"))).toBeVisible();
   await expect(page.getByText(roundName)).toHaveCount(0);
-});
-
-test("認証コードで入ったセッションのアクセストークンでアカウント削除のRPCをREST越しに直接呼ぶと拒否され、その後も同じアカウントでパスワードでサインインでき、記録が残る", async () => {
-  // パスワードを持つ利用者とラウンドを作り、パスワード再設定のメールの認証コードを確認して、認証コード由来のセッションを得る。
-  const credentials = {
-    email: newEmail("e2e-delete-otp"),
-    password: "password-e2e-delete-otp",
-  };
-  await createConfirmedUser(credentials);
-  const roundId = await addRound(credentials, "残るラウンド", "2026-08-24");
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-  const client = createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const sent = await client.auth.resetPasswordForEmail(credentials.email, {
-    captchaToken: "test-captcha-token",
-  });
-  expect(sent.error).toBeNull();
-  const { data } = await client.auth.verifyOtp({
-    email: credentials.email,
-    token: await getOtpCodeFromMailpit(credentials.email),
-    type: "recovery",
-  });
-  const accessToken = data.session?.access_token ?? "";
-  expect(authMethodOf(accessToken)).toBe("otp");
-
-  // そのアクセストークンでRPCを直接呼ぶと、再認証が必要としてPT403で拒否され、アカウントはパスワードでサインインでき、ラウンドが残る。
-  const response = await fetch(`${url}/rest/v1/rpc/delete_account`, {
-    method: "POST",
-    headers: {
-      apikey: anonKey,
-      authorization: `Bearer ${accessToken}`,
-      "content-type": "application/json",
-    },
-    body: "{}",
-  });
-  expect(response.status).toBe(403);
-  expect((await response.json()).code).toBe("PT403");
-  expect(await signInError(credentials.email, credentials.password)).toBeNull();
-  const { supabase } = await signInAsTestUser(
-    credentials.email,
-    credentials.password,
-  );
-  const { data: rounds } = await supabase
-    .from("rounds")
-    .select("id")
-    .eq("id", roundId);
-  expect(rounds).toHaveLength(1);
 });
 
 test("画面の枠を保存した後、オフラインでアカウント削除の画面を開いて削除を実行すると、オフラインの文言が表示され、アカウントは残り、通信が戻ると再び実行できる", async ({

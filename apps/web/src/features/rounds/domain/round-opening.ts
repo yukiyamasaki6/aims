@@ -7,7 +7,7 @@ import type { SyncOperation } from "./sync-events";
 import type { TargetFaceOption } from "./target-face";
 
 // 詳細を開く判断の入力。
-export type OpeningInput = {
+type OpeningInput = {
   record: {
     base: RecordBase | undefined;
     operations: readonly AppliedOperation[];

@@ -76,7 +76,7 @@ async function writeFromServer(page: Page) {
 
 // セッションの期限を来させ、ブラウザの次のセッションの更新の通信を止める。
 // requestedは更新が始まったときに解決する。releaseは、別の書き手に保存先を書き換えさせてから止めていた更新を通し、passedはそれを通したときに解決する。
-export async function holdNextRefresh(page: Page) {
+async function holdNextRefresh(page: Page) {
   const requested = Promise.withResolvers<void>();
   const released = Promise.withResolvers<void>();
   const passed = Promise.withResolvers<void>();

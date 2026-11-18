@@ -8,9 +8,8 @@ import {
   localRoundsList,
   type RoundListItem,
   roundIdOfItem,
-  roundListItemOf,
   roundsPageOf,
-  type ServerRoundSummary,
+  type ServerHistoryPage,
 } from "./round-list";
 import {
   distanceDisabled,
@@ -20,6 +19,12 @@ import {
   shotCleared,
   shotRecorded,
 } from "./round-op-test-helpers";
+
+// 公開の契約(履歴の1ページ)から、履歴の1件の型を得る。
+type ServerRoundSummary = Extract<
+  ServerHistoryPage,
+  { rounds: unknown }
+>["rounds"][number];
 
 const pending = (operation: ReturnType<typeof roundDisabled>) => ({
   operation,
@@ -266,7 +271,7 @@ describe("localRoundsList: 的に無い点数", () => {
   });
 });
 
-describe("roundListItemOf", () => {
+describe("roundsPageOf: ラウンド単位の項目", () => {
   it("サーバーの応答の列を、画面の名前(roundDate、format、bowType、total、距離ごとの小計)へ写す", () => {
     // Given
     const summary: ServerRoundSummary = {
@@ -283,7 +288,7 @@ describe("roundListItemOf", () => {
     };
 
     // When
-    const item = roundListItemOf(summary);
+    const [item] = roundsPageOf({ rounds: [summary], hasMore: false }).items;
 
     // Then
     expect(item).toEqual({

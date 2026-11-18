@@ -50,7 +50,7 @@ function optionIndex(options: readonly string[], value: string): number {
 // 距離は同じ種別・弓種の中で「距離の数が多いほど上」「同数なら先頭から見て
 // 距離が大きい方が上」という、距離・サイズを大きい方から並べるアーチェリー
 // 界隈の慣習に合わせる。最後まで並びが同じ場合は作成日時が新しい方を上にする。
-export function comparePresets(a: PresetRecord, b: PresetRecord): number {
+function comparePresets(a: PresetRecord, b: PresetRecord): number {
   const formatDiff =
     optionIndex(FORMAT_OPTIONS, a.format) -
     optionIndex(FORMAT_OPTIONS, b.format);

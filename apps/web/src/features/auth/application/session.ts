@@ -49,7 +49,7 @@ type RecordUser = {
 
 // サインアウトの結果。画面が区別するのは、失敗(理由を示して再試行できる)とそれ以外だけである。
 // ignored: 完了(遷移で画面ごと捨てられる)、実行中のため始めなかった、のどれか。
-export type SignOutResult =
+type SignOutResult =
   | { readonly kind: "failed"; readonly failure: AuthFailure }
   | { readonly kind: "ignored" };
 

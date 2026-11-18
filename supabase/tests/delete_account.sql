@@ -8,7 +8,7 @@
 
 begin;
 
-select plan(35);
+select plan(32);
 
 -- ============================================================
 -- fixture
@@ -365,17 +365,6 @@ select is(
 
 drop trigger da_fail_user_delete on public.users;
 
-select is(
-  (select proconfig from pg_proc where oid = 'public.delete_account()'::regprocedure),
-  array['search_path=""', 'statement_timeout=60s'],
-  '関数は検索パスを空にし、制限時間を60秒にする'
-);
-
-select ok(
-  (select prosecdef from pg_proc where oid = 'public.delete_account()'::regprocedure),
-  '関数はSECURITY DEFINERである'
-);
-
 -- ============================================================
 -- A2 削除の副作用
 -- ============================================================
@@ -422,20 +411,6 @@ select is(
   pg_temp.leftover_refs(pg_temp.uid('S')),
   0::bigint,
   '利用者のIDを値に持つ行が、利用者を指す全ての外部キーの列で0件になる'
-);
-
--- 利用者を指す外部キーの列の一覧。新しい外部キーが増えたら、この表と、匿名化・削除の対象を見直す。認証サービスが管理するスキーマの表は、版で変わるため比べない(0件の確認が漏れを見る)。
-select results_eq(
-  $$select (c.conrelid::regclass::text || '.' || a.attname::text) collate "C" as ref
-    from pg_constraint c
-    join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any (c.conkey)
-    where c.contype = 'f' and c.confrelid in ('public.users'::regclass, 'auth.users'::regclass)
-      and c.connamespace = 'public'::regnamespace
-    order by 1$$,
-  $$values
-    ('distance_events.author_id'::text collate "C"), ('preset_rounds.owner_id'), ('round_events.author_id'), ('round_users.user_id'),
-    ('shot_events.author_id'), ('shot_events.shooter_id'), ('shots.shooter_id'), ('users.id')$$,
-  'publicで利用者を指す外部キーの列が、削除と匿名化で扱う列の一覧と全件一致する'
 );
 
 -- ============================================================

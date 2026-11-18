@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { StreamEntry } from "@/lib/local-op-log/contract/op-log-store";
+import type { StreamRules } from "@/lib/local-op-log/contract/op-log-store";
 import {
   isOlderBase,
   newestById,
@@ -8,6 +8,11 @@ import {
 } from "./round-base";
 import { roundTablesFromServer } from "./round-op-test-helpers";
 import type { SyncOperation } from "./sync-events";
+
+// 公開の契約(規則の引数)から、列の操作の型を得る。
+type StreamEntry<Op extends { eventId: string }> = Parameters<
+  StreamRules<Op, unknown>["reflects"]
+>[1];
 
 function record(
   overrides: {

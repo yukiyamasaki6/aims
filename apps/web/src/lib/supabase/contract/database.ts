@@ -40,7 +40,7 @@ export type DbOrder<S extends DbSchema, T extends TableOf<S>> =
       };
     }[TableOf<S>];
 
-export type DbSelect<S extends DbSchema, T extends TableOf<S>> = {
+type DbSelect<S extends DbSchema, T extends TableOf<S>> = {
   table: T;
   // 列の文字列と`or`の式は、文字列で、型では確かめない。
   columns: string;

@@ -6,11 +6,7 @@ import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { SettingsView } from "../domain/settings-location";
-import {
-  type SettingsItemControls,
-  type SettingsItemRenderer,
-  SettingsPanel,
-} from "./settings-panel";
+import { type SettingsItemControls, SettingsPanel } from "./settings-panel";
 
 const settingsText = translatorFor("settings");
 
@@ -41,9 +37,10 @@ function ItemProbe({
   );
 }
 
-const renderItem: SettingsItemRenderer = (view, controls) => (
-  <ItemProbe view={view} controls={controls} />
-);
+const renderItem: ComponentProps<typeof SettingsPanel>["renderItem"] = (
+  view,
+  controls,
+) => <ItemProbe view={view} controls={controls} />;
 
 function setup(props: Partial<ComponentProps<typeof SettingsPanel>> = {}) {
   const onMove = vi.fn();

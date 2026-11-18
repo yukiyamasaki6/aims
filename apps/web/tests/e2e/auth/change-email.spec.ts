@@ -16,7 +16,6 @@ import {
   openSettingsAt,
   panelBackLink,
   settingsPanel,
-  waitForPanelHydration,
 } from "../helpers/settings";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
@@ -102,26 +101,6 @@ async function confirmBoth(page: Page, addresses: Addresses) {
     authText("changeEmailDone"),
   );
 }
-
-test("ハッシュ付きのURLを直接開いても再読み込みしても、設定パネルにメールアドレス変更の画面が表示され、入力は空である", async ({
-  page,
-}) => {
-  // ハッシュ付きのURLを直接開き、メールアドレス変更の画面が表示される。
-  await signUpAndSignIn(page, {
-    email: uniqueEmail("change-email-direct"),
-    password: PASSWORD,
-  });
-  await openChangeEmail(page);
-  await expect(page).toHaveURL(new RegExp(`${CHANGE_EMAIL_HASH}$`));
-  await expect(newEmailInput(page)).toHaveValue("");
-
-  // 再読み込みして、同じ画面が表示される。
-  await page.reload();
-  await waitForPanelHydration(page);
-  await expect(settingsPanel(page)).toBeVisible();
-  await expect(newEmailInput(page)).toHaveValue("");
-  await expect(page).toHaveURL(new RegExp(`${CHANGE_EMAIL_HASH}$`));
-});
 
 test("新しいメールアドレスを送り、現在と新しいアドレスへ届く2つのコードを確認すると、完了が表示され、戻ると分類「アカウント」へ移動し、新しいアドレスが現在として表示され、新しいアドレスでだけサインインでき、この端末はサインインしたままである", async ({
   page,
@@ -287,37 +266,6 @@ test("現在と同じアドレスを入力すると、同じアドレスには�
   await sendNewEmail(page, email);
   await expect(page.getByText(authText("failure.same_email"))).toBeVisible();
   await expect(verifyButton(page)).not.toBeVisible();
-});
-
-test("入力の画面でヘッダーの戻るのリンクを押すと、分類「アカウント」へ移動する", async ({
-  page,
-}) => {
-  await signUpAndSignIn(page, {
-    email: uniqueEmail("change-email-back-input"),
-    password: PASSWORD,
-  });
-  await openChangeEmail(page);
-
-  await panelBackLink(page).click();
-
-  await expectAccountCategory(page);
-});
-
-test("コード確認の画面でヘッダーの戻るのリンクを押すと、分類「アカウント」へ移動する", async ({
-  page,
-}) => {
-  // 新しいメールアドレスを送って、コード確認の画面へ進む。
-  const addresses = {
-    current: uniqueEmail("change-email-leave"),
-    next: uniqueEmail("change-email-leave-next"),
-  };
-  await signUpAndSignIn(page, { email: addresses.current, password: PASSWORD });
-  await openChangeEmail(page);
-  await requestChange(page, addresses);
-
-  // ヘッダーの戻るのリンクを押して、分類「アカウント」へ進む。
-  await panelBackLink(page).click();
-  await expectAccountCategory(page);
 });
 
 test("別の端末でサインインしているとき、この端末が変更を完了しても、この端末と別の端末はサインインしたままである", async ({

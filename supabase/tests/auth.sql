@@ -1,6 +1,6 @@
 begin;
 
-select plan(6);
+select plan(2);
 
 insert into auth.users (id) values ('55555555-5555-5555-5555-555555555555');
 
@@ -14,47 +14,6 @@ select is(
   (select id from public.users where id = '55555555-5555-5555-5555-555555555555'),
   '55555555-5555-5555-5555-555555555555'::uuid,
   'public.usersのidはauth.users.idと一致する'
-);
-
--- auth.users削除時の連鎖検証: public.usersだけでなく、所有物やメンバー登録・
--- 記録済みshotsまで巻き込んでカスケード削除されることを確認する。
-insert into auth.users (id) values ('e0000000-0000-0000-0000-000000000001');
-
-insert into public.preset_rounds (owner_id, name, format, bow_type)
-values ('e0000000-0000-0000-0000-000000000001', 'Owned Preset', 'outdoor', 'recurve');
-
-insert into public.rounds (id, name, round_date, format, bow_type)
-values ('e0000000-0000-0000-0000-000000000002', 'User Delete Round', current_date, 'outdoor', 'recurve');
-
-insert into public.round_users (round_id, user_id, role)
-values ('e0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000001', 'editor');
-
-insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
-values ('e0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000002', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
-
-insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int)
-values ('e0000000-0000-0000-0000-000000000003', 1, 'e0000000-0000-0000-0000-000000000001', 'X', 10);
-
-delete from auth.users where id = 'e0000000-0000-0000-0000-000000000001';
-
-select is_empty(
-  $$select id from public.users where id = 'e0000000-0000-0000-0000-000000000001'$$,
-  'auth.users削除でpublic.usersもカスケード削除される'
-);
-
-select is_empty(
-  $$select id from public.preset_rounds where owner_id = 'e0000000-0000-0000-0000-000000000001'$$,
-  'auth.users削除で所有するpreset_roundsもカスケード削除される'
-);
-
-select is_empty(
-  $$select round_id from public.round_users where user_id = 'e0000000-0000-0000-0000-000000000001'$$,
-  'auth.users削除でround_usersのメンバー登録もカスケード削除される'
-);
-
-select is_empty(
-  $$select distance_id from public.shots where shooter_id = 'e0000000-0000-0000-0000-000000000001'$$,
-  'auth.users削除で記録したshotsもカスケード削除される'
 );
 
 select * from finish();

@@ -1,7 +1,7 @@
 import type { LoadedRoundsList } from "../domain/round-list";
 
 // 履歴を離れるときの表示。連結したページ(`deleted`は、各ページの取得時の削除済みIDと、画面で削除したIDの和)と、スクロールの位置。
-export type HistoryPagesSnapshot = {
+type HistoryPagesSnapshot = {
   list: LoadedRoundsList;
   scrollTop: number;
 };

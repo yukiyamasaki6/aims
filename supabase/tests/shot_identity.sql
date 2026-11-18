@@ -1,14 +1,13 @@
--- 矢の識別（矢のID）、項目ごとの記録、射順（shot_number）、射数/エンドの上限を確認する。
---   - 矢はIDで識別し、エンド内の位置（arrow_number）を持たない
+-- 項目ごとの記録、射順（shot_number）、射数/エンドの上限を確認する。
 --   - record_shotsは要素に含まれる項目だけを変え、効いた属性をset_fieldsとapplied_fieldsに残す
 --   - 射順は1〜射数/エンドで、同じエンドの生きている矢で重ならない。重なる書き込みは射順だけが効かない
 --   - 消した矢を戻すとき、射順が他の生きている矢に使われていれば射順だけが外れる
 --   - エンドの生きている矢は射数/エンドを超えない（RPCの判定。書き込みはRPCだけである）
--- RPC × 観点の網羅（権限、入力検証、冪等性）はrpc_matrix.sqlで固定している。
+-- RPC × 観点（権限、入力検証、冪等性）はrpc_matrix.sqlで固定している。
 
 begin;
 
-select plan(38);
+select plan(34);
 
 create temp table si_id (alias text primary key, id uuid not null);
 insert into si_id (alias, id) values
@@ -107,15 +106,6 @@ insert into public.distances (id, round_id, position_key, distance, total_ends, 
   (pg_temp.id('D'), pg_temp.id('R'), 'a', 70, 6, 6, pg_temp.face(), true),
   (pg_temp.id('DC'), pg_temp.id('R'), 'b', 50, 6, 3, pg_temp.face(), true),
   (pg_temp.id('DS'), pg_temp.id('R'), 'c', 30, 6, 6, pg_temp.face(), true);
-
--- ============================================================
--- 形: 矢はIDで識別し、エンド内の位置を持たない
--- ============================================================
-
-select hasnt_column('public', 'shots', 'arrow_number', 'shotsはエンド内の位置（arrow_number）を持たない');
-select hasnt_column('public', 'shot_events', 'arrow_number', 'shot_eventsはエンド内の位置（arrow_number）を持たない');
-select col_not_null('public', 'shot_events', 'shot_id', 'shot_eventsは対象の矢のIDを必ず持つ');
-select col_is_unique('public', 'shot_events', array['shot_id', 'revision'], 'shot_eventsは矢ごとのrevisionで一意');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);

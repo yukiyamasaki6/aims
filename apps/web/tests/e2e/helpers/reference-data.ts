@@ -3,13 +3,12 @@ import { getSharedEmail, SHARED_PASSWORD, waitForHydration } from "./auth";
 import { createRound } from "./rounds";
 import { goOffline, waitForServiceWorkerControl } from "./service-worker";
 
-export const CREATE_ROUND_RPC = "**/rest/v1/rpc/create_round";
 // 取得のselectが`/`を含みglobの`*`に合わないため、正規表現で指定する。
 export const TARGET_FACES_REST = /\/rest\/v1\/target_faces\?/;
 
 // 文書を読み込むたびに、端末に保存された的の一覧を消す。
 // 共有ユーザーの認証状態には、準備のときに保存された的が含まれる。
-export async function forgetTargetFacesOnDevice(page: Page) {
+async function forgetTargetFacesOnDevice(page: Page) {
   await page.addInitScript(() => {
     for (const key of Object.keys(localStorage)) {
       if (key.startsWith("aims:reference:target-faces:")) {
@@ -56,7 +55,7 @@ function targetFacesSaved(page: Page): Promise<boolean> {
 }
 
 // ラウンドのベースが端末の保存(IndexedDBの`aims-sync`の`bases`)にあるか。ベースの保存のキーは[利用者, 列のID]。
-function roundBaseSaved(page: Page, roundId: string): Promise<boolean> {
+export function roundBaseSaved(page: Page, roundId: string): Promise<boolean> {
   return page.evaluate(
     (streamId) =>
       new Promise<boolean>((resolve, reject) => {
@@ -73,7 +72,10 @@ function roundBaseSaved(page: Page, roundId: string): Promise<boolean> {
             .transaction("bases", "readonly")
             .objectStore("bases")
             .getAllKeys();
-          request.onerror = () => reject(request.error);
+          request.onerror = () => {
+            db.close();
+            reject(request.error);
+          };
           request.onsuccess = () => {
             db.close();
             resolve(
@@ -125,17 +127,4 @@ export async function startRoundOffline(page: Page, presetName?: string) {
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
   await waitForHydration(page);
-}
-
-// 的の一覧の取得を空にして、的データを取得できない表示を再現する。ページを開く前に呼ぶ。
-export async function stubMissingTargetFaces(page: Page) {
-  await forgetTargetFacesOnDevice(page);
-  // Service Workerが制御する文書の通信も置き換えるため、contextで置き換える。
-  await page.context().route(TARGET_FACES_REST, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: "[]",
-    }),
-  );
 }

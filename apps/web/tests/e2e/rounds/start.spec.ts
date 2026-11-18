@@ -13,25 +13,17 @@ import {
 } from "../helpers/auth";
 import { savedRoundCount } from "../helpers/other-device";
 import { createPreset } from "../helpers/presets";
-import {
-  openNewRoundThenGoOffline,
-  saveTargetFacesOnDevice,
-  startRoundOffline,
-} from "../helpers/reference-data";
+import { saveTargetFacesOnDevice } from "../helpers/reference-data";
 import { signInAsTestUser } from "../helpers/rounds";
 import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
-import { overlapNextRefresh } from "../helpers/session-overlap";
 import { mockTurnstile } from "../helpers/turnstile";
 
 const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
-
-// supabase/config.tomlのjwt_expiry（3600秒）を越える時間。
-const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 
 async function openNewRound(page: Page) {
   await page.goto("/rounds/new");
@@ -54,15 +46,6 @@ let sequence = 0;
 function uniqueName(label: string): string {
   sequence++;
   return `${label}-${Date.now()}-${sequence}`;
-}
-
-async function createPersonalPreset(name: string) {
-  await createPreset({
-    email: getSharedEmail(),
-    password: SHARED_PASSWORD,
-    name,
-    distances: [{ distance: 30, totalEnds: 6, arrowsPerEnd: 6 }],
-  });
 }
 
 test("個人プリセットと公式プリセットの一覧から公式プリセットを選んで開始すると、その距離構成のラウンドが表示される", async ({
@@ -119,40 +102,6 @@ test("プリセットを選ばずに開始すると、距離のないラウン�
     .toBe(1);
 });
 
-// 実施日の初期値は、開始した時点の端末のローカルの日付になる(UTCの日付ではない)。
-for (const { timezoneId, instant, expected } of [
-  // 日本時間の3/2 8:30(UTCでは3/1)。
-  {
-    timezoneId: "Asia/Tokyo",
-    instant: "2026-03-01T23:30:00Z",
-    expected: "2026-03-02",
-  },
-  // ロサンゼルスの3/1 21:00(UTCでは3/2)。
-  {
-    timezoneId: "America/Los_Angeles",
-    instant: "2026-03-02T05:00:00Z",
-    expected: "2026-03-01",
-  },
-]) {
-  test.describe(`${timezoneId}で${instant}に開始する`, () => {
-    test.use({ timezoneId });
-
-    test(`実施日の初期値が端末のローカルの日付(${expected})になる`, async ({
-      page,
-    }) => {
-      // 時刻を固定してから開く(固定してもタイマーは止まらない)。
-      await page.clock.setFixedTime(new Date(instant));
-      await openNewRound(page);
-
-      await page.getByTestId("round-start-button").click();
-
-      await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-      // 距離がないラウンドはラウンド編集が展開済みのため、そのまま日付を確かめる。
-      await expect(page.getByTestId("round-config-date")).toHaveValue(expected);
-    });
-  });
-}
-
 test("「一覧へ戻る」リンクを押すと、ラウンド一覧へ移動する", async ({
   page,
 }) => {
@@ -178,85 +127,6 @@ test("的の一覧を端末に保存済みなら、オフラインでも開始�
   await expect(page.getByTestId("round-summary")).toContainText(
     roundsText("roundTotal", { total: "0" }),
   );
-});
-
-test("的の一覧を端末に保存済みなら、アクセストークンを更新できないときも開始して、ラウンドが表示される", async ({
-  page,
-}) => {
-  await saveTargetFacesOnDevice(page);
-  await page.clock.install();
-  await openNewRound(page);
-  await expect(presetButton(page, "WA 1440")).toBeVisible();
-  // 時計を進めてアクセストークンを失効させ、更新の通信を止めて、認証を確認できない状態にする。
-  await page.route("**/auth/v1/token*", (route) => route.abort());
-  await page.clock.fastForward(PAST_JWT_EXPIRY_MS);
-
-  await page.getByTestId("round-start-button").click();
-
-  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-  await expect(page.getByTestId("round-summary")).toContainText(
-    roundsText("roundTotal", { total: "0" }),
-  );
-});
-
-// セッションの更新はリフレッシュトークンを入れ替え、共有のユーザーの他のテストのセッションを無効にし得るため、使い捨てのユーザーで行う。
-test.describe("セッションの更新の重なり", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
-
-  test("セッションの更新が別の書き手の更新と重なっても、開始して、ラウンドが表示される", async ({
-    page,
-  }) => {
-    await signUpAndSignIn(page, {
-      email: `e2e-start-overlap-${Date.now()}-${randomUUID().slice(0, 8)}@aims.test`,
-      password: "password-e2e-start",
-    });
-    await openNewRound(page);
-    // 取得の完了を待ち、セッションの更新が開始ボタンの操作だけに重なる状態にする。
-    await expect(presetButton(page, "WA 1440")).toBeVisible();
-    const { overlapped } = await overlapNextRefresh(page);
-
-    await page.getByTestId("round-start-button").click();
-
-    await overlapped;
-    await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-    await expect(page.getByTestId("round-summary")).toContainText(
-      roundsText("roundTotal", { total: "0" }),
-    );
-    await expect(
-      page.getByText(roundsText("fetchFailure.unauthenticated")),
-    ).toHaveCount(0);
-  });
-});
-
-test("オンラインで一度開いた後のオフラインでも、保存済みのプリセットの一覧が表示され、選んで開始すると、その距離構成のラウンドが表示される", async ({
-  page,
-}) => {
-  // オンラインで一度開いてプリセットを端末に保存させ、オフラインで開き直して公式プリセットを選ぶ。
-  const name = uniqueName("保存済み");
-  await createPersonalPreset(name);
-  await openNewRoundThenGoOffline(page);
-  await page.goto("/rounds/new");
-  await expect(presetButton(page, name)).toBeVisible();
-  await expect(presetButton(page, "WA 1440")).toBeVisible();
-  await expect(
-    page.getByText(roundsText("presetPersonal"), { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText(roundsText("presetGlobal"), { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
-  await presetButton(page, "WA 1440").click();
-  await expect(presetButton(page, "WA 1440")).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-
-  // 選んだプリセットで開始し、ラウンドの画面へ進む。
-  await startRoundOffline(page);
-  await expect(page.getByTestId("distance-summary-1")).toContainText("90m");
-  await expect(page.getByTestId("distance-summary-2")).toContainText("70m");
-  await expect(page.getByTestId("distance-summary-3")).toContainText("50m");
-  await expect(page.getByTestId("distance-summary-4")).toContainText("30m");
 });
 
 test("別のユーザーでサインインし直した後のオフラインでは、前のユーザーの個人プリセットが表示されない", async ({

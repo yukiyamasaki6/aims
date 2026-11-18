@@ -27,7 +27,7 @@ export type RoundListItem = {
 };
 
 // 履歴の関数(rounds_list)が返す1件。行の列は生成型(rounds、distances)から導き、合計点と距離ごとの小計だけを足す。
-export type ServerRoundSummary = Pick<
+type ServerRoundSummary = Pick<
   Tables<"rounds">,
   "id" | "name" | "round_date" | "format" | "bow_type"
 > & {
@@ -38,7 +38,7 @@ export type ServerRoundSummary = Pick<
 };
 
 // 履歴の関数が返す1ページ。続きがあるかを添える。
-export type ServerRoundsPage = {
+type ServerRoundsPage = {
   rounds: ServerRoundSummary[];
   hasMore: boolean;
 };
@@ -109,7 +109,7 @@ export type LoadedRoundsList = RoundsPage & {
   deleted: ReadonlySet<string>;
 };
 
-export function roundListItemOf(summary: ServerRoundSummary): RoundListItem {
+function roundListItemOf(summary: ServerRoundSummary): RoundListItem {
   return {
     id: summary.id,
     name: summary.name,

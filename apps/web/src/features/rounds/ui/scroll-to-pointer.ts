@@ -5,7 +5,7 @@ const TOLERANCE = 1;
 // 見えるべき範囲（固定表示の下端から領域の下端まで）に矢の行を収めるための
 // スクロール量。下に隠れる場合を優先し、上に隠れる場合はそれに次ぐ。
 // 許容の範囲で接している行は見えているものとして動かさない。
-export function revealDelta({
+function revealDelta({
   cellTop,
   cellBottom,
   visibleTop,

@@ -28,11 +28,6 @@ export async function expectUncovered(locator: Locator, inset = 2) {
   await expect.poll(() => frontmostPoints(locator, inset)).toBe(5);
 }
 
-// 少なくとも一部が他の要素に覆われているか、画面の外にある(最前面でない点がある)ことを確かめる。
-export async function expectPartlyCovered(locator: Locator) {
-  await expect.poll(() => frontmostPoints(locator, 2)).toBeLessThan(5);
-}
-
 // どの点でも見えていない(覆われているか、画面の外か、畳まれている)ことを確かめる。
 export async function expectHidden(locator: Locator) {
   await expect.poll(() => frontmostPoints(locator, 2)).toBe(0);
