@@ -15,7 +15,6 @@ export function SignUpForm({
   const copy = {
     idPrefix: "signup",
     emailTitle: t("signUpTitle"),
-    emailFooter: { lead: t("signUpFooterLead"), label: t("signUpFooterLink") },
     passwordTitle: t("signUpPasswordTitle"),
     passwordLabel: t("signUpPasswordLabel"),
     passwordSubmit: t("signUpPasswordSubmit"),

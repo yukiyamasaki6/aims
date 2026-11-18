@@ -1,8 +1,6 @@
 // introductionの画面の文言(名前空間: introduction)。
 export const introductionMessages = {
   ja: {
-    headerSignIn: "サインイン",
-    headerSignUp: "サインアップ",
     catch: "あなたの点数記録を、もっと自由に",
     startButton: "記録を始める",
     setupTitle: "自分のスタイルに合わせて、点数を記録",

@@ -15,7 +15,7 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 
 | 状態 | 表示と操作 | 次の状態 |
 | --- | --- | --- |
-| メール入力 | メールアドレス、captcha、送信、サインインへのリンク | 送信成功でコード入力、リンクで`/signin`、検証・送信失敗はエラー表示 |
+| メール入力 | メールアドレス、captcha、送信。サインインへの本文内のリンクは置かず、ヘッダーのサインインで行く | 送信成功でコード入力、ヘッダーで`/signin`、検証・送信失敗はエラー表示 |
 | コード入力 | 6桁までのコード、確認、再送、戻る。迷惑メールの確認を案内する | 確認成功でパスワード設定、戻るでメール入力、再送、確認・再送の失敗はエラー表示 |
 | パスワード設定 | パスワード、captcha、登録 | 成功で`/rounds`、検証・登録・サインインの失敗はエラー表示 |
 | 処理中 | 該当ボタンを`aria-disabled`にする。コード入力では確認・送付(再送)・戻るを同時に無効にする。以前のエラーは開始で消す | 完了で元の状態 |
@@ -33,7 +33,7 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 構造の方針は`docs/architecture.md`に従う。
 
 - `src/app/(auth)/signup/page.tsx`: 入口。認証の実装(接続を作る関数`createClient`を渡す)、ページ全体の置き換えの実装(`createBrowserPageLoad`)、通信の可否の約束(`Connectivity`。送信の直前のオフラインの読み取りに使う)、手続きを生成し、手続きを画面へ渡す。
-- `src/features/auth/ui/signup-form.tsx`: サインアップの画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)を、UI層の文言の一覧から得る。パスワード再設定と共有の骨組みへ渡す。
+- `src/features/auth/ui/signup-form.tsx`: サインアップの画面の文言(見出し、パスワード設定の段階の文言)を、UI層の文言の一覧から得る。パスワード再設定と共有の骨組みへ渡す。
 - `src/features/auth/ui/password-setup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。状態を`useScreenView`で持ち、操作のたびに入力と画面の約束(`ScreenView`)を手続きへ渡す。メール入力とコード入力は段階の部品へ渡す。パスワード再設定と共有する。
 - `src/features/auth/application/sign-up.ts`: 手続き。
   コードの送信と、パスワード設定の後のセッションの置き換えと、ページ全体の置き換え(`/rounds`)を持つ。
@@ -64,7 +64,7 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
   画面は目的を判定しない。
 - `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。パスワード再設定も使う。
 - `src/features/auth/application/password-setup.ts`の`tickCooldown`: 再送できるまでの秒数を進める1秒の予約(`Clock`)。画面の部品`password-setup-form.tsx`が、残りが変わるたびに予約し直す(依存は描画をまたいで同じ参照の`dispatch`だけで、描画のたびには張り直さない)。
-- `src/app/(auth)/layout.tsx`、`src/features/auth/ui/auth-header.tsx`、`src/features/auth/ui/turnstile.tsx`: 認証画面の共通部品と枠。
+- `src/app/(auth)/layout.tsx`、`src/features/auth/ui/auth-header.tsx`、`src/features/auth/ui/turnstile.tsx`: 認証画面の共通部品と枠。枠は、縦の並び(`flex h-full flex-col`)に、共有のヘッダー(`GuestHeader`。`shrink-0`。紹介画面と同じ。`app/introduction`)と、本文のスクロールの入れ物(`min-h-0 flex-1 overflow-y-auto`)を置き、入れ物の中に、中央寄せの`main`(`min-h-full max-w-sm`)を置く。左上に固定のロゴ(`AppLogo`)は置かない。サインアップ・サインイン・パスワード再設定の全ての段階で出る。
 - `supabase/migrations/20261016000000_users.sql`: `auth.users`のINSERTで`public.users`を作るトリガー。
 
 契約は次のとおりである。

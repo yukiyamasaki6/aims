@@ -142,20 +142,17 @@ describe("SignUpForm", () => {
   });
 
   describe("文言とリンク", () => {
-    it("メール入力の段階は、サインアップの見出しと、サインインへのリンクを表示する", () => {
+    it("メール入力の段階は、サインアップの見出しを表示する", () => {
       // Given
 
       // When
       renderForm();
 
       // Then
-      expect(heading(authText("signInSignUpLink"))).toBeInTheDocument();
-      expect(
-        screen.getByRole("link", { name: authText("signUpFooterLink") }),
-      ).toHaveAttribute("href", "/signin");
+      expect(heading(authText("signUpTitle"))).toBeInTheDocument();
     });
 
-    it("パスワード設定の段階は、サインアップの見出しを表示し、補足説明とリンクを表示しない", async () => {
+    it("パスワード設定の段階は、サインアップの見出しを表示し、補足説明を表示しない", async () => {
       // Given
       await renderPasswordStep();
 

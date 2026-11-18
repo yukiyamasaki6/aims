@@ -127,7 +127,7 @@ describe("サインアップ画面の入口", () => {
     render(<SignUpPage />, { wrapper: IntlTestProvider });
 
     // Then
-    expect(heading(authText("signInSignUpLink"))).toBeInTheDocument();
+    expect(heading(authText("signUpTitle"))).toBeInTheDocument();
     expect(connection.createBrowserClient).not.toHaveBeenCalled();
   });
 });

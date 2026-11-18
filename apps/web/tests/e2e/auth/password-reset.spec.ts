@@ -136,19 +136,6 @@ test("再送待機時間の終了後に再送すると、新しい認証コー�
   }).toPass();
 });
 
-test("パスワード再設定画面で「サインインに戻る」を押すと、サインイン画面へ移動する", async ({
-  page,
-}) => {
-  await openEmailStep(page);
-  await page
-    .getByRole("link", { name: authText("resetBackToSignIn"), exact: true })
-    .click();
-  await expect(page).toHaveURL(/\/signin$/);
-  await expect(
-    page.getByRole("heading", { name: authText("signInTitle") }),
-  ).toBeVisible();
-});
-
 test.describe("認証済み", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
 

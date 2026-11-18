@@ -89,7 +89,7 @@
 ```mermaid
 flowchart TD
     Landing["/<br/>紹介画面"]
-    Logo(("AIMSロゴ<br/>（認証画面・紹介画面・オフライン画面の左上）"))
+    Logo(("AIMSロゴ<br/>（紹介画面・認証画面のヘッダー、オフライン画面の左上）"))
 
     subgraph auth ["(auth)"]
         SignIn["/signin<br/>サインイン画面"]
@@ -120,11 +120,11 @@ flowchart TD
     Landing -->|ヘッダーのサインイン（未認証）| SignIn
     Landing -->|「記録を始める」・ヘッダーのサインイン・サインアップ（認証済み）| Rounds
     SignIn -->|「パスワードをお忘れですか」| ResetPass
-    SignIn -->|「サインアップ」リンク| SignUp
+    SignIn -->|ヘッダーのサインアップ| SignUp
     SignIn -->|サインイン成功| Rounds
-    SignUp -->|サインインリンク| SignIn
+    SignUp -->|ヘッダーのサインイン| SignIn
     SignUp -->|登録成功| Rounds
-    ResetPass -->|サインインに戻るリンク| SignIn
+    ResetPass -->|ヘッダーのサインイン| SignIn
     ResetPass -->|パスワード変更成功（サインアウト）| SignIn
     Rounds -->|ラウンドの開始ボタン（右下）| RoundsNew
     Rounds -->|入力中のカードクリック| RoundDetail

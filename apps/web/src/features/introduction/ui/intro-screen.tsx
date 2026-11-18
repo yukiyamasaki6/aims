@@ -1,10 +1,10 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { GuestHeader } from "@/components/guest-header";
 import { CloudFigure } from "./cloud-figure";
 import { HistoryFigure } from "./history-figure";
 import { IntroCard } from "./intro-card";
-import { IntroHeader } from "./intro-header";
 import { OfflineFigure } from "./offline-figure";
 import { PresetFigure } from "./preset-figure";
 import { SetupFigure } from "./setup-figure";
@@ -35,7 +35,7 @@ export function IntroScreen() {
   const t = useTranslations("introduction");
   return (
     <div className="flex h-full flex-col">
-      <IntroHeader />
+      <GuestHeader />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <main className="mx-auto flex w-full max-w-6xl flex-col items-center gap-8 p-8">
           <div className="flex w-full max-w-3xl flex-col items-center gap-6 text-center">

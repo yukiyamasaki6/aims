@@ -31,7 +31,7 @@
   `main`は`mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8`で、画面の上下中央にそろえる。
   共用のヘッダー枠の本文領域(スクロールしない枠)の中に、画面が持つスクロールの入れ物(`h-full overflow-y-auto`)を置き、その中で`min-h-full`により入れ物の高さいっぱいに広げ、`justify-center`で上下中央にする。
   内容が領域より高いときは、`min-h-full`により`main`が伸びて領域がスクロールし、上端が切れない。
-  認証のレイアウト(`app/(auth)/layout.tsx`)は、ロゴの分(`mt-14`、`h-[calc(100dvh-3.5rem)]`)を持つため使わず、同じ中央寄せを画面の`main`に持たせる。
+  認証のレイアウト(`app/(auth)/layout.tsx`)は、ログイン前のヘッダー(`GuestHeader`)を持つため使わず、同じ中央寄せを画面の`main`に持たせる。
   エラーと完了の文言は、`text-center text-sm`で、エラーは`text-destructive`である。
   入力欄(`Input`)と変更ボタン(`BusyButton`)は既存の部品のままである。
 - キャプション(placeholder)は、現在のパスワードが「現在のパスワード」、新しいパスワードが「新しいパスワード」だけである。
