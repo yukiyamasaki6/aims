@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS "public"."preset_distances" (
     CONSTRAINT "preset_distances_arrows_per_end_positive" CHECK (("arrows_per_end" >= 1)),
     CONSTRAINT "preset_distances_distance_positive" CHECK ((("distance" IS NULL) OR ("distance" >= 1))),
     CONSTRAINT "preset_distances_marked_requires_distance" CHECK ((("is_marked" = false) OR ("distance" IS NOT NULL))),
+    CONSTRAINT "preset_distances_distance_max" CHECK ((("distance" IS NULL) OR ("distance" <= 100))),
+    CONSTRAINT "preset_distances_total_ends_max" CHECK (("total_ends" <= 60)),
+    CONSTRAINT "preset_distances_arrows_per_end_max" CHECK (("arrows_per_end" <= 12)),
     CONSTRAINT "preset_distances_total_ends_positive" CHECK (("total_ends" >= 1))
 );
 
@@ -48,6 +51,17 @@ CREATE OR REPLACE FUNCTION "public"."save_round_as_preset"("p_name" "text", "p_f
 declare
   v_preset_id uuid;
 begin
+  if exists (
+    select 1 from jsonb_array_elements(p_distances) as distance_input
+    where distance_config_over_limit(
+      (distance_input ->> 'distance')::numeric,
+      (distance_input ->> 'total_ends')::numeric,
+      (distance_input ->> 'arrows_per_end')::numeric
+    )
+  ) then
+    raise exception '距離・総エンド数・矢数が上限を超えています。' using errcode = 'PT422';
+  end if;
+
   insert into preset_rounds (owner_id, name, format, bow_type)
   values (auth.uid(), p_name, p_format, p_bow_type)
   returning id into v_preset_id;
@@ -118,13 +132,11 @@ REVOKE EXECUTE ON FUNCTION "public"."save_round_as_preset"("p_name" "text", "p_f
 GRANT EXECUTE ON FUNCTION "public"."save_round_as_preset"("p_name" "text", "p_format" "text", "p_bow_type" "text", "p_distances" "jsonb") TO "authenticated";
 
 
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."preset_distances" TO "service_role";
 
 
 GRANT SELECT,INSERT ON TABLE "public"."preset_distances" TO "authenticated";
 
 
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."preset_rounds" TO "service_role";
 
 
 GRANT SELECT,INSERT,DELETE ON TABLE "public"."preset_rounds" TO "authenticated";
@@ -170,5 +182,9 @@ INSERT INTO "public"."preset_distances" ("id", "preset_id", "distance", "total_e
 	('ca18984b-61cc-46a3-8f6b-7ab983d0bf42', 'a3000000-0000-0000-0000-000000000009', 18, 10, 3, 'a1000000-0000-0000-0000-000000000007', '2026-09-14 15:04:23.770849+00', '2026-09-14 15:04:25.713602+00', true, '000000000001'),
 	('b40050a4-13a0-4bbe-a0fb-b7c957c5e99d', 'a3000000-0000-0000-0000-000000000009', 18, 10, 3, 'a1000000-0000-0000-0000-000000000007', '2026-09-14 15:04:23.770849+00', '2026-09-14 15:04:25.713607+00', true, '000000000002'),
 	('86a3eb50-89a8-4498-a58e-66ab1f49f052', 'a3000000-0000-0000-0000-000000000010', 18, 10, 3, 'a1000000-0000-0000-0000-000000000007', '2026-09-14 15:04:23.770849+00', '2026-09-14 15:04:25.713612+00', true, '000000000001');
+
+-- Supabaseの既定権限から、旧最終状態では不要な権限を除く。
+REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."preset_rounds" FROM "service_role";
+REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."preset_distances" FROM "service_role";
 
 commit;

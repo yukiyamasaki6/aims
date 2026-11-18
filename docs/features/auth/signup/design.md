@@ -67,7 +67,7 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 - `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。パスワード再設定も使う。
 - `src/features/auth/application/password-setup.ts`の`tickCooldown`: 再送できるまでの秒数を進める1秒の予約(`Clock`)。画面の部品`password-setup-form.tsx`が、残りが変わるたびに予約し直す(依存は描画をまたいで同じ参照の`dispatch`だけで、描画のたびには張り直さない)。
 - `src/app/(auth)/layout.tsx`、`src/features/auth/ui/auth-header.tsx`、`src/features/auth/ui/turnstile.tsx`: 認証画面の共通部品と枠。枠は、縦の並び(`flex h-full flex-col`)に、共有のヘッダー(`GuestHeader`。`shrink-0`。紹介画面と同じ。`app/introduction`)と、本文のスクロールの入れ物(`min-h-0 flex-1 overflow-y-auto`)を置き、入れ物の中に、中央寄せの`main`(`min-h-full max-w-sm`)を置く。左上に固定のロゴ(`AppLogo`)は置かない。サインアップ・サインイン・パスワード再設定の全ての段階で出る。
-- `supabase/migrations/20261016000000_users.sql`: `auth.users`のINSERTで`public.users`を作るトリガー。
+- `supabase/migrations/20261117000001_users.sql`: `auth.users`のINSERTで`public.users`を作るトリガー。
 
 契約は次のとおりである。
 
