@@ -55,7 +55,7 @@ function targetFacesSaved(page: Page): Promise<boolean> {
 }
 
 // ラウンドのベースが端末の保存(IndexedDBの`aims-sync`の`bases`)にあるか。ベースの保存のキーは[利用者, 列のID]。
-export function roundBaseSaved(page: Page, roundId: string): Promise<boolean> {
+function roundBaseSaved(page: Page, roundId: string): Promise<boolean> {
   return page.evaluate(
     (streamId) =>
       new Promise<boolean>((resolve, reject) => {

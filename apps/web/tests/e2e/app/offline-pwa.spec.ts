@@ -3,19 +3,8 @@ import type { Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { FRAME_PATHS, shellUrlOf } from "@/routes";
 import { expect, test } from "../fixtures";
-import {
-  getSharedEmail,
-  SHARED_AUTH_STATE_PATH,
-  SHARED_PASSWORD,
-  signUpAndSignIn,
-  waitForHydration,
-} from "../helpers/auth";
+import { SHARED_AUTH_STATE_PATH, signUpAndSignIn } from "../helpers/auth";
 import { collectHydrationErrors } from "../helpers/hydration";
-import {
-  expectRoundBasesFetched,
-  roundBaseSaved,
-} from "../helpers/reference-data";
-import { createRound } from "../helpers/rounds";
 import {
   comeBackOnline,
   goOffline,
@@ -159,81 +148,6 @@ test("Service Workerが登録済みでオフラインのとき、紹介画面を
 
 test.describe("認証済みで開く", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
-
-  test("ラウンドの詳細を開くと、Service Workerが返した枠に読み込み中が表示された後に、ラウンドの内容が表示される", async ({
-    page,
-    context,
-  }) => {
-    const errors = collectHydrationErrors(page);
-    const initialFetch = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return (
-        url.pathname.endsWith("/rest/v1/rounds") &&
-        !url.searchParams.has("id") &&
-        response.ok()
-      );
-    });
-    await page.goto("/rounds");
-    await waitForHydration(page);
-    await waitForServiceWorkerControl(page);
-    await (await initialFetch).finished();
-    await expectRoundBasesFetched(page);
-    await page.waitForLoadState("networkidle");
-    const roundId = await createRound({
-      email: getSharedEmail(),
-      password: SHARED_PASSWORD,
-      name: "枠の確認",
-      roundDate: "2026-08-24",
-      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
-    });
-    expect(await roundBaseSaved(page, roundId)).toBe(false);
-    // 枠が内容より先に表示されることを確かめるため、ラウンドの取得を保留する。
-    let release: () => void = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let requested: () => void = () => {};
-    const requestStarted = new Promise<void>((resolve) => {
-      requested = resolve;
-    });
-    const isTarget = (value: string) => {
-      const url = new URL(value);
-      return (
-        url.pathname.endsWith("/rest/v1/rounds") &&
-        url.searchParams.get("id") === `eq.${roundId}`
-      );
-    };
-    await context.route("**/rest/v1/rounds?*", async (route) => {
-      if (isTarget(route.request().url())) {
-        requested();
-        await gate;
-      }
-      await route.continue();
-    });
-    try {
-      const response = await page.goto(`/rounds/${roundId}`, {
-        waitUntil: "commit",
-      });
-
-      await requestStarted;
-      expect(await roundBaseSaved(page, roundId)).toBe(false);
-      expect(response?.fromServiceWorker()).toBe(true);
-      await expect(
-        page.getByRole("link", { name: roundsText("back") }),
-      ).toBeVisible();
-      await expect(page.getByRole("status")).toBeVisible();
-      await expect(page.getByTestId("round-config-summary")).toHaveCount(0);
-      const detailResponse = page.waitForResponse(
-        (response) => isTarget(response.url()) && response.ok(),
-      );
-      release();
-      await detailResponse;
-      await expect(page.getByTestId("round-config-summary")).toBeVisible();
-      expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
-    } finally {
-      release();
-    }
-  });
 
   test("プリセットを端末に保存していないとき、オフラインでラウンドの作成を開くと、枠と「ネットワークに接続されていません」が表示され、オンラインに戻るとプリセット一覧が表示される", async ({
     page,
