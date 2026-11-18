@@ -1,7 +1,8 @@
 import { FIGURE_LINE } from "./figure-svg";
 import { BLACK, BLUE, GOLD, RED, TARGET_LINE, WHITE } from "./target-style";
+
 // 内側から外側へ。5色の同心円で、各リングの幅は等しい。
-export const STANDARD_COLORS = [GOLD, RED, BLUE, BLACK, WHITE] as const;
+const STANDARD_COLORS = [GOLD, RED, BLUE, BLACK, WHITE] as const;
 // 的の大きさの基準にする線の太さ(viewBox座標)。色の塗りの外縁は、外周の線の外縁から、この太さの半分だけ内側にある。
 const FRAME_WIDTH = FIGURE_LINE;
 

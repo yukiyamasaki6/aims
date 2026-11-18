@@ -2,12 +2,12 @@ import { TargetMark } from "./target-mark";
 
 // 6点的(インドア・60cm・3つ目トライアングル)の3つの的の配置。アプリの的の定義(target_face_spots・target_face_rings)と同じ値(cm)。
 // 中心は、図の向き(下向きがプラス)に直してある(アプリは上向きがプラス)。半径は、各的の最大のリングの半径。
-export const TRIPLE_SPOTS = [
+const TRIPLE_SPOTS = [
   { x: 0, y: -18.48 },
   { x: -16, y: 9.24 },
   { x: 16, y: 9.24 },
 ] as const;
-export const TRIPLE_RADIUS = 15;
+const TRIPLE_RADIUS = 15;
 // 3つの的の外接の範囲の、上端・下端と、縦の中央(中心のy座標)
 const TOP_Y = TRIPLE_SPOTS[0].y - TRIPLE_RADIUS;
 const BOTTOM_Y = TRIPLE_SPOTS[1].y + TRIPLE_RADIUS;

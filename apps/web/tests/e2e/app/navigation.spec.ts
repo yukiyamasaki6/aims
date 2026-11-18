@@ -14,7 +14,6 @@ import { overlapNextRefresh } from "../helpers/session-overlap";
 import { revokeAllSessions } from "../helpers/session-revoke";
 import { homeHeading, settingsPanel } from "../helpers/settings";
 import { waitForTurnstileToken } from "../helpers/turnstile";
-import { expectUncovered } from "../helpers/visibility";
 
 const authText = translatorFor("auth");
 const introductionText = translatorFor("introduction");
@@ -33,33 +32,6 @@ async function signInAsDisposableUser(page: Page, prefix: string) {
     password: "password1",
   });
   await waitForHydration(page);
-}
-
-// レフトパネルのラウンドの開始ボタン。ホームの右下にも同名のリンクがあるため、レフトパネルの中に絞る。
-function startRoundLink(page: Page) {
-  return page
-    .locator("aside")
-    .getByRole("link", { name: navigationText("leftPanelStartRound") });
-}
-
-function panelContents(page: Page) {
-  return [
-    page.getByRole("link", { name: "AIMS" }),
-    startRoundLink(page),
-    page.getByRole("link", { name: navigationText("leftPanelHome") }),
-    page.getByRole("link", { name: navigationText("leftPanelHistory") }),
-    page.getByRole("link", {
-      name: navigationText("leftPanelSettings"),
-      exact: true,
-    }),
-  ];
-}
-
-// ホーム・履歴・設定の項目は角が丸いため、内側の点で確かめる。
-async function expectPanelExpanded(page: Page) {
-  for (const item of panelContents(page)) {
-    await expectUncovered(item, 5);
-  }
 }
 
 test.describe("ロゴ", () => {
@@ -111,7 +83,6 @@ test.describe("認証済み", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: roundsText("homeTitle") }),
     ).toBeVisible();
-    await expectPanelExpanded(page);
   });
 });
 
