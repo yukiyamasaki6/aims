@@ -1,4 +1,4 @@
-// 図の中の的の絵(簡略化した描き方)。輪の色と、色ごとの外縁の半径の比は、アプリの的の定義(target_face_rings。supabase/migrations/20261016000100_target_faces.sql)と同じで、画面の配色(テーマ)に依存しない。
+// 図の中の的の絵(簡略化した描き方)。輪の色と、色ごとの外縁の半径の比は、アプリの的の定義(target_face_rings。supabase/migrations/20261117000002_target_faces.sql)と同じで、画面の配色(テーマ)に依存しない。
 import { BLUE, GOLD, BLACK as OUTLINE, RED, TARGET_LINE } from "./target-style";
 
 // 外側の輪から順に、色と半径(的の半径を50としたとき)。

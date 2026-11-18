@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS "public"."distance_events" (
     "created_at" timestamp with time zone DEFAULT "clock_timestamp"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "clock_timestamp"() NOT NULL,
     "set_fields" "text"[],
-    CONSTRAINT "distance_events_payload_by_type" CHECK (((("type" = 'DISABLED'::"text") AND ("set_fields" IS NULL) AND ("position_key" IS NULL) AND ("distance" IS NULL) AND ("is_marked" IS NULL) AND ("total_ends" IS NULL) AND ("arrows_per_end" IS NULL) AND ("target_face_id" IS NULL)) OR (("type" = 'CREATED'::"text") AND ("set_fields" IS NULL) AND ("position_key" IS NOT NULL) AND ("is_marked" IS NOT NULL) AND ("total_ends" IS NOT NULL) AND ("arrows_per_end" IS NOT NULL) AND ("target_face_id" IS NOT NULL) AND (("is_marked" = false) OR ("distance" IS NOT NULL))) OR (("type" = 'UPDATED'::"text") AND ("set_fields" IS NOT NULL) AND ("cardinality"("set_fields") > 0) AND ("set_fields" <@ ARRAY['distance'::"text", 'is_marked'::"text", 'total_ends'::"text", 'arrows_per_end'::"text", 'target_face_id'::"text"]) AND ("position_key" IS NOT NULL) AND ((NOT ('is_marked'::"text" = ANY ("set_fields"))) OR ("is_marked" IS NOT NULL)) AND (('total_ends'::"text" = ANY ("set_fields")) = ('arrows_per_end'::"text" = ANY ("set_fields"))) AND (('total_ends'::"text" = ANY ("set_fields")) = ('target_face_id'::"text" = ANY ("set_fields"))) AND ((NOT ('total_ends'::"text" = ANY ("set_fields"))) OR (("total_ends" IS NOT NULL) AND ("arrows_per_end" IS NOT NULL) AND ("target_face_id" IS NOT NULL)))))),
     CONSTRAINT "distance_events_revision_positive" CHECK (("revision" >= 1)),
     CONSTRAINT "distance_events_type_check" CHECK (("type" = ANY (ARRAY['CREATED'::"text", 'UPDATED'::"text", 'DISABLED'::"text"])))
 );
@@ -28,7 +27,6 @@ CREATE TABLE IF NOT EXISTS "public"."distance_events" (
 ALTER TABLE "public"."distance_events" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."distance_events"."set_fields" IS 'UPDATEDで効いた項目。作成と削除はnull';
 
 
 CREATE TABLE IF NOT EXISTS "public"."distances" (
@@ -48,6 +46,9 @@ CREATE TABLE IF NOT EXISTS "public"."distances" (
     CONSTRAINT "distances_distance_positive" CHECK ((("distance" IS NULL) OR ("distance" >= 1))),
     CONSTRAINT "distances_marked_requires_distance" CHECK ((("is_marked" = false) OR ("distance" IS NOT NULL))),
     CONSTRAINT "distances_revision_check" CHECK (("revision" >= 1)),
+    CONSTRAINT "distances_distance_max" CHECK ((("distance" IS NULL) OR ("distance" <= 100))),
+    CONSTRAINT "distances_total_ends_max" CHECK (("total_ends" <= 60)),
+    CONSTRAINT "distances_arrows_per_end_max" CHECK (("arrows_per_end" <= 12)),
     CONSTRAINT "distances_total_ends_positive" CHECK (("total_ends" >= 1))
 );
 
@@ -69,7 +70,6 @@ CREATE TABLE IF NOT EXISTS "public"."round_events" (
     "updated_at" timestamp with time zone DEFAULT "clock_timestamp"() NOT NULL,
     "set_fields" "text"[],
     "status" "text",
-    CONSTRAINT "round_events_payload_by_type" CHECK (((("type" = 'DISABLED'::"text") AND ("set_fields" IS NULL) AND ("name" IS NULL) AND ("round_date" IS NULL) AND ("format" IS NULL) AND ("bow_type" IS NULL) AND ("status" IS NULL)) OR (("type" = 'CREATED'::"text") AND ("set_fields" IS NULL) AND ("name" IS NOT NULL) AND ("round_date" IS NOT NULL) AND ("format" IS NOT NULL) AND ("bow_type" IS NOT NULL) AND ("status" IS NULL)) OR (("type" = 'UPDATED'::"text") AND ("set_fields" IS NOT NULL) AND ("cardinality"("set_fields") > 0) AND ("set_fields" <@ ARRAY['name'::"text", 'round_date'::"text", 'format'::"text", 'bow_type'::"text", 'status'::"text"]) AND ((NOT ('name'::"text" = ANY ("set_fields"))) OR ("name" IS NOT NULL)) AND ((NOT ('round_date'::"text" = ANY ("set_fields"))) OR ("round_date" IS NOT NULL)) AND ((NOT ('format'::"text" = ANY ("set_fields"))) OR ("format" IS NOT NULL)) AND ((NOT ('bow_type'::"text" = ANY ("set_fields"))) OR ("bow_type" IS NOT NULL)) AND ((NOT ('status'::"text" = ANY ("set_fields"))) OR ("status" IS NOT NULL))))),
     CONSTRAINT "round_events_revision_positive" CHECK (("revision" >= 1)),
     CONSTRAINT "round_events_status_check" CHECK ((("status" IS NULL) OR ("status" = ANY (ARRAY['in_progress'::"text", 'completed'::"text"])))),
     CONSTRAINT "round_events_type_check" CHECK (("type" = ANY (ARRAY['CREATED'::"text", 'UPDATED'::"text", 'DISABLED'::"text"])))
@@ -79,10 +79,8 @@ CREATE TABLE IF NOT EXISTS "public"."round_events" (
 ALTER TABLE "public"."round_events" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."round_events"."set_fields" IS 'UPDATEDで効いた項目。作成と削除はnull';
 
 
-COMMENT ON COLUMN "public"."round_events"."status" IS 'UPDATEDでstatusが効いたときの値。作成と、statusが効いていないUPDATEDはnull';
 
 
 CREATE TABLE IF NOT EXISTS "public"."round_users" (
@@ -121,7 +119,6 @@ CREATE TABLE IF NOT EXISTS "public"."rounds" (
 ALTER TABLE "public"."rounds" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."rounds"."status" IS 'ラウンドの状態。in_progress（入力中）かcompleted（完了）';
 
 
 CREATE TABLE IF NOT EXISTS "public"."shot_events" (
@@ -139,7 +136,6 @@ CREATE TABLE IF NOT EXISTS "public"."shot_events" (
     "shot_id" "uuid" NOT NULL,
     "shot_number" bigint,
     "set_fields" "text"[],
-    CONSTRAINT "shot_events_payload_by_type" CHECK (((("type" = 'RECORDED'::"text") AND ("set_fields" IS NOT NULL) AND ('score'::"text" = ANY ("set_fields")) AND ("set_fields" <@ ARRAY['score'::"text", 'shooter_id'::"text", 'shot_number'::"text"]) AND ("shooter_id" IS NOT NULL) AND ("score_str" IS NOT NULL) AND ("score_int" IS NOT NULL) AND (('shot_number'::"text" = ANY ("set_fields")) OR ("shot_number" IS NULL))) OR (("type" = 'CLEARED'::"text") AND ("set_fields" IS NULL) AND ("shooter_id" IS NULL) AND ("score_str" IS NULL) AND ("score_int" IS NULL) AND ("shot_number" IS NULL)))),
     CONSTRAINT "shot_events_revision_positive" CHECK (("revision" >= 1)),
     CONSTRAINT "shot_events_shot_number_check" CHECK (("shot_number" >= 1)),
     CONSTRAINT "shot_events_type_check" CHECK (("type" = ANY (ARRAY['RECORDED'::"text", 'CLEARED'::"text"])))
@@ -149,13 +145,10 @@ CREATE TABLE IF NOT EXISTS "public"."shot_events" (
 ALTER TABLE "public"."shot_events" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."shot_events"."shot_id" IS '対象の矢のID';
 
 
-COMMENT ON COLUMN "public"."shot_events"."shot_number" IS 'RECORDEDでset_fieldsにshot_numberを含むとき、記録した射順（nullは射順を外した）。それ以外はnull';
 
 
-COMMENT ON COLUMN "public"."shot_events"."set_fields" IS 'RECORDEDで効いた属性（score、shooter_id、shot_number）。CLEAREDはnull';
 
 
 CREATE TABLE IF NOT EXISTS "public"."shots" (
@@ -178,10 +171,8 @@ CREATE TABLE IF NOT EXISTS "public"."shots" (
 ALTER TABLE "public"."shots" OWNER TO "postgres";
 
 
-COMMENT ON COLUMN "public"."shots"."id" IS '矢のID。新しい矢は端末が作る時刻順のUUID（UUIDv7の形式）。点数の変更・消去・復活で変わらない';
 
 
-COMMENT ON COLUMN "public"."shots"."shot_number" IS 'エンド内で何射目か。nullは射順不明。1以上・矢数以下で、同じエンドの生きている矢で重ならない';
 
 
 ALTER TABLE ONLY "public"."distance_events"
@@ -206,6 +197,20 @@ CREATE INDEX "shots_live_end_idx" ON "public"."shots" USING "btree" ("distance_i
 CREATE UNIQUE INDEX "shots_live_shot_number_key" ON "public"."shots" USING "btree" ("distance_id", "end_number", "shot_number") WHERE (("disabled_at" IS NULL) AND ("shot_number" IS NOT NULL));
 
 
+CREATE OR REPLACE FUNCTION "public"."distance_config_over_limit"("p_distance" numeric, "p_total_ends" numeric, "p_arrows_per_end" numeric) RETURNS boolean
+    LANGUAGE "sql" IMMUTABLE
+    SET "search_path" TO 'public'
+    AS $$
+  select coalesce(p_distance > 100, false)
+    or coalesce(p_total_ends > 60, false)
+    or coalesce(p_arrows_per_end > 12, false);
+$$;
+
+ALTER FUNCTION "public"."distance_config_over_limit"("p_distance" numeric, "p_total_ends" numeric, "p_arrows_per_end" numeric) OWNER TO "postgres";
+
+REVOKE EXECUTE ON FUNCTION "public"."distance_config_over_limit"("p_distance" numeric, "p_total_ends" numeric, "p_arrows_per_end" numeric) FROM PUBLIC, "anon";
+GRANT EXECUTE ON FUNCTION "public"."distance_config_over_limit"("p_distance" numeric, "p_total_ends" numeric, "p_arrows_per_end" numeric) TO "authenticated";
+
 CREATE OR REPLACE FUNCTION "public"."clear_shots"("p_shots" "jsonb") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -219,6 +224,7 @@ declare
   v_shot_id uuid;
   v_row_distance_id uuid;
   v_row_end bigint;
+  v_row_disabled_at timestamptz;
   v_new_revision bigint;
   v_event_revision bigint;
   v_results jsonb := '[]'::jsonb;
@@ -241,11 +247,11 @@ begin
     end if;
   end loop;
 
-  -- record_shotsと同じ順序でdistanceをロックし、得点の記録・取消と距離構成の変更を同じ直列化境界に置く。
+  -- 得点の記録・取消と距離構成の変更を、distanceの行ロックで同じ直列化境界に置く。
+  -- 送信器の要求は距離ごとの1件だけで、複数の距離を逆順で処理する別クライアントは無いため、ID順にはしない。
   for v_distance_id in
     select distinct (shot ->> 'distance_id')::uuid
     from jsonb_array_elements(p_shots) as shot
-    order by 1
   loop
     v_round_id := null;
     select d.round_id into v_round_id
@@ -285,13 +291,19 @@ begin
       continue;
     end if;
 
-    select distance_id, end_number into v_row_distance_id, v_row_end from shots where id = v_shot_id;
+    select distance_id, end_number, disabled_at into v_row_distance_id, v_row_end, v_row_disabled_at from shots where id = v_shot_id;
     if not found then
       v_results := v_results || jsonb_build_object('revision', null::bigint, 'applied', false, 'reason', 'MISSING');
       continue;
     end if;
     if v_row_distance_id <> v_distance_id then
       raise exception '矢の距離が記録と一致しません。' using errcode = 'PT422';
+    end if;
+
+    -- 消えている矢を別の操作IDで消す要求は、書かずに効かない結果で返す(履歴に同じ消去を並べない)。
+    if v_row_disabled_at is not null then
+      v_results := v_results || jsonb_build_object('revision', null::bigint, 'applied', false, 'reason', 'DISABLED');
+      continue;
     end if;
 
     select greatest(
@@ -351,6 +363,9 @@ begin
     or p_target_face_id is null or p_is_marked is null
     or (p_distance is not null and p_distance < 1) then
     raise exception '距離の指定が不正です。' using errcode = 'PT422';
+  end if;
+  if distance_config_over_limit(p_distance, p_total_ends, p_arrows_per_end) then
+    raise exception '距離・総エンド数・矢数が上限を超えています。' using errcode = 'PT422';
   end if;
   if p_is_marked and p_distance is null then
     raise exception 'Markedの距離には距離(m)が必要です。' using errcode = 'PT422';
@@ -471,6 +486,11 @@ begin
         v_distance_value < 1 or v_distance_value > v_max or v_distance_value <> trunc(v_distance_value)
       )) then
       raise exception '距離の指定が不正です。' using errcode = 'PT422';
+    end if;
+    if distance_config_over_limit(
+      v_distance_value, (v_distance ->> 'total_ends')::numeric, (v_distance ->> 'arrows_per_end')::numeric
+    ) then
+      raise exception '距離・総エンド数・矢数が上限を超えています。' using errcode = 'PT422';
     end if;
     if v_is_marked and v_distance_value is null then
       raise exception 'Markedの距離には距離(m)が必要です。' using errcode = 'PT422';
@@ -594,15 +614,16 @@ $$;
 ALTER FUNCTION "public"."disable_distance"("p_distance_event_id" "uuid", "p_distance_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."disable_round"("p_round_event_id" "uuid", "p_round_id" "uuid") RETURNS bigint
+CREATE OR REPLACE FUNCTION "public"."disable_round"("p_round_event_id" "uuid", "p_round_id" "uuid") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
 declare
   v_revision bigint;
+  v_disabled_at timestamptz;
   v_event_revision bigint;
 begin
-  select revision into v_revision
+  select revision, disabled_at into v_revision, v_disabled_at
   from rounds
   where id = p_round_id
   for update;
@@ -613,17 +634,22 @@ begin
 
   select revision into v_event_revision from round_events where event_id = p_round_event_id;
   if found then
-    return v_event_revision;
+    return jsonb_build_object('revision', v_event_revision, 'applied', true, 'reason', null::text);
+  end if;
+
+  -- 削除済みのラウンドは書かない(revisionも削除の時刻も変えない)。
+  if v_disabled_at is not null then
+    return jsonb_build_object('revision', null::bigint, 'applied', false, 'reason', 'DISABLED');
   end if;
 
   insert into round_events (event_id, round_id, type, author_id, revision)
   values (p_round_event_id, p_round_id, 'DISABLED', auth.uid(), v_revision + 1);
 
   update rounds
-  set disabled_at = coalesce(disabled_at, clock_timestamp()), revision = v_revision + 1
+  set disabled_at = clock_timestamp(), revision = v_revision + 1
   where id = p_round_id;
 
-  return v_revision + 1;
+  return jsonb_build_object('revision', v_revision + 1, 'applied', true, 'reason', null::text);
 end;
 $$;
 
@@ -631,30 +657,9 @@ $$;
 ALTER FUNCTION "public"."disable_round"("p_round_event_id" "uuid", "p_round_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."distances_capacity_guard"() RETURNS "trigger"
-    LANGUAGE "plpgsql"
-    SET "search_path" TO 'public'
-    AS $$
-begin
-  perform 1 from distances where id = new.id for update;
-
-  if exists (
-    select 1
-    from shots
-    where distance_id = new.id
-      and disabled_at is null
-    group by end_number
-    having count(*) > new.arrows_per_end
-  ) then
-    raise exception 'エンドの矢が矢数を超えます。' using errcode = '23514';
-  end if;
-
-  return null;
-end;
-$$;
 
 
-ALTER FUNCTION "public"."distances_capacity_guard"() OWNER TO "postgres";
+
 
 
 CREATE OR REPLACE FUNCTION "public"."is_round_editor"("target_round_id" "uuid") RETURNS boolean
@@ -751,13 +756,11 @@ begin
     end if;
   end loop;
 
-  -- バッチ内のdistanceをID順にロックする。同じ複数distanceを逆順で処理する
-  -- 別クライアントともロック順が一致するため、デッドロックを避けられる。
+  -- バッチ内のdistanceをロックする。送信器の要求は距離ごとの1件だけで、ID順にはしない。
   -- 存在しない距離は、要素ごとにMISSINGとして返す。
   for v_distance_id in
     select distinct (shot ->> 'distance_id')::uuid
     from jsonb_array_elements(p_shots) as shot
-    order by 1
   loop
     v_round_id := null;
     select d.round_id into v_round_id
@@ -987,35 +990,9 @@ $$;
 ALTER FUNCTION "public"."shot_fits"("p_target_face_id" "uuid", "p_total_ends" bigint, "p_arrows_per_end" bigint, "p_end" bigint, "p_shot_number" bigint, "p_score_str" "text", "p_score_int" bigint) OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."shots_capacity_guard"() RETURNS "trigger"
-    LANGUAGE "plpgsql"
-    SET "search_path" TO 'public'
-    AS $$
-declare
-  v_arrows_per_end bigint;
-  v_count bigint;
-begin
-  select arrows_per_end into v_arrows_per_end
-  from distances
-  where id = new.distance_id
-  for update;
-
-  select count(*) into v_count
-  from shots
-  where distance_id = new.distance_id
-    and end_number = new.end_number
-    and disabled_at is null;
-
-  if v_count > v_arrows_per_end then
-    raise exception 'エンドの矢が矢数を超えます。' using errcode = '23514';
-  end if;
-
-  return null;
-end;
-$$;
 
 
-ALTER FUNCTION "public"."shots_capacity_guard"() OWNER TO "postgres";
+
 
 
 CREATE OR REPLACE FUNCTION "public"."update_distance"("p_distance_event_id" "uuid", "p_distance_id" "uuid", "p_changes" "jsonb") RETURNS "jsonb"
@@ -1117,6 +1094,9 @@ begin
   ) then
     raise exception '距離(m)が不正です。' using errcode = 'PT422';
   end if;
+  if p_changes ? 'distance' and distance_config_over_limit((p_changes #>> '{distance}')::numeric, null, null) then
+    raise exception '距離・総エンド数・矢数が上限を超えています。' using errcode = 'PT422';
+  end if;
   if p_changes ? 'is_marked' and jsonb_typeof(p_changes -> 'is_marked') <> 'boolean' then
     raise exception 'Marked/Unmarkedが不正です。' using errcode = 'PT422';
   end if;
@@ -1133,6 +1113,11 @@ begin
       or jsonb_typeof(p_changes -> 'config' -> 'target_face_id') <> 'string'
       or (p_changes #>> '{config,target_face_id}') !~ v_uuid_re then
       raise exception '構成の値が不正です。' using errcode = 'PT422';
+    end if;
+    if distance_config_over_limit(
+      null, (p_changes #>> '{config,total_ends}')::numeric, (p_changes #>> '{config,arrows_per_end}')::numeric
+    ) then
+      raise exception '距離・総エンド数・矢数が上限を超えています。' using errcode = 'PT422';
     end if;
     v_new_total_ends := (p_changes #>> '{config,total_ends}')::bigint;
     v_new_arrows_per_end := (p_changes #>> '{config,arrows_per_end}')::bigint;
@@ -1415,7 +1400,6 @@ $_$;
 ALTER FUNCTION "public"."update_round"("p_round_event_id" "uuid", "p_round_id" "uuid", "p_changes" "jsonb") OWNER TO "postgres";
 
 
-CREATE CONSTRAINT TRIGGER "distances_capacity_guard" AFTER UPDATE OF "arrows_per_end", "total_ends" ON "public"."distances" NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "public"."distances_capacity_guard"();
 
 
 CREATE OR REPLACE TRIGGER "set_distance_events_updated_at" BEFORE UPDATE ON "public"."distance_events" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
@@ -1439,7 +1423,6 @@ CREATE OR REPLACE TRIGGER "set_shot_events_updated_at" BEFORE UPDATE ON "public"
 CREATE OR REPLACE TRIGGER "set_shots_updated_at" BEFORE UPDATE ON "public"."shots" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
 
 
-CREATE CONSTRAINT TRIGGER "shots_capacity_guard" AFTER INSERT OR UPDATE OF "disabled_at", "end_number", "distance_id" ON "public"."shots" NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW WHEN (("new"."disabled_at" IS NULL)) EXECUTE FUNCTION "public"."shots_capacity_guard"();
 
 
 ALTER TABLE ONLY "public"."distance_events"
@@ -1459,7 +1442,7 @@ ALTER TABLE ONLY "public"."round_events"
 
 
 ALTER TABLE ONLY "public"."round_users"
-    ADD CONSTRAINT "round_users_round_id_fkey" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
+    ADD CONSTRAINT "round_users_round_id_fkey" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE CASCADE NOT DEFERRABLE;
 
 
 ALTER TABLE ONLY "public"."round_users"
@@ -1500,7 +1483,7 @@ ALTER TABLE "public"."rounds" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "select_if_member" ON "public"."distance_events" FOR SELECT TO "authenticated" USING ("public"."is_round_member"("round_id"));
 
 
-CREATE POLICY "select_if_member" ON "public"."distances" FOR SELECT TO "authenticated" USING ("public"."is_round_member"("round_id"));
+CREATE POLICY "select_if_member" ON "public"."distances" FOR SELECT TO "authenticated" USING (EXISTS (SELECT 1 FROM "public"."rounds" "r" WHERE "r"."id" = "distances"."round_id"));
 
 
 CREATE POLICY "select_if_member" ON "public"."round_events" FOR SELECT TO "authenticated" USING ("public"."is_round_member"("round_id"));
@@ -1517,9 +1500,7 @@ CREATE POLICY "select_if_member" ON "public"."shot_events" FOR SELECT TO "authen
   WHERE ("d"."id" = "shot_events"."distance_id"))));
 
 
-CREATE POLICY "select_if_member" ON "public"."shots" FOR SELECT TO "authenticated" USING ("public"."is_round_member"(( SELECT "d"."round_id"
-   FROM "public"."distances" "d"
-  WHERE ("d"."id" = "shots"."distance_id"))));
+CREATE POLICY "select_if_member" ON "public"."shots" FOR SELECT TO "authenticated" USING (EXISTS (SELECT 1 FROM "public"."distances" "d" WHERE "d"."id" = "shots"."distance_id"));
 
 
 ALTER TABLE "public"."shot_events" ENABLE ROW LEVEL SECURITY;
@@ -1570,51 +1551,51 @@ REVOKE EXECUTE ON FUNCTION "public"."is_round_editor"("target_round_id" "uuid") 
 REVOKE EXECUTE ON FUNCTION "public"."shot_fits"("p_target_face_id" "uuid", "p_total_ends" bigint, "p_arrows_per_end" bigint, "p_end" bigint, "p_shot_number" bigint, "p_score_str" "text", "p_score_int" bigint) FROM PUBLIC, "anon", "authenticated";
 
 
-REVOKE EXECUTE ON FUNCTION "public"."shots_capacity_guard"() FROM PUBLIC, "anon", "authenticated";
 
 
-REVOKE EXECUTE ON FUNCTION "public"."distances_capacity_guard"() FROM PUBLIC, "anon", "authenticated";
 
 
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."distance_events" TO "service_role";
 
 
 GRANT SELECT ON TABLE "public"."distance_events" TO "authenticated";
 
 
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."distances" TO "service_role";
 
 
 GRANT SELECT ON TABLE "public"."distances" TO "authenticated";
 
 
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."round_events" TO "service_role";
 
 
 GRANT SELECT ON TABLE "public"."round_events" TO "authenticated";
 
 
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."round_users" TO "service_role";
 
 
 GRANT SELECT ON TABLE "public"."round_users" TO "authenticated";
 
 
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."rounds" TO "service_role";
 
 
 GRANT SELECT ON TABLE "public"."rounds" TO "authenticated";
 
 
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."shot_events" TO "service_role";
 
 
 GRANT SELECT ON TABLE "public"."shot_events" TO "authenticated";
 
 
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."shots" TO "service_role";
 
 
 GRANT SELECT ON TABLE "public"."shots" TO "authenticated";
+
+-- Supabaseの既定権限から、旧最終状態では不要な権限を除く。
+REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."rounds" FROM "service_role";
+REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."distances" FROM "service_role";
+REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."shots" FROM "service_role";
+REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."round_users" FROM "service_role";
+REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."round_events" FROM "service_role";
+REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."distance_events" FROM "service_role";
+REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."shot_events" FROM "service_role";
 
 commit;

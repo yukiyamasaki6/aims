@@ -68,7 +68,7 @@
   - `eraseHistoryViewMemory(userId)`: このタブの`aims:history-view`が、その利用者のものなら消す。
   - 端末の識別情報(`aims:local-user-id`)は、サインアウトの通知(`signed-out`)で消える。Service Workerのキャッシュに利用者の記録は無い(静的資産と枠だけ)ため、消去の対象外である。
   - 消去の後に別のタブが追記した行は、利用者のIDが別のため、表示も送信もされない。
-- `supabase/migrations/20261115000200_delete_account.sql`: 次を行う。
+- `supabase/migrations/20261117000006_delete_account.sql`: 次を行う。
   - 「削除済みの利用者」を`auth.users`(`banned_until = 'infinity'`、メールなし)に作る。`handle_new_user`が`public.users`の行を作る。
   - `delete_account()`: SECURITY DEFINER、`search_path = ''`、`statement_timeout = '60s'`、EXECUTEは`authenticated`だけ。
 - `delete_account()`の契約:

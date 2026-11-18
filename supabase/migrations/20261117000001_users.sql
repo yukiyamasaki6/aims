@@ -91,7 +91,6 @@ REVOKE EXECUTE ON FUNCTION "public"."handle_new_user"() FROM PUBLIC, "anon", "au
 REVOKE EXECUTE ON FUNCTION "public"."set_updated_at"() FROM PUBLIC, "anon", "authenticated";
 
 
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."users" TO "service_role";
 
 
 GRANT SELECT,UPDATE ON TABLE "public"."users" TO "authenticated";
@@ -106,5 +105,8 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 CREATE TRIGGER "on_auth_user_created"
     AFTER INSERT ON "auth"."users"
     FOR EACH ROW EXECUTE FUNCTION "public"."handle_new_user"();
+
+-- Supabaseの既定権限から、旧最終状態では不要な権限を除く。
+REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."users" FROM "service_role";
 
 commit;

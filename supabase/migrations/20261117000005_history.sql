@@ -1,13 +1,50 @@
--- 点数カードの表示項目を、履歴の関数の戻り値(jsonbの中身)へ足す。署名・戻り値の型・SECURITY INVOKER・STABLE・search_path・所有者・実行権限は変えない。
---   - rounds_list: 各ラウンドにformat、bow_type、distances([{distance, is_marked, total}]。無効でない距離を(position_key, id)の順に、小計は無効でない矢のscore_intの和で矢が無ければ0)を足す
---   - distances_list: 各件にformat、bow_typeを足す
---   - 距離ごとの小計はページに入る行についてだけ求める。並べ替え・絞り込み・起点・ページの切り出しは変えない
---   - 戻すときは、前の本文(20261115000000_history_remove_total_arrows.sql、20261114000300_history_sort_directions.sql)へのCREATE OR REPLACEで行う
-
 begin;
 
 set lock_timeout = '1s';
 set statement_timeout = '5s';
+
+-- 履歴の参照を効率化する。トランザクション内で適用するためCONCURRENTLYは使わない。
+-- squawk-ignore require-concurrent-index-creation
+CREATE INDEX "distances_round_id_idx" ON "public"."distances" USING "btree" ("round_id");
+-- 履歴の所属検索を効率化する。トランザクション内で適用するためCONCURRENTLYは使わない。
+-- squawk-ignore require-concurrent-index-creation
+CREATE INDEX "round_users_user_id_idx" ON "public"."round_users" USING "btree" ("user_id");
+
+CREATE OR REPLACE FUNCTION "public"."history_rounds"("p_format" "text", "p_bow_type" "text", "p_date_from" "date", "p_date_to" "date", "p_distances" "jsonb") RETURNS SETOF "public"."rounds"
+    LANGUAGE "sql" STABLE SECURITY INVOKER
+    AS $$
+  select r.*
+  from public.round_users ru
+  join public.rounds r on r.id = ru.round_id
+  where ru.user_id = auth.uid()
+    and r.disabled_at is null
+    and r.status = 'completed'
+    and (p_format is null or r.format = p_format)
+    and (p_bow_type is null or r.bow_type = p_bow_type)
+    and (p_date_from is null or r.round_date >= p_date_from)
+    and (p_date_to is null or r.round_date <= p_date_to)
+    and (p_distances is null or coalesce((
+      select count(*) = jsonb_array_length(p_distances)
+        and bool_and(coalesce(
+          d.is_marked
+          and d.distance = (c.value->>'distance')::bigint
+          and (c.value->>'arrows_per_end' is null or d.arrows_per_end = (c.value->>'arrows_per_end')::bigint)
+          and (c.value->>'target_face_id' is null or d.target_face_id = (c.value->>'target_face_id')::uuid),
+          false))
+      from (
+        select dd.*, row_number() over (order by dd.position_key, dd.id) as n
+        from public.distances dd
+        where dd.round_id = r.id
+          and dd.disabled_at is null
+      ) d
+      left join jsonb_array_elements(p_distances) with ordinality as c(value, n) on c.n = d.n
+    ), false));
+$$;
+
+ALTER FUNCTION "public"."history_rounds"("p_format" "text", "p_bow_type" "text", "p_date_from" "date", "p_date_to" "date", "p_distances" "jsonb") OWNER TO "postgres";
+
+REVOKE EXECUTE ON FUNCTION "public"."history_rounds"("p_format" "text", "p_bow_type" "text", "p_date_from" "date", "p_date_to" "date", "p_distances" "jsonb") FROM PUBLIC, "anon";
+GRANT EXECUTE ON FUNCTION "public"."history_rounds"("p_format" "text", "p_bow_type" "text", "p_date_from" "date", "p_date_to" "date", "p_distances" "jsonb") TO "authenticated";
 
 CREATE OR REPLACE FUNCTION "public"."rounds_list"("p_date_direction" "text", "p_score_direction" "text", "p_format" "text", "p_bow_type" "text", "p_after_id" "uuid", "p_limit" integer, "p_date_from" "date" DEFAULT NULL, "p_date_to" "date" DEFAULT NULL, "p_score_min" bigint DEFAULT NULL, "p_score_max" bigint DEFAULT NULL, "p_distances" jsonb DEFAULT NULL) RETURNS "jsonb"
     LANGUAGE "sql" STABLE SECURITY INVOKER
@@ -207,5 +244,13 @@ CREATE OR REPLACE FUNCTION "public"."distances_list"("p_date_direction" "text", 
   )
   from page;
 $$;
+
+ALTER FUNCTION "public"."rounds_list"("p_date_direction" "text", "p_score_direction" "text", "p_format" "text", "p_bow_type" "text", "p_after_id" "uuid", "p_limit" integer, "p_date_from" "date", "p_date_to" "date", "p_score_min" bigint, "p_score_max" bigint, "p_distances" jsonb) OWNER TO "postgres";
+ALTER FUNCTION "public"."distances_list"("p_date_direction" "text", "p_score_direction" "text", "p_format" "text", "p_bow_type" "text", "p_after_id" "uuid", "p_limit" integer, "p_date_from" "date", "p_date_to" "date", "p_score_min" bigint, "p_score_max" bigint, "p_distances" jsonb, "p_distance" jsonb) OWNER TO "postgres";
+
+REVOKE EXECUTE ON FUNCTION "public"."rounds_list"("p_date_direction" "text", "p_score_direction" "text", "p_format" "text", "p_bow_type" "text", "p_after_id" "uuid", "p_limit" integer, "p_date_from" "date", "p_date_to" "date", "p_score_min" bigint, "p_score_max" bigint, "p_distances" jsonb) FROM PUBLIC, "anon";
+GRANT EXECUTE ON FUNCTION "public"."rounds_list"("p_date_direction" "text", "p_score_direction" "text", "p_format" "text", "p_bow_type" "text", "p_after_id" "uuid", "p_limit" integer, "p_date_from" "date", "p_date_to" "date", "p_score_min" bigint, "p_score_max" bigint, "p_distances" jsonb) TO "authenticated";
+REVOKE EXECUTE ON FUNCTION "public"."distances_list"("p_date_direction" "text", "p_score_direction" "text", "p_format" "text", "p_bow_type" "text", "p_after_id" "uuid", "p_limit" integer, "p_date_from" "date", "p_date_to" "date", "p_score_min" bigint, "p_score_max" bigint, "p_distances" jsonb, "p_distance" jsonb) FROM PUBLIC, "anon";
+GRANT EXECUTE ON FUNCTION "public"."distances_list"("p_date_direction" "text", "p_score_direction" "text", "p_format" "text", "p_bow_type" "text", "p_after_id" "uuid", "p_limit" integer, "p_date_from" "date", "p_date_to" "date", "p_score_min" bigint, "p_score_max" bigint, "p_distances" jsonb, "p_distance" jsonb) TO "authenticated";
 
 commit;

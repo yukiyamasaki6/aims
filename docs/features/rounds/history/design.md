@@ -250,7 +250,7 @@
   - ポリシーは`ALTER POLICY "select_if_member" ON ... USING (...)`で式だけを置き換える。名前・対象のロール・操作は保たれ、1つの文で変わる。`DROP POLICY`と`CREATE POLICY`にする場合も、同じトランザクションの中なら他の接続から途中の状態(ポリシーが無く何も見えない状態)は見えない。
   - 錠: 索引の作成はその表への書き込みを、ポリシーの変更はその表の読み書きを、コミットまで止める。`lock_timeout`で他の取得・書き込みと重なるとmigrationが失敗しうるが、全体が巻き戻るため再実行で済む。
   - 戻すときは、逆の内容(ポリシーの式を変更前に戻し、索引を消し、本文を戻す)の追加のmigrationで行う。
-  - 索引の2文には、それぞれ直前の行に`-- squawk-ignore require-concurrent-index-creation`を書き、その上に理由のコメントを書く(前例: `20261111000000_distance_practical_limits.sql`)。理由: `create index concurrently`はトランザクションの中で使えず、索引・ポリシー・関数を1つのトランザクションで原子的に適用するため。書き込みの停止は`lock_timeout`で上限を付け、作成時間は合成データ(距離約9万行)で数十ミリ秒だった。`pnpm lint:sql`(squawk)は、この2文を無視の指定なしでは`require-concurrent-index-creation`で失敗し、指定すると通る(同じ形の下書きで確かめた。`ALTER POLICY`と`CREATE OR REPLACE FUNCTION`は検出されない)。
+  - 索引の2文には、それぞれ直前の行に`-- squawk-ignore require-concurrent-index-creation`を書き、その上に理由のコメントを書く(配置先: `20261117000005_history.sql`)。理由: `create index concurrently`はトランザクションの中で使えず、索引・ポリシー・関数を1つのトランザクションで原子的に適用するため。書き込みの停止は`lock_timeout`で上限を付け、作成時間は合成データ(距離約9万行)で数十ミリ秒だった。`pnpm lint:sql`(squawk)は、この2文を無視の指定なしでは`require-concurrent-index-creation`で失敗し、指定すると通る(同じ形の下書きで確かめた。`ALTER POLICY`と`CREATE OR REPLACE FUNCTION`は検出されない)。
 - 条件の評価の順(事実。PostgreSQL 16の実行計画):
   - 1つの表を読むときの`where`の条件は、書いた順でなく、プランナーが見積もった1行あたりの費用の安い順に並べ替えて評価される。絞り込む量(選択率)は順の決定に使われない。費用が同じ条件は書いた順のまま並んだ。RLSの条件は、leakproofでない条件より先に評価される(比較の演算子のようなleakproofの条件は前に出られる)。PostgreSQLの文書は、式の評価の順を保証しない。
   - 結ぶ表や集計に依る条件は、計画の形で順が決まる。ラウンド構成の判定はラウンドを読むときの副問い合わせで、得点の範囲は合計点の集計の後にしか評価できない。
@@ -355,7 +355,7 @@
 - `features/rounds/application/rounds-list-store.ts`（手続き）: 点数一覧の画面に渡す状態。`loadList(condition, after, size)`は、端末の記録(`readList`)を読んで削除済みのラウンドのIDを求め、条件と続きの起点と件数で1ページの取得(`RoundFetching.fetchRoundsList`)を行い、失敗したときはその結果を返し、成功したらページと削除済みのIDを返す。`readDeleted()`は、取得せずに端末の記録の削除済みのIDだけを返す(戻ったときの表示に使う)。1ページごとに`withinFetchTimeout`で10秒に打ち切る(`app/offline-pwa`)。削除が確定済みでも端末の記録へは反映しない(反映は一括の取得の`refreshAll`が行う)。取得の拒否はそのまま伝え、画面の取得の hook が`error`にする。端末内の入力中の一覧は窓口(`features/rounds/application/round-window.ts`の`watchLocalList`/`localList`)が持つ。窓口は購読者が0→1で端末の記録を購読し、変化を同じティックで1回にまとめ、全ての列から導き直し、構造が同値なら参照を変えず通知しない。1→0で値を捨てる(再購読は`null`から始める)。導き直しは、端末の各組を`features/rounds/domain/round-view.ts`の`deriveRoundState`で状態にし、`features/rounds/domain/round-retention.ts`の`isRoundInProgress`が真のものを名前・実施日・合計点にする(`round-list.ts`)。保存済みの的は読まない。入力中と端末が保持するラウンドの一括の取得は、履歴の取得とは別に同期が行う(`features/round-sync/application/round-sync.ts`、`features/rounds/application/round-base-refreshing.ts`)。ユーザーの突き合わせは行わない。ベースと操作の列は端末でユーザーごとに隔離され、取得の利用者と記録の利用者が`same`でない反映は端末へ保存されない。通信の復帰の合図(`whenOnline`)は手続きの入れ物から受ける。画面は時刻、乱数、通信の可否に触らない。
 - `features/rounds/application/round-fetching.ts`（手続き）: 取得の順序。`fetchRoundsList(condition, after, size)`が、`fetchContent`（`features/rounds/application/content-fetcher.ts`）経由で認証を確かめて`RoundQueries.roundsList`を呼び、`roundListItemOf`で項目にして続きの有無を添える。
 - `features/rounds/infrastructure/round-queries.ts`（インフラ層）: 履歴の問い合わせを`DatabaseGateway<RoundsDbSchema>`の`rpc`で履歴の関数(`rounds_list`)へ行い(`roundsList({ condition, after, size })`)、応答を`ServerRoundSummary`の列と続きの有無のまま`QueryOutcome`で返す。応答の形(カードの項目の有無)を確かめ、無いときは取得の失敗として返す(「カードの項目の取得」)。自動の再試行はしない。`rounds_list`の引数のうち、期間と得点の範囲の4つは、`null`でないものだけを送り、ラウンド構成は行が1つ以上のときだけ`p_distances`として送る(指定のない引数は送らない。`rangeArgsOf`と同じ形)。距離単位のときは`distances_list`を呼び(行があれば`p_distance`を送る)、応答の`distances`を距離単位の項目のページにする。生成型では新しい引数がoptionalのため、`rounds-db-schema.ts`にnull許容の上書きは足さない。`rounds-db-schema.ts`は`rounds_list`と`distances_list`を含み、`distances_list`にも`rounds_list`と同じnull許容の上書きを持つ。名前(`roundsList`、`fetchRoundsList`、`loadList`、`RoundsListStore`)は据え置き、履歴の取得を指す。
-- `supabase/migrations/*_rounds_list*.sql`、`*_distances_list*.sql`（DB）: 履歴の関数、ラウンドの条件の関数、距離単位の履歴の関数(「取得の形」)と、その取得が使う索引、`distances`・`shots`のSELECTのポリシー(「索引とRLSと条件の評価の順」)。引数を足すときは、追加のmigrationで旧署名を作り直す。署名を直書きするDBのテスト(`supabase/tests/rpc_matrix.sql`、`rls_matrix.sql`)と生成型(`apps/web/src/types/supabase.ts`)も、同じ変更で新しい署名に合わせる。
+- `supabase/migrations/20261117000005_history.sql`（DB）: 履歴の関数、ラウンドの条件の関数、距離単位の履歴の関数(「取得の形」)と、その取得が使う索引。`distances`・`shots`のSELECTポリシーは`supabase/migrations/20261117000003_rounds.sql`に置く(「索引とRLSと条件の評価の順」)。引数を足すときは、追加のmigrationで旧署名を作り直す。署名を直書きするDBのテスト(`supabase/tests/rpc_matrix.sql`、`rls_matrix.sql`)と生成型(`apps/web/src/types/supabase.ts`)も、同じ変更で新しい署名に合わせる。
 - 端末から導く入力中のラウンドの種別・弓種・距離ごとの小計・合計点は、状態(`deriveRoundState`)の設定、距離・矢から、履歴の関数と同じ規則で端末が求める(`localRoundsList`)。距離は無効でないものを(`position_key`, `id`)の順(`compareDistancePosition`)に並べ、小計は距離ごとの無効でない矢の`score_int`の和、合計点は小計の和(矢が無ければ0)である。ホームでは、途中の値になる。
 
 ## ファイルと層
@@ -382,7 +382,7 @@
 | `features/rounds/application/rounds-list-store.ts`、`round-deletion.ts` | application(点数一覧の画面に渡す状態、削除。削除は手続きの入れ物から画面が直接受ける) |
 | `features/rounds/application/round-fetching.ts` | application(取得の順序)と約束(`RoundQueries`) |
 | `features/rounds/infrastructure/round-queries.ts` | infrastructure(履歴の問い合わせ) |
-| `supabase/migrations/*_rounds_list*.sql`、`*_distances_list*.sql` | DB(履歴の関数、ラウンドの条件の関数、距離単位の履歴の関数と、その索引・RLS) |
+| `supabase/migrations/20261117000005_history.sql` | DB(履歴の関数、ラウンドの条件の関数、距離単位の履歴の関数と、その索引) |
 | `features/rounds/infrastructure/browser-unique-ids.ts` | infrastructure(新しいIDと、IDに混ぜる乱数(`randomBytes`)の払い出し) |
 | `features/rounds/infrastructure/rounds-db-schema.ts` | infrastructure(ラウンドが使うスキーマの部分の型) |
 | `features/rounds/index.ts` | 機能の入口(型だけを公開) |
