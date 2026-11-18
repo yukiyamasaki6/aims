@@ -4,9 +4,9 @@ import { LogoImage } from "@/components/logo-image";
 import { buttonVariants } from "@/components/ui/button";
 import { HOME_PATH, SIGN_IN_PATH, SIGN_UP_PATH } from "@/routes";
 
-// 紹介画面専用のヘッダー。左端にロゴ、右端にサインインとサインアップのリンクを置く。見出しとメニューは持たない。
-export function IntroHeader() {
-  const t = useTranslations("introduction");
+// ログイン前の画面(紹介・認証)が共有するヘッダー。左端にロゴ、右端にサインインとサインアップのリンクを置く。見出しとメニューは持たない。
+export function GuestHeader() {
+  const t = useTranslations("shared");
   return (
     <header className="flex h-16 shrink-0 items-center border-b px-4">
       <Link href={HOME_PATH} className="shrink-0">

@@ -140,19 +140,6 @@ test("サインイン画面で「パスワードをお忘れですか」を押�
   ).toBeVisible();
 });
 
-test("サインイン画面で「サインアップ」を押すと、サインアップ画面へ移動する", async ({
-  page,
-}) => {
-  await openSignIn(page);
-  await page
-    .getByRole("link", { name: authText("signInSignUpLink"), exact: true })
-    .click();
-  await expect(page).toHaveURL(/\/signup$/);
-  await expect(
-    page.getByRole("heading", { name: authText("signUpTitle") }),
-  ).toBeVisible();
-});
-
 test.describe("認証済み", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
 

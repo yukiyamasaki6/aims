@@ -1,12 +1,10 @@
 "use client";
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { SIGN_IN_PATH } from "@/routes";
 import type { PasswordSetup } from "../application/password-setup";
 import type { ScreenView } from "../application/screen-view";
 import { PASSWORD_MIN_LENGTH } from "../domain/password";
@@ -25,15 +23,11 @@ import { Turnstile } from "./turnstile";
 import { useAuthTexts } from "./use-auth-texts";
 import { useScreenView } from "./use-screen-view";
 
-// サインインへのリンクの文言。リンク先は経路の規則が持つ。
-type SignInLinkCopy = { lead?: string; label: string };
-
-// 画面ごとに違う文言とリンク。画面の配置にだけ関わるため、画面の部品が持つ。
+// 画面ごとに違う文言。画面の配置にだけ関わるため、画面の部品が持つ。
 export type PasswordSetupCopy = {
   // エラー文の要素のidの接頭辞。
   idPrefix: string;
   emailTitle: string;
-  emailFooter: SignInLinkCopy;
   passwordTitle: string;
   // パスワード欄の見出し。説明(最小文字数など)は規則の持ち主から得て足す。
   passwordLabel: string;
@@ -83,7 +77,6 @@ export function PasswordSetupForm({
     <OtpEmailStep
       idPrefix={copy.idPrefix}
       title={copy.emailTitle}
-      footer={<SignInLink copy={copy.emailFooter} />}
       email={email}
       onEmailChange={setEmail}
       emailError={texts.fieldError("email", flow.fieldErrors.email)}
@@ -211,16 +204,5 @@ function PasswordStep({
         </p>
       )}
     </>
-  );
-}
-
-function SignInLink({ copy }: { copy: SignInLinkCopy }) {
-  return (
-    <p className="text-muted-foreground text-sm">
-      {copy.lead && <>{copy.lead} </>}
-      <Link href={SIGN_IN_PATH} className="underline">
-        {copy.label}
-      </Link>
-    </p>
   );
 }

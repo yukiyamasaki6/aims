@@ -28,7 +28,6 @@ function createForm(overrides: Partial<Props> = {}) {
   return {
     idPrefix: "test",
     title: "タイトル",
-    footer: <p>フッター</p>,
     email: "",
     onEmailChange: vi.fn(),
     emailError: undefined,
@@ -46,14 +45,13 @@ function createForm(overrides: Partial<Props> = {}) {
 
 function renderStep(
   form: Props,
-  props: { idPrefix?: string; title?: string; footer?: string } = {},
+  props: { idPrefix?: string; title?: string } = {},
 ) {
   return render(
     <OtpEmailStep
       {...form}
       idPrefix={props.idPrefix ?? form.idPrefix}
       title={props.title ?? form.title}
-      footer={props.footer ? <p>{props.footer}</p> : form.footer}
     />,
     { wrapper: IntlTestProvider },
   );
@@ -74,23 +72,17 @@ describe("OtpEmailStep", () => {
   });
 
   describe("画面の違いを受け取る表示", () => {
-    it("titleを見出しに、footerを全体のエラーの下に描く", () => {
+    it("titleを見出しに描く", () => {
       // Given
 
       // When
-      const form = createForm({ error: "全体のエラー" });
-      renderStep(form, { title: "パスワードを再設定", footer: "戻るリンク" });
+      const form = createForm();
+      renderStep(form, { title: "パスワードを再設定" });
 
       // Then
       expect(
         screen.getByRole("heading", { name: authText("resetTitle") }),
       ).toBeInTheDocument();
-      const errorText = screen.getByText("全体のエラー");
-      const footer = screen.getByText("戻るリンク");
-      expect(
-        errorText.compareDocumentPosition(footer) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
     });
 
     it("メールのエラー文の要素のidをidPrefixから作り、入力欄と結びつける", () => {
@@ -229,7 +221,6 @@ describe("OtpEmailStep", () => {
 
       // Then
       expect(container.querySelector("p.text-destructive")).toBeNull();
-      expect(screen.getByText("フッター")).toBeInTheDocument();
     });
   });
 });

@@ -12,7 +12,7 @@
 
 | 状態 | 表示 | 次の状態 |
 | --- | --- | --- |
-| メール入力 | メールアドレス、captcha、送信、サインインへのリンク | 送信成功でコード入力、リンクで`/signin`、検証・送信失敗はエラー表示、送信中は送信ボタンを`aria-disabled`にする。以前のエラーは開始で消す |
+| メール入力 | メールアドレス、captcha、送信。サインインへの本文内のリンクは置かず、ヘッダー(`GuestHeader`)のサインインで行く | 送信成功でコード入力、ヘッダーで`/signin`、検証・送信失敗はエラー表示、送信中は送信ボタンを`aria-disabled`にする。以前のエラーは開始で消す |
 | コード入力 | 認証コード、確認、再送、戻る。迷惑メールの確認を案内する | 確認成功でパスワード設定、戻るでメール入力、再送、確認・再送の失敗はエラー表示、処理中は3つのボタンを`aria-disabled`にする。以前のエラーは開始で消す |
 | パスワード設定 | 新しいパスワード(表示切替つき)、変更 | 成功で`/signin`(全ての端末のサインインの終了の結果によらない)、検証・変更失敗はエラー表示、処理中は変更ボタンを`aria-disabled`にする。以前のエラーは開始で消す |
 
@@ -25,7 +25,7 @@
 構造の方針は`docs/architecture.md`に従う。
 
 - `src/app/(auth)/reset-password/page.tsx`: 入口。認証の実装(接続を作る関数`createClient`を渡す)、遷移の実装、通信の可否の約束(`Connectivity`。送信の直前のオフラインの読み取りに使う)、手続きを生成し、手続きを画面へ渡す。
-- `src/features/auth/ui/reset-password-form.tsx`: 再設定の画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)を、UI層の文言の一覧から得る。サインアップと共有の骨組みへ渡す。
+- `src/features/auth/ui/reset-password-form.tsx`: 再設定の画面の文言(見出し、パスワード設定の段階の文言)を、UI層の文言の一覧から得る。サインアップと共有の骨組みへ渡す。
 - `src/features/auth/ui/password-setup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。状態を`useScreenView`で持ち、操作のたびに入力と画面の約束(`ScreenView`)を手続きへ渡す。サインアップと共有する。
 - `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。サインアップと共有する。
 - `src/features/auth/application/reset-password.ts`: 手続き。状態を持たず、コードの送付(初回も再送も同じ操作)、確認の順序と、パスワードの設定の後の、この端末のサインインの終了(結果は見ない)と、サインインへの遷移を持つ。
@@ -37,7 +37,7 @@
   応答が無かった場合(接続を作れない、呼び出しが投げた)は、`unreachable`の失敗として返す。
 - `src/features/auth/infrastructure/browser-page-load.ts`: サインアウトのセッション喪失の遷移（`window.location.replace`による置き換え、今の場所）の実装。
 - `src/features/auth/application/password-setup.ts`の`tickCooldown`: 再送できるまでの秒数を進める1秒の予約(`Clock`)。画面の部品`password-setup-form.tsx`が、残りが変わるたびに予約し直す(依存は描画をまたいで同じ参照の`dispatch`だけで、描画のたびには張り直さない)。
-- `src/app/(auth)/layout.tsx`、`src/features/auth/ui/auth-header.tsx`、`src/features/auth/ui/turnstile.tsx`: 認証画面の共通部品と枠。
+- `src/app/(auth)/layout.tsx`、`src/features/auth/ui/auth-header.tsx`、`src/features/auth/ui/turnstile.tsx`: 認証画面の共通部品と枠(ヘッダーを含む。`auth/signup`)。
 
 契約は次のとおりである。
 

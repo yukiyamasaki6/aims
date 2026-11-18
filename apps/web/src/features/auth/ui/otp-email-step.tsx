@@ -2,7 +2,7 @@
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { useTranslations } from "next-intl";
-import type { FormEvent, ReactNode, RefObject } from "react";
+import type { FormEvent, RefObject } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { AuthField } from "./auth-field";
@@ -13,8 +13,6 @@ type OtpEmailStepProps = {
   // エラー文の要素のidの接頭辞(`${idPrefix}-email-error`)。
   idPrefix: string;
   title: string;
-  // 全体のエラーの下に置く、サインインへのリンクなど。
-  footer: ReactNode;
   email: string;
   onEmailChange: (value: string) => void;
   emailError: string | undefined;
@@ -31,7 +29,6 @@ type OtpEmailStepProps = {
 export function OtpEmailStep({
   idPrefix,
   title,
-  footer,
   email,
   onEmailChange,
   emailError,
@@ -79,7 +76,6 @@ export function OtpEmailStep({
         </BusyButton>
       </form>
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
-      {footer}
     </>
   );
 }

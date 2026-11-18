@@ -6,7 +6,7 @@ import { type FormEvent, useRef, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { RESET_PASSWORD_PATH, SIGN_UP_PATH } from "@/routes";
+import { RESET_PASSWORD_PATH } from "@/routes";
 import type { SignIn } from "../application/sign-in";
 import {
   initialSignInFlow,
@@ -83,12 +83,6 @@ export function SignInForm({
       <p className="text-muted-foreground text-sm">
         <Link href={RESET_PASSWORD_PATH} className="underline">
           {t("signInForgotPassword")}
-        </Link>
-      </p>
-      <p className="text-muted-foreground text-sm">
-        {t("signInNoAccount")}{" "}
-        <Link href={SIGN_UP_PATH} className="underline">
-          {t("signInSignUpLink")}
         </Link>
       </p>
     </>

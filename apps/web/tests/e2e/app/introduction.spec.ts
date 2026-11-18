@@ -6,6 +6,7 @@ import { homeHeading } from "../helpers/settings";
 
 const authText = translatorFor("auth");
 const introductionText = translatorFor("introduction");
+const sharedText = translatorFor("shared");
 
 function header(page: Page) {
   return page.getByRole("banner");
@@ -20,13 +21,13 @@ function startLinks(page: Page) {
 
 function signInLink(page: Page) {
   return header(page).getByRole("link", {
-    name: introductionText("headerSignIn"),
+    name: sharedText("headerSignIn"),
   });
 }
 
 function signUpLink(page: Page) {
   return header(page).getByRole("link", {
-    name: introductionText("headerSignUp"),
+    name: sharedText("headerSignUp"),
   });
 }
 

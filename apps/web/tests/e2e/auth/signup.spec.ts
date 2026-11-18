@@ -259,19 +259,6 @@ test("登録済みのメールアドレスで送信すると、コード入力�
   expect(notice.html).not.toMatch(/\d{6}/);
 });
 
-test("サインアップ画面で「サインイン」を押すと、サインイン画面へ移動する", async ({
-  page,
-}) => {
-  await openSignUp(page);
-  await page
-    .getByRole("link", { name: authText("signUpFooterLink"), exact: true })
-    .click();
-  await expect(page).toHaveURL(/\/signin$/);
-  await expect(
-    page.getByRole("heading", { name: authText("signInTitle") }),
-  ).toBeVisible();
-});
-
 test.describe("認証済み", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
 

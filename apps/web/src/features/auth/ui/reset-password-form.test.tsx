@@ -185,7 +185,7 @@ describe("ResetPasswordForm", () => {
   });
 
   describe("文言とリンク", () => {
-    it("メール入力の段階は、再設定の見出しと、サインインに戻るリンクを表示する", () => {
+    it("メール入力の段階は、再設定の見出しを表示する", () => {
       // Given
 
       // When
@@ -195,12 +195,9 @@ describe("ResetPasswordForm", () => {
       expect(
         screen.getByRole("heading", { name: authText("resetTitle") }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByRole("link", { name: authText("resetBackToSignIn") }),
-      ).toHaveAttribute("href", "/signin");
     });
 
-    it("パスワード設定の段階は、再設定の見出しを表示し、補足説明とサインインに戻るリンクを表示しない", async () => {
+    it("パスワード設定の段階は、再設定の見出しを表示し、補足説明を表示しない", async () => {
       // Given
       renderForm();
       await advanceToPasswordStep();
@@ -217,9 +214,6 @@ describe("ResetPasswordForm", () => {
       ).not.toBeInTheDocument();
       expect(passwordInput()).toBeInTheDocument();
       expect(setPasswordButton()).toBeInTheDocument();
-      expect(
-        screen.queryByRole("link", { name: authText("resetBackToSignIn") }),
-      ).not.toBeInTheDocument();
     });
 
     it("パスワードの不備のエラー文は、reset-password-password-errorのidで入力欄と結び付く", async () => {

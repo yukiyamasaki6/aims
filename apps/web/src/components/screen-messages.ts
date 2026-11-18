@@ -4,6 +4,8 @@ export const screenMessages = {
     appName: "AIMS",
     appDescription: "AIMS Web Application",
     logoAlt: "AIMS",
+    headerSignIn: "サインイン",
+    headerSignUp: "サインアップ",
     confirmDelete: "削除",
     confirmCancel: "キャンセル",
   },

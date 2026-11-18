@@ -15,7 +15,6 @@ export function ResetPasswordForm({
   const copy = {
     idPrefix: "reset-password",
     emailTitle: t("resetTitle"),
-    emailFooter: { label: t("resetBackToSignIn") },
     passwordTitle: t("resetPasswordTitle"),
     passwordLabel: t("resetPasswordLabel"),
     passwordSubmit: t("resetPasswordSubmit"),

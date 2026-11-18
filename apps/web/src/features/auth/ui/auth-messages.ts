@@ -76,18 +76,13 @@ export const authMessages = {
     signInTitle: "サインイン",
     signInSubmit: "サインイン",
     signInForgotPassword: "パスワードをお忘れですか",
-    signInNoAccount: "アカウントをお持ちでない方は",
-    signInSignUpLink: "サインアップ",
     // サインアップ
     signUpTitle: "サインアップ",
-    signUpFooterLead: "既にアカウントをお持ちの方は",
-    signUpFooterLink: "サインイン",
     signUpPasswordTitle: "パスワードを設定",
     signUpPasswordLabel: "パスワード",
     signUpPasswordSubmit: "登録してサインイン",
     // パスワードの再設定
     resetTitle: "パスワードを再設定",
-    resetBackToSignIn: "サインインに戻る",
     resetPasswordTitle: "新しいパスワードを設定",
     resetPasswordLabel: "新しいパスワード",
     resetPasswordSubmit: "パスワードを変更",

@@ -67,7 +67,7 @@ const subjects: {
   requiresCheck: boolean;
 }[] = [
   {
-    name: authText("signInSignUpLink"),
+    name: authText("signUpTitle"),
     create: () =>
       createSignUp({
         clock: createBrowserClock(),
