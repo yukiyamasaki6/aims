@@ -29,6 +29,7 @@ import {
 import { homeHeading, railItem, settingsPanel } from "../helpers/settings";
 
 const authText = translatorFor("auth");
+const introductionText = translatorFor("introduction");
 const navigationText = translatorFor("navigation");
 const offlinePwaText = translatorFor("offlinePwa");
 const roundsText = translatorFor("rounds");
@@ -450,7 +451,9 @@ test("オフラインのページでAIMSロゴを押すと、紹介画面へ移�
   await page.getByRole("link", { name: "AIMS" }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: introductionText("catch") }),
+  ).toBeVisible();
 });
 
 test("Service Workerが登録済みで未認証のとき、ラウンドの詳細を開くと、Service Workerが返した枠からサインイン画面へ移動する", async ({

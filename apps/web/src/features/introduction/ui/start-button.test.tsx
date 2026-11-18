@@ -4,11 +4,11 @@ import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { StartButton } from "./start-button";
 
-const navigationText = translatorFor("navigation");
+const introductionText = translatorFor("introduction");
 
 describe("StartButton", () => {
-  // 押して移ることはE2E(navigation.spec.ts)が確かめる。
-  it("開始リンクは、サインアップの画面を向く", () => {
+  // 押して移ることはE2E(introduction.spec.ts)が確かめる。
+  it("開始リンクは、名前が「記録を始める」で、サインアップの画面を向く", () => {
     // Given
 
     // When
@@ -16,7 +16,7 @@ describe("StartButton", () => {
 
     // Then
     expect(
-      screen.getByRole("link", { name: navigationText("startButton") }),
+      screen.getByRole("link", { name: introductionText("startButton") }),
     ).toHaveAttribute("href", "/signup");
   });
 });

@@ -1,6 +1,7 @@
 import type { IntlConfig, IntlError } from "next-intl";
 import { screenMessages } from "@/components/screen-messages";
 import { authMessages } from "@/features/auth/ui/auth-messages";
+import { introductionMessages } from "@/features/introduction/ui/introduction-messages";
 import { navigationMessages } from "@/features/navigation/ui/navigation-messages";
 import { offlinePwaMessages } from "@/features/offline-pwa/ui/offline-pwa-messages";
 import { roundsMessages } from "@/features/rounds/ui/rounds-messages";
@@ -12,6 +13,7 @@ const locale = "ja";
 const messages = {
   auth: authMessages.ja,
   rounds: roundsMessages.ja,
+  introduction: introductionMessages.ja,
   navigation: navigationMessages.ja,
   offlinePwa: offlinePwaMessages.ja,
   settings: settingsMessages.ja,
