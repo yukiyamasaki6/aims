@@ -71,6 +71,7 @@ export const roundsMessages = {
       scoreOrder: "下限は上限以下にしてください",
     } satisfies Record<HistoryRangeError, string>,
     historyFilterDistances: "ラウンド構成",
+    historyFilterDistanceGroup: "距離構成",
     historyFilterDistance: "距離(m)",
     historyFilterArrowsPerEnd: "射数/エンド",
     historyFilterTarget: "的",

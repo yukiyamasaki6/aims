@@ -51,6 +51,11 @@ function DistanceSummary({
   );
 }
 
+// 入力欄の見出し。ラウンド構成と距離構成で同じ見た目にする。
+function GroupLabel({ children }: { children: string }) {
+  return <span className="text-muted-foreground text-sm">{children}</span>;
+}
+
 function AddLabel({ children }: { children: string }) {
   return (
     <>
@@ -75,9 +80,7 @@ export function HistoryDistanceList({
   const listRef = useRef<HTMLDivElement>(null);
   return (
     <div ref={listRef} className="flex flex-col gap-2">
-      <span className="text-muted-foreground text-sm">
-        {t("historyFilterDistances")}
-      </span>
+      <GroupLabel>{t("historyFilterDistances")}</GroupLabel>
       {rows.map((row, index) => (
         <HistoryDistanceDialog
           // biome-ignore lint/suspicious/noArrayIndexKey: 行は位置で識別する(同じ値の行がありうる)。編集で値が変わっても、閉じた後のフォーカス復帰先のトリガーを保つ
@@ -125,25 +128,28 @@ export function HistoryDistanceSelect({
   const t = useTranslations("rounds");
   const targetFaces = useSavedTargetFaces();
   return (
-    <HistoryDistanceDialog
-      mode={row === null ? "select" : "edit"}
-      row={row}
-      filter={filter}
-      trigger={
-        row === null ? (
-          <AddLabel>{t("historyFilterDistanceSelect")}</AddLabel>
-        ) : (
-          <DistanceSummary row={row} targetFaces={targetFaces} />
-        )
-      }
-      triggerTestId={
-        row === null
-          ? "history-filter-distance-select"
-          : "history-filter-distance-row"
-      }
-      triggerClassName={row === null ? ADD_CLASS : SUMMARY_CLASS}
-      onConfirm={onChange}
-      onDelete={row === null ? undefined : () => onChange(null)}
-    />
+    <div className="flex flex-col gap-2">
+      <GroupLabel>{t("historyFilterDistanceGroup")}</GroupLabel>
+      <HistoryDistanceDialog
+        mode={row === null ? "select" : "edit"}
+        row={row}
+        filter={filter}
+        trigger={
+          row === null ? (
+            <AddLabel>{t("historyFilterDistanceSelect")}</AddLabel>
+          ) : (
+            <DistanceSummary row={row} targetFaces={targetFaces} />
+          )
+        }
+        triggerTestId={
+          row === null
+            ? "history-filter-distance-select"
+            : "history-filter-distance-row"
+        }
+        triggerClassName={row === null ? ADD_CLASS : SUMMARY_CLASS}
+        onConfirm={onChange}
+        onDelete={row === null ? undefined : () => onChange(null)}
+      />
+    </div>
   );
 }
