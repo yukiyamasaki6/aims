@@ -3,12 +3,10 @@ import { translatorFor } from "@/i18n/translator-test-helpers";
 import { SETTINGS_ACCOUNT_HASH } from "@/routes";
 import { expect, test } from "../fixtures";
 import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
-import { waitForServiceWorkerControl } from "../helpers/service-worker";
 import { settingsPanel } from "../helpers/settings";
 
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
-const offlinePwaText = translatorFor("offlinePwa");
 
 // サインアウトする（失敗するケースも含む）テストのため、
 // 共有の認証状態を汚さないよう使い捨てユーザーで専用のセッションを使う。
@@ -23,7 +21,6 @@ async function signInAndOpenDialog(
   options: {
     installClock?: boolean;
     path?: string;
-    controlledByServiceWorker?: boolean;
   } = {},
 ) {
   // 時計は画面遷移より前に差し替える必要がある。
@@ -38,10 +35,10 @@ async function signInAndOpenDialog(
     await page.goto(options.path);
     await waitForHydration(page);
   }
-  // オフラインの/signinはService Workerが/offlineを返すため、先に制御下に置く。
-  // 制御されていなければ読み込み直すため、設定画面やダイアログを開く前に行う。
-  if (options.controlledByServiceWorker)
-    await waitForServiceWorkerControl(page);
+  return openSignOutDialog(page);
+}
+
+async function openSignOutDialog(page: Page) {
   await page
     .getByRole("link", {
       name: navigationText("leftPanelSettings"),
@@ -83,28 +80,55 @@ test("別の画面でサインアウトを確認すると、この端末のセ�
   await expect(page).toHaveURL(/\/signin/);
 });
 
-test("オフラインでサインアウトを確認すると、この端末のセッションが終了し、オフライン画面が表示される", async ({
+test("オフラインでサインアウトを確認すると、理由が表示されサインインを保ち、オンラインに戻して再度確認するとサインイン画面へ移動する", async ({
   page,
 }) => {
-  const { confirmButton } = await signInAndOpenDialog(page, "signout-offline", {
-    controlledByServiceWorker: true,
-  });
+  const { confirmButton } = await signInAndOpenDialog(page, "signout-offline");
 
-  // オフラインでサインアウトを確認して、オフライン画面へ移る。
-  // scope:"local"のsignOut()は、サーバーへの通信が失敗してもローカルセッションの
-  // 削除自体は必ず行う。UIは通信の成否ではなく、これを根拠に遷移する。
+  // オフラインでサインアウトを確認して、理由を表示したまま設定パネルに留まる。
   await page.context().setOffline(true);
-
   await confirmButton.click();
+  await expect(page.getByText(authText("failure.offline"))).toBeVisible();
+  await expect(confirmButton).toHaveAttribute("aria-disabled", "false");
+  await expect(page).toHaveURL(new RegExp(`${SETTINGS_ACCOUNT_HASH}$`));
 
-  await expect(
-    page.getByRole("heading", { name: offlinePwaText("offlineTitle") }),
-  ).toBeVisible();
-
-  // 端末のセッションが消えていることを、オンラインへ戻して確認する。
+  // オンラインへ戻して再度確認し、サインイン画面へ移る。
   await page.context().setOffline(false);
+  await confirmButton.click();
+  await expect(page).toHaveURL(/\/signin$/);
+
+  // ラウンド一覧を開き直して、この端末のセッションが終了したことを確かめる。
   await page.goto("/rounds");
   await expect(page).toHaveURL(/\/signin/);
+});
+
+test("認証サービスが失効を受け付けず失敗すると、理由が表示され、端末のサインインが残り、通信が戻った再度の確認でサインイン画面へ移動する", async ({
+  page,
+}) => {
+  const { confirmButton } = await signInAndOpenDialog(page, "signout-revoke");
+
+  // 失効の通信が500で失敗する状態で確認して、理由を表示したまま設定パネルに留まる。
+  await page.route("**/auth/v1/logout*", (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ code: 500, msg: "server error" }),
+    }),
+  );
+  await confirmButton.click();
+  await expect(page.getByText(authText("failure.other"))).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${SETTINGS_ACCOUNT_HASH}$`));
+
+  // 画面を開き直しても、サインインしたままであることを確かめて、再び確認の画面を開く。
+  await page.goto("/rounds");
+  await waitForHydration(page);
+  await expect(page).toHaveURL(/\/rounds$/);
+  await page.unroute("**/auth/v1/logout*");
+  const retryButton = (await openSignOutDialog(page)).confirmButton;
+
+  // 通信が戻った状態で確認して、サインイン画面へ移る。
+  await retryButton.click();
+  await expect(page).toHaveURL(/\/signin$/);
 });
 
 test("トークンを更新できずサインアウトに失敗すると、エラーが表示され、画面に留まって再度確認できる", async ({

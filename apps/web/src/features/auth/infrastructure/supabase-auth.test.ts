@@ -32,6 +32,7 @@ function setup() {
     resend: vi.fn(),
     updateUser: vi.fn(),
     signOut: vi.fn(),
+    admin: { signOut: vi.fn() },
     getSession: vi.fn(),
     getUser: vi.fn(),
     onAuthStateChange: vi.fn((listener: Listener) => {
@@ -358,10 +359,104 @@ describe("メールアドレスの変更(readCurrentEmail、requestEmailChange�
   });
 });
 
+const serverError = new AuthApiError("server error", 500, "unexpected_failure");
+const session = { access_token: "access-token-1" } as Session;
+
 describe("この端末のサインアウト(signOutHere)", () => {
-  it("この端末のサインアウトだけを、scopeにlocalを指定して1回頼み、問題が無ければ受け付けられたを返す", async () => {
+  function setupWithSession() {
+    const made = setup();
+    made.auth.getSession.mockResolvedValue({ data: { session }, error: null });
+    made.auth.admin.signOut.mockResolvedValue({ error: null });
+    made.auth.signOut.mockResolvedValue({ error: null });
+    return made;
+  }
+
+  it("失効が受け付けられたら、アクセストークンとlocalで1回頼んだ後に保存先を削除し、受け付けられたを返す", async () => {
+    // Given
+    const { service, auth } = setupWithSession();
+
+    // When
+    const result = await service.signOutHere();
+
+    // Then
+    expect(result).toEqual({ kind: "accepted" });
+    expect(auth.admin.signOut).toHaveBeenCalledExactlyOnceWith(
+      "access-token-1",
+      "local",
+    );
+    expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "local" });
+    expect(auth.admin.signOut.mock.invocationCallOrder[0]).toBeLessThan(
+      auth.signOut.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it.each([
+    ["401", 401],
+    ["403", 403],
+    ["404", 404],
+  ] as const)(
+    "失効の頼みが%sで拒否されたときは、失効済みとして保存先を削除し、受け付けられたを返す",
+    async (_name, status) => {
+      // Given
+      const { service, auth } = setupWithSession();
+      auth.admin.signOut.mockResolvedValue({
+        error: new AuthApiError("gone", status, "session_not_found"),
+      });
+
+      // When
+      const result = await service.signOutHere();
+
+      // Then
+      expect(result).toEqual({ kind: "accepted" });
+      expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "local" });
+    },
+  );
+
+  it.each([
+    ["通信の断の値", connectionLost, { kind: "unreachable" }],
+    ["サーバーの失敗(500)", serverError, { kind: "other" }],
+    ["認証サービスの拒否(429)", rateLimited, { kind: "rate_limited" }],
+    [
+      "その他の拒否(400)",
+      new AuthApiError("bad request", 400, "some_unknown_code"),
+      { kind: "other" },
+    ],
+  ] as const)(
+    "失効の頼みが%sで返ったときは、保存先を削除せず、その失敗の種類で返す",
+    async (_name, error, failure) => {
+      // Given
+      const { service, auth } = setupWithSession();
+      auth.admin.signOut.mockResolvedValue({ error });
+
+      // When
+      const result = await service.signOutHere();
+
+      // Then
+      expect(result).toEqual({ kind: "failed", failure });
+      expect(auth.signOut).not.toHaveBeenCalled();
+    },
+  );
+
+  it("失効の頼みが投げたときは、保存先を削除せず、届かなかった失敗にする", async () => {
+    // Given
+    const { service, auth } = setupWithSession();
+    auth.admin.signOut.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    // When
+    const result = await service.signOutHere();
+
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+    expect(auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it("保存先にセッションが無いときは、失効を頼まず、保存先を整理して受け付けられたを返す", async () => {
     // Given
     const { service, auth } = setup();
+    auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
     auth.signOut.mockResolvedValue({ error: null });
 
     // When
@@ -369,7 +464,87 @@ describe("この端末のサインアウト(signOutHere)", () => {
 
     // Then
     expect(result).toEqual({ kind: "accepted" });
+    expect(auth.admin.signOut).not.toHaveBeenCalled();
     expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "local" });
+  });
+
+  it("保存先のセッションを取得できない(エラーを返す)ときは、何も頼まず、その失敗の種類で返す", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.getSession.mockResolvedValue({
+      data: { session: null },
+      error: rateLimited,
+    });
+
+    // When
+    const result = await service.signOutHere();
+
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "rate_limited" },
+    });
+    expect(auth.admin.signOut).not.toHaveBeenCalled();
+    expect(auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it("保存先のセッションの取得が投げたときは、何も頼まず、届かなかった失敗にする", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.getSession.mockRejectedValue(new Error("storage"));
+
+    // When
+    const result = await service.signOutHere();
+
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+    expect(auth.admin.signOut).not.toHaveBeenCalled();
+    expect(auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it("保存先の削除がエラーを返しても、失効済みのため、受け付けられたを返す", async () => {
+    // Given
+    const { service, auth } = setupWithSession();
+    auth.signOut.mockResolvedValue({ error: rateLimited });
+
+    // When
+    const result = await service.signOutHere();
+
+    // Then
+    expect(result).toEqual({ kind: "accepted" });
+  });
+
+  it("接続を得られないときも、届かなかった失敗にする", async () => {
+    // Given
+    const service = unavailableService();
+
+    // When
+    const result = await service.signOutHere();
+
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+  });
+});
+
+describe("保存先のセッションの削除(discardHere)", () => {
+  it("scopeにlocalを指定して1回頼み、失効の頼み(admin.signOut)はせず、問題が無ければ受け付けられたを返す", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.signOut.mockResolvedValue({ error: null });
+
+    // When
+    const result = await service.discardHere();
+
+    // Then
+    expect(result).toEqual({ kind: "accepted" });
+    expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "local" });
+    expect(auth.admin.signOut).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -388,7 +563,7 @@ describe("この端末のサインアウト(signOutHere)", () => {
       auth.signOut.mockResolvedValue({ error });
 
       // When
-      const result = await service.signOutHere();
+      const result = await service.discardHere();
 
       // Then
       expect(result).toEqual({ kind: "failed", failure });
@@ -401,7 +576,7 @@ describe("この端末のサインアウト(signOutHere)", () => {
     auth.signOut.mockRejectedValue(new TypeError("Failed to fetch"));
 
     // When
-    const result = await service.signOutHere();
+    const result = await service.discardHere();
 
     // Then
     expect(result).toEqual({
@@ -415,7 +590,7 @@ describe("この端末のサインアウト(signOutHere)", () => {
     const service = unavailableService();
 
     // When
-    const result = await service.signOutHere();
+    const result = await service.discardHere();
 
     // Then
     expect(result).toEqual({

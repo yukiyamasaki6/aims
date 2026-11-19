@@ -352,7 +352,7 @@ describe("排他と保持", () => {
     // Given
     const h = setup();
     await sendOtp(h);
-    h.authenticator.signOutHere.mockResolvedValue({
+    h.authenticator.discardHere.mockResolvedValue({
       kind: "failed",
       failure: { kind: "unreachable" },
     });

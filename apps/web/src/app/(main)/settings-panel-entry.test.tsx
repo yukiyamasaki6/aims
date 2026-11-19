@@ -5,6 +5,7 @@ import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-pa
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SessionProvider } from "@/features/auth/ui/session-context";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 
 import "fake-indexeddb/auto";
@@ -100,6 +101,7 @@ function SessionWrapper({ children }: { children: ReactNode }) {
       recordUser: { isRecordUser: () => true },
       identity: createBrowserIdentityStore(),
       clock: createBrowserClock(),
+      connectivity: createFakeConnectivity(),
     }),
   );
   return (

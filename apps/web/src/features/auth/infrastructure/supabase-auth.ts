@@ -52,7 +52,8 @@ export function createSupabaseAuth(
     readCurrentAccount: () => readCurrentAccount(auth),
     ...createChangeEmailAuthenticator(auth),
     // この端末のサインインだけを終える。終えられたかは、呼び出し側が、この後のサインインの状態の読み取りで決める。
-    signOutHere: () => toCallResult(() => signOut(auth(), "local")),
+    signOutHere: () => revokeAndClear(auth),
+    discardHere: () => toCallResult(() => signOut(auth(), "local")),
     subscribe: (listener) => {
       const {
         data: { subscription },
@@ -75,6 +76,41 @@ export function createSupabaseAuth(
 // この端末のセッションだけを終了する。
 function signOut(auth: Auth, scope: "local") {
   return auth.signOut({ scope });
+}
+
+// セッションが既に無いことを表す、失効の呼び出しの拒否の状態コード。
+const GONE_STATUSES = new Set([401, 403, 404]);
+
+// この端末のセッションの失効を認証サービスに頼み、受け付けられたときだけ保存先のセッションを削除する。
+// SDKのsignOutは、通信失敗など(401・403・404以外)でも保存先を削除するため、失効の頼み(admin.signOut)と保存先の削除を分ける。
+// 失効が受け付けられなかった(届かない、5xx、429など)ときと、保存先のセッションを取得できないときは、保存先に触らず失敗を返す。
+// 保存先にセッションが無いときは、保存先を整理して受け付けとする。
+async function revokeAndClear(auth: () => Auth): Promise<CallResult> {
+  try {
+    const { data, error } = await auth().getSession();
+    if (error) return failedResult(error);
+    if (!data.session) return await clearLocal(auth);
+    const revoked = await auth().admin.signOut(
+      data.session.access_token,
+      "local",
+    );
+    if (revoked.error && !GONE_STATUSES.has(revoked.error.status ?? 0)) {
+      return failedResult(revoked.error);
+    }
+    return await clearLocal(auth);
+  } catch {
+    return { kind: "failed", failure: UNREACHABLE };
+  }
+}
+
+function failedResult(error: AuthError): CallResult {
+  return { kind: "failed", failure: toAuthFailure(error, REJECTION_KINDS) };
+}
+
+// 失効の済んだ(またはセッションの無い)保存先を削除して通知を出す。ここでのエラーは無視する(失効済みのため。終えられたかは後続の読み取りが判定する)。
+async function clearLocal(auth: () => Auth): Promise<CallResult> {
+  await signOut(auth(), "local");
+  return { kind: "accepted" };
 }
 
 // サインインの状態を判定する。結果の意味の判定はjudgeSessionResultが行い、ここは保存先の読み出しと更新、保存先を空にする呼び出しだけを行う。
