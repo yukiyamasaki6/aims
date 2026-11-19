@@ -294,7 +294,7 @@ function composeApp(router: PageRouter) {
 }
 
 // ルートレイアウトはサーバー専用のexport(メタデータ)を持ち、クライアントの処理を持てないため、この入口が起動地点の代わりに、アプリで1度だけ動く部品を生成して始め、アプリの全体を包んで、画面へ状態と変更の方法を渡す。
-// 端末の識別情報の記録は、サインイン、サインアップを含む全ページで有効にする。
+// 端末の識別情報の記録は、サインイン(新規登録を含む)を含む全ページで有効にする。
 export function RootClientEntry({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [app] = useState(() => composeApp(router));

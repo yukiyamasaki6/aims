@@ -147,7 +147,6 @@ test.describe("未認証", () => {
 
   for (const [name, path] of [
     ["サインイン", "/signin"],
-    ["サインアップ", "/signup"],
     ["紹介", "/"],
     ["オフライン", "/offline"],
     ["見つからない旨", `/not-found-${randomUUID().slice(0, 8)}`],

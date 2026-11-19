@@ -48,7 +48,7 @@ describe("ログインの入口", () => {
     expect(authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
       email: "archer@example.test",
       captchaToken: "check",
-      shouldCreateUser: false,
+      shouldCreateUser: true,
     });
     expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith(destination);
   });

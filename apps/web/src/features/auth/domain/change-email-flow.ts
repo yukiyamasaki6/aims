@@ -1,4 +1,5 @@
 import {
+  decrementResendCooldown,
   RESEND_COOLDOWN_SECONDS,
   validateAuthCode,
   validateResendWait,
@@ -231,7 +232,10 @@ export function changeEmailReducer(
     case "checkWaitReleased":
       return applyCheckWaitReleased(flow, { pending: null });
     case "cooldownTicked":
-      return { ...flow, resendCooldown: flow.resendCooldown - 1 };
+      return {
+        ...flow,
+        resendCooldown: decrementResendCooldown(flow.resendCooldown),
+      };
     // 応答待ちに戻ると、遅れて届いた応答が別の段階へ反映されるため、操作中は戻らない。
     case "backed":
       return flow.pending !== null ? flow : backToEmail(flow);

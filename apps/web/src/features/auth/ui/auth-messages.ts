@@ -50,9 +50,7 @@ export const authMessages = {
     back: "戻る",
     emailPlaceholder: "you@example.com",
     // サインイン
-    signInTitle: "サインイン",
-    // サインアップ
-    signUpTitle: "サインアップ",
+    emailContinue: "メールで続ける",
     // メールアドレスの変更
     changeEmailTitle: "メールアドレス変更",
     changeEmailCurrent: "現在のメールアドレス: {email}",
@@ -76,7 +74,6 @@ export const authMessages = {
     deleteAccountSubmit: "アカウントを削除",
     // 認証コード
     otpSendCode: "認証コードを送信",
-    otpTitle: "認証コードを入力",
     otpDescription: "{email} に送信されたコードを入力してください。",
     otpSpamNote: "メールが届かない場合は、迷惑メールフォルダをご確認ください。",
     otpCodePlaceholder: "123456",

@@ -67,7 +67,7 @@ test("別の画面でサインアウトを確認すると、この端末のセ�
   await expect(page).toHaveURL(/\/signin$/);
   await waitForHydration(page);
   await expect(
-    page.getByRole("heading", { name: authText("signInTitle") }),
+    page.getByPlaceholder(authText("emailPlaceholder")),
   ).toBeVisible();
   await expect(page).toHaveURL(/\/signin$/);
 

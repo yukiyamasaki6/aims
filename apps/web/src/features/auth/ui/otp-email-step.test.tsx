@@ -20,7 +20,6 @@ type Props = ComponentProps<typeof OtpEmailStep>;
 function createForm(overrides: Partial<Props> = {}) {
   return {
     idPrefix: "test",
-    title: "タイトル",
     email: "",
     onEmailChange: vi.fn(),
     emailError: undefined,
@@ -39,16 +38,9 @@ function createForm(overrides: Partial<Props> = {}) {
   } satisfies Props;
 }
 
-function renderStep(
-  form: Props,
-  props: { idPrefix?: string; title?: string } = {},
-) {
+function renderStep(form: Props, props: { idPrefix?: string } = {}) {
   return render(
-    <OtpEmailStep
-      {...form}
-      idPrefix={props.idPrefix ?? form.idPrefix}
-      title={props.title ?? form.title}
-    />,
+    <OtpEmailStep {...form} idPrefix={props.idPrefix ?? form.idPrefix} />,
     { wrapper: IntlTestProvider },
   );
 }
@@ -68,16 +60,17 @@ describe("OtpEmailStep", () => {
   });
 
   describe("画面の違いを受け取る表示", () => {
-    it("titleを見出しに描く", () => {
+    it("見出しを描かず、送信ボタンを「メールで続ける」にする", () => {
       // Given
 
       // When
       const form = createForm();
-      renderStep(form, { title: authText("signInTitle") });
+      renderStep(form);
 
       // Then
+      expect(screen.queryByRole("heading")).not.toBeInTheDocument();
       expect(
-        screen.getByRole("heading", { name: authText("signInTitle") }),
+        screen.getByRole("button", { name: authText("emailContinue") }),
       ).toBeInTheDocument();
     });
 
@@ -150,7 +143,7 @@ describe("OtpEmailStep", () => {
 
       // Then
       const button = screen.getByRole("button", {
-        name: authText("otpSendCode"),
+        name: authText("emailContinue"),
       });
       expect(button).toHaveAttribute("aria-disabled", "true");
       expect(button.querySelector("svg")).not.toBeNull();
@@ -165,7 +158,7 @@ describe("OtpEmailStep", () => {
 
       // Then
       const button = screen.getByRole("button", {
-        name: authText("otpSendCode"),
+        name: authText("emailContinue"),
       });
       expect(button).toHaveAttribute("aria-disabled", "false");
       expect(button.querySelector("svg")).toBeNull();

@@ -58,7 +58,6 @@
 
 | 対象 | 機能 | ユーザーの目的 | roadmap.mdの機能 |
 | :--- | :--- | :--- | :--- |
-| auth | signup | アカウントを作る | メールOTP認証 |
 | auth | signin | サインインする | メールOTP認証 |
 | auth | signout | サインアウトする | メールOTP認証 |
 | auth | change-email | サインイン後にメールアドレスを変更する | メール変更 |
@@ -87,11 +86,10 @@
 ```mermaid
 flowchart TD
     Landing["/<br/>紹介画面"]
-    Logo(("AIMSロゴ<br/>（紹介画面・認証画面のヘッダー、オフライン画面の左上）"))
+    Logo(("AIMSロゴ<br/>（認証画面のフォーム前、オフライン画面の左上）"))
 
     subgraph auth ["(auth)"]
         SignIn["/signin<br/>サインイン画面"]
-        SignUp["/signup<br/>サインアップ画面"]
     end
 
     subgraph main ["(main)"]
@@ -107,18 +105,13 @@ flowchart TD
 
     %% 認証状態による自動リダイレクト
     SignIn -.->|認証済み| Rounds
-    SignUp -.->|認証済み| Rounds
     main -.->|未認証・セッション喪失| SignIn
 
     %% ユーザー操作による遷移
     Logo -->|クリック| Landing
-    Landing -->|「記録を始める」・ヘッダーのサインアップ（未認証）| SignUp
-    Landing -->|ヘッダーのサインイン（未認証）| SignIn
-    Landing -->|「記録を始める」・ヘッダーのサインイン・サインアップ（認証済み）| Rounds
-    SignIn -->|ヘッダーのサインアップ| SignUp
+    Landing -->|「記録を始める」（未認証）| SignIn
+    Landing -->|「記録を始める」（認証済み）| Rounds
     SignIn -->|サインイン成功| Rounds
-    SignUp -->|ヘッダーのサインイン| SignIn
-    SignUp -->|登録成功| Rounds
     Rounds -->|ラウンドの開始ボタン（右下）| RoundsNew
     Rounds -->|入力中のカードクリック| RoundDetail
     History -->|ラウンドカードクリック（from=history）| RoundDetail

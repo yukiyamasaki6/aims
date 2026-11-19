@@ -1,12 +1,13 @@
 "use client";
 
+import { ChevronLeft } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { FormEvent, RefObject } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 import { AuthField } from "./auth-field";
-import { AuthHeader } from "./auth-header";
 import { Turnstile, type TurnstileReset } from "./turnstile";
 
 // 実行中の確認(verify)か、コードの送付(send。この段階では再送)。
@@ -61,12 +62,21 @@ export function OtpCodeStep({
   const t = useTranslations("auth");
   return (
     <>
-      <AuthHeader
-        title={t("otpTitle")}
-        description={t("otpDescription", { email })}
-        onBack={onBack}
-        backDisabled={pending !== null}
-      />
+      <button
+        type="button"
+        onClick={onBack}
+        aria-disabled={pending !== null}
+        className={cn(
+          "inline-flex w-fit items-center gap-1 self-start text-muted-foreground text-sm hover:text-foreground",
+          pending !== null && "pointer-events-none opacity-50",
+        )}
+      >
+        <ChevronLeft className="size-4" />
+        {t("back")}
+      </button>
+      <p className="text-center text-muted-foreground text-sm">
+        {t("otpDescription", { email })}
+      </p>
       <CodeEntryForm
         code={code}
         onCodeChange={onCodeChange}

@@ -8,7 +8,6 @@ import {
   OFFLINE_PATH,
   ROUNDS_PATH,
   SIGN_IN_PATH,
-  SIGN_UP_PATH,
   SW_PATH,
   shellUrlOf,
 } from "@/routes";
@@ -26,20 +25,17 @@ afterEach(() => {
 
 describe("proxy", () => {
   describe("対象パス", () => {
-    it.each([
-      "/signin",
-      "/signup",
-      "/rounds/1/edit",
-      ROUNDS_PATH,
-      `${ROUNDS_PATH}/1`,
-    ])("%sで実行する", (url) => {
-      // Given
-      // When
-      const matched = unstable_doesMiddlewareMatch({ config, url });
+    it.each(["/signin", "/rounds/1/edit", ROUNDS_PATH, `${ROUNDS_PATH}/1`])(
+      "%sで実行する",
+      (url) => {
+        // Given
+        // When
+        const matched = unstable_doesMiddlewareMatch({ config, url });
 
-      // Then
-      expect(matched).toBe(true);
-    });
+        // Then
+        expect(matched).toBe(true);
+      },
+    );
 
     it.each([
       HOME_PATH,
@@ -48,6 +44,7 @@ describe("proxy", () => {
       "/manifest.webmanifest",
       "/_next/static/chunks/main.js",
       "/signin/extra",
+      "/signup",
       "/roundsx",
       "/settings",
       "/settings/1",
@@ -68,7 +65,6 @@ describe("proxy", () => {
   describe("対象パスと経路の規則の一致", () => {
     const probes = [
       SIGN_IN_PATH,
-      SIGN_UP_PATH,
       "/rounds/1/edit",
       "/rounds/new",
       ROUNDS_PATH,
@@ -122,6 +118,26 @@ describe("proxy", () => {
       );
     });
 
+    it.each([true, false])(
+      "認証済み=%sで遷移元付きの/signupを開いても、廃止された経路としてリダイレクトしない",
+      async (signedIn) => {
+        // Given
+        db.getClaims.mockResolvedValue({
+          data: signedIn ? { claims: { sub: "user-1" } } : null,
+          error: null,
+        });
+
+        // When
+        const request = new NextRequest(
+          "https://app.example.com/signup?returnTo=%2Frounds#settings",
+        );
+        const response = await proxy(request);
+
+        // Then
+        expect(response.headers.get("location")).toBeNull();
+      },
+    );
+
     it.each(["/settings", "/settings/1", "/settings/delete-account"])(
       "未認証で%sを開いても、保護の範囲の外のためリダイレクトしない",
       async (path) => {
@@ -156,7 +172,7 @@ describe("proxy", () => {
       );
     });
 
-    it.each([SIGN_IN_PATH, SIGN_UP_PATH])(
+    it.each([SIGN_IN_PATH])(
       "認証済みで遷移元のない%sを開くと、ホームへリダイレクトする",
       async (path) => {
         // Given

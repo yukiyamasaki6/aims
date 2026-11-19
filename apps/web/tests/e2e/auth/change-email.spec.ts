@@ -6,8 +6,11 @@ import { CHANGE_EMAIL_HASH } from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
+  markOtpSent,
   signInWithEmailOtp,
   signUpAndSignIn,
+  waitForHydration,
+  waitForOtpSendWindow,
 } from "../helpers/auth";
 import { fastForwardResendCooldown } from "../helpers/clock";
 import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
@@ -15,12 +18,14 @@ import {
   expectStillSignedIn,
   signInOnOtherDevice,
 } from "../helpers/other-browser-device";
+import { createRoundWithClient } from "../helpers/rounds";
 import {
   expectAccountCategory,
   openSettingsAt,
   panelBackLink,
   settingsPanel,
 } from "../helpers/settings";
+import { AUTH_COOKIE } from "../helpers/stored-session";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
@@ -317,4 +322,115 @@ test("別の端末でサインインしているとき、この端末が変更�
   await expect(page).toHaveURL(/\/rounds/);
   await expectStillSignedIn(otherDevice.page);
   await otherDevice.context.close();
+});
+
+// 保存されたセッションの利用者ID。旧アドレスで作り直した利用者のセッションは、Cookieが分割されることがあるため、分割を連結して読む。
+async function storedUserId(page: Page) {
+  const parts = (await page.context().cookies())
+    .filter(
+      (c) => c.name === AUTH_COOKIE || c.name.startsWith(`${AUTH_COOKIE}.`),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
+  const value = parts.map((c) => c.value).join("");
+  const session = JSON.parse(
+    Buffer.from(value.replace(/^base64-/, ""), "base64url").toString("utf8"),
+  );
+  return session.user.id as string;
+}
+
+// 既存のセッションのない新しいブラウザ状態で、サインイン画面からメールのコードで認証し、認証された利用者IDを返す。
+async function signInFromScratch(page: Page, email: string) {
+  await page.context().clearCookies();
+  await waitForOtpSendWindow(email);
+  const previous = await mailIds(email);
+  await page.goto("/signin");
+  await waitForHydration(page);
+  await page.getByPlaceholder(authText("emailPlaceholder")).fill(email);
+  await waitForTurnstileToken(page, 1);
+  await page.getByRole("button", { name: authText("emailContinue") }).click();
+  await expect(
+    page.getByPlaceholder(authText("otpCodePlaceholder")),
+  ).toBeVisible();
+  markOtpSent(email);
+  await page
+    .getByPlaceholder(authText("otpCodePlaceholder"))
+    .fill(await getOtpCodeFromMailpit(email, previous));
+  await page
+    .getByRole("button", { name: authText("otpVerify"), exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/rounds$/);
+  await waitForHydration(page);
+  return await storedUserId(page);
+}
+
+// 元の利用者として、記録を持つ状態を作る。
+async function startWithRecord(page: Page, email: string) {
+  await signUpAndSignIn(page, { email, password: PASSWORD });
+  const originalId = await storedUserId(page);
+  const name = `旧アドレス-${randomUUID().slice(0, 8)}`;
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  try {
+    await signInWithEmailOtp(client, email);
+    await createRoundWithClient(client, {
+      name,
+      roundDate: "2026-08-24",
+      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+    });
+  } finally {
+    await client.auth.stopAutoRefresh();
+  }
+  return { originalId, name };
+}
+
+test("変更を完了すると、新しいアドレスは元の利用者IDと記録を使え、旧アドレスで認証すると元と異なる利用者で始まり、旧アドレスで再び認証すると同じ別の利用者と記録に戻る", async ({
+  page,
+}) => {
+  test.setTimeout(480000);
+  // 記録を持つ利用者が、新しいアドレスへの変更を完了する。
+  const addresses = {
+    current: uniqueEmail("old-address"),
+    next: uniqueEmail("old-address-next"),
+  };
+  const { originalId, name } = await startWithRecord(page, addresses.current);
+  await openChangeEmail(page);
+  await requestChange(page, addresses);
+  // 変更の送付で両方のアドレスへコードが送られ、実Authの送信間隔が始まる。
+  markOtpSent(addresses.current);
+  markOtpSent(addresses.next);
+  await confirmBoth(page, addresses);
+
+  // 新しいアドレスで認証すると、元の利用者IDと記録を使える。
+  expect(await signInFromScratch(page, addresses.next)).toBe(originalId);
+  await expect(page.getByText(name)).toBeVisible();
+
+  // 旧アドレスで認証すると、元と異なる利用者で始まり、元の記録を持たない。
+  const reregisteredId = await signInFromScratch(page, addresses.current);
+  expect(reregisteredId).not.toBe(originalId);
+  await expect(page.getByText(name)).toHaveCount(0);
+
+  // 旧アドレスで再び認証すると、同じ別の利用者に戻る。
+  expect(await signInFromScratch(page, addresses.current)).toBe(reregisteredId);
+});
+
+test("変更を確認せずに離れた後、旧アドレスで認証すると、元の利用者IDと記録を使える", async ({
+  page,
+}) => {
+  test.setTimeout(300000);
+  // 記録を持つ利用者が、新しいアドレスを送ったまま確認せずに離れる。
+  const addresses = {
+    current: uniqueEmail("old-address-left"),
+    next: uniqueEmail("old-address-left-next"),
+  };
+  const { originalId, name } = await startWithRecord(page, addresses.current);
+  await openChangeEmail(page);
+  await requestChange(page, addresses);
+  markOtpSent(addresses.current);
+
+  // 旧アドレスで認証すると、元の利用者IDと記録を使える。
+  expect(await signInFromScratch(page, addresses.current)).toBe(originalId);
+  await expect(page.getByText(name)).toBeVisible();
 });

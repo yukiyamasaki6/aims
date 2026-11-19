@@ -55,7 +55,7 @@ vi.mock("@marsidev/react-turnstile", () => ({
 }));
 
 function submitButton() {
-  return screen.getByRole("button", { name: authText("otpSendCode") });
+  return screen.getByRole("button", { name: authText("emailContinue") });
 }
 
 async function fillAndVerify(user: ReturnType<typeof userEvent.setup>) {
@@ -90,9 +90,7 @@ describe("サインイン画面の入口", () => {
     render(<SignInPage />, { wrapper: IntlTestProvider });
 
     // Then
-    expect(
-      screen.getByRole("heading", { name: authText("signInTitle") }),
-    ).toBeInTheDocument();
+    expect(submitButton()).toBeInTheDocument();
     expect(widget.siteKey).toBe("page-site-key");
   });
 
@@ -117,9 +115,7 @@ describe("サインイン画面の入口", () => {
     render(<SignInPage />, { wrapper: IntlTestProvider });
 
     // Then
-    expect(
-      screen.getByRole("heading", { name: authText("signInTitle") }),
-    ).toBeInTheDocument();
+    expect(submitButton()).toBeInTheDocument();
     expect(connection.createBrowserClient).not.toHaveBeenCalled();
   });
 

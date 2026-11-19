@@ -36,7 +36,7 @@
 | 概念 | 規則 |
 | --- | --- |
 | 経路のファイル | 経路の事実(定数と経路を作る関数)は`src/routes.ts`だけが持つ。機能の`domain/<機能の単数形の概念>-routes.ts`(1機能に1つ以下)は、判定・変換の関数だけを持つ。経路の値は`<名前>_PATH`、経路を作る関数は`<名前>Path`、経路の集合は`<名前>_PATHS`、経路の部品(ID・接頭・パラメーター名)は`<名前>_ID`、`_PREFIX`、`_PARAM`。経路を判定・変換する関数は、判定は`is…`、変換は`<対象>Of`、`<対象>For`、`<対象>Href`など、問いや変換を表す名前 |
-| 手続き | ファイル名は型名のkebab-case(1ファイル1手続き)。生成関数は`create<型名>`。型名は`<対象><動作の名詞形>`(`RoundDeletion`)、対象を持たない操作名(`SignIn`、`Start`)、役割の名詞(`Session`、`OpSender`、`ContentFetcher`)のどれか。動詞で始まる型名は、手続きの型名には置かない。手続きの結果を表す型を新設するときは、手続きの型名を接頭にする(`RoundStartResult`)。約束の型、見え方の型、ドメインの型は、この規則の対象外とする。例外は、1つの型の手続きを画面ごとに作る生成関数(`createSignUp`、`createResetPassword`は`PasswordSetup`を返す)で、画面の操作名で呼び、ファイルも画面の操作名とする |
+| 手続き | ファイル名は型名のkebab-case(1ファイル1手続き)。生成関数は`create<型名>`。型名は`<対象><動作の名詞形>`(`RoundDeletion`)、対象を持たない操作名(`SignIn`、`Start`)、役割の名詞(`Session`、`OpSender`、`ContentFetcher`)のどれか。動詞で始まる型名は、手続きの型名には置かない。手続きの結果を表す型を新設するときは、手続きの型名を接頭にする(`RoundStartResult`)。約束の型、見え方の型、ドメインの型は、この規則の対象外とする。例外は、1つの型の手続きを画面ごとに作る生成関数(`createSignIn`は`EmailOtp`を返す)で、画面の操作名で呼び、ファイルも画面の操作名とする |
 | 窓口 | 型`<画面>Store`、ファイル`<画面>-store.ts`、生成関数`create<画面>Store`(`RoundsListStore`ほか) |
 | 約束 | 頼むこと、読み出す対象を表す名詞(`Clock`、`PageNavigation`、`UniqueIds`)。独立のファイルのときはkebab-case。複数の型を持つ約束のファイルは、主な型の名前にする |
 | 手続きの依存の引数名 | 約束の型名の先頭を小文字にした名前(`pageNavigation`)。役割が分かる短い名前(`hub`、`ids`、`signIn`、`authenticator`、`clock`、`host`)でもよい。同じ型を複数受けるときは役割で区別する |

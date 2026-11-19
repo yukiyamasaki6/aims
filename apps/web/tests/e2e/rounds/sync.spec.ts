@@ -144,9 +144,9 @@ async function signInOnPage(
   await waitForOtpSendWindow(user.email);
   const previous = await mailIds(user.email);
   await waitForTurnstileToken(page, 1);
-  await page.getByRole("button", { name: authText("otpSendCode") }).click();
+  await page.getByRole("button", { name: authText("emailContinue") }).click();
   await expect(
-    page.getByRole("heading", { name: authText("otpTitle") }),
+    page.getByPlaceholder(authText("otpCodePlaceholder")),
   ).toBeVisible();
   markOtpSent(user.email);
   await page

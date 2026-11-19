@@ -29,9 +29,7 @@ async function deleteWithNewCode(page: Page, email: string) {
   await waitForOtpSendWindow(email);
   const previous = await mailIds(email);
   await page.getByRole("button", { name: t("deleteAccountSubmit") }).click();
-  await expect(
-    page.getByRole("heading", { name: t("otpTitle") }),
-  ).toBeVisible();
+  await expect(page.getByPlaceholder(t("otpCodePlaceholder"))).toBeVisible();
   markOtpSent(email);
   // コードを確認するまでは削除されず、設定パネルに留まる。
   await expect(page).toHaveURL(/#settings\/account\/delete-account$/);

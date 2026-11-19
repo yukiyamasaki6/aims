@@ -59,7 +59,7 @@ export function getSharedEmail(): string {
   return readFileSync(SHARED_EMAIL_PATH, "utf-8");
 }
 
-// サインアップ自体（OTPメール確認）の検証はsignup.spec.tsが
+// 登録とサインインの画面操作（OTPメール確認）の検証はsignin.spec.tsが
 // 担うため、それ以外のテストでは管理APIで確認済みユーザーを直接作成し、Mailpitへの
 // OTPポーリングを経由しない。
 export async function createConfirmedUser(input: {
@@ -85,6 +85,20 @@ export async function createConfirmedUser(input: {
   if (error && !/already been registered|already exists/i.test(error.message)) {
     throw error;
   }
+}
+
+// ローカルDBの利用者のメールアドレス。画面を通した登録で、その利用者が作られたことを確かめるために使う。
+export async function emailOfUser(userId: string): Promise<string | undefined> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+  if (!supabaseUrl || !secretKey) {
+    throw new Error("Missing Supabase environment variables in e2e helper.");
+  }
+  const supabase = createClient(supabaseUrl, secretKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data } = await supabase.auth.admin.getUserById(userId);
+  return data.user?.email;
 }
 
 function cookieExpiry(options: CookieOptions): number {
@@ -180,9 +194,9 @@ export async function signUpAndSignIn(
   await page.getByPlaceholder("you@example.com").fill(input.email);
   const previous = await mailIds(input.email);
   await waitForTurnstileToken(page, 1);
-  await page.getByRole("button", { name: authText("otpSendCode") }).click();
+  await page.getByRole("button", { name: authText("emailContinue") }).click();
   await expect(
-    page.getByRole("heading", { name: authText("otpTitle") }),
+    page.getByPlaceholder(authText("otpCodePlaceholder")),
   ).toBeVisible();
   markOtpSent(input.email);
   const code = await getOtpCodeFromMailpit(input.email, previous);

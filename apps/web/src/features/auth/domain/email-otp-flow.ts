@@ -1,4 +1,5 @@
 import {
+  decrementResendCooldown,
   RESEND_COOLDOWN_SECONDS,
   validateAuthCode,
   validateResendWait,
@@ -139,7 +140,10 @@ export function emailOtpReducer(
     case "checkWaitReleased":
       return applyCheckWaitReleased(flow, { pending: null });
     case "cooldownTicked":
-      return { ...flow, resendCooldown: Math.max(0, flow.resendCooldown - 1) };
+      return {
+        ...flow,
+        resendCooldown: decrementResendCooldown(flow.resendCooldown),
+      };
     case "emailStepReturned":
       return flow.pending !== null
         ? flow

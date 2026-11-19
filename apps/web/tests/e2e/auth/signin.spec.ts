@@ -4,8 +4,11 @@ import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
+  emailOfUser,
+  SHARED_AUTH_STATE_PATH,
   signInWithEmailOtp,
   waitForHydration,
+  waitForOtpSendWindow,
 } from "../helpers/auth";
 import {
   getUserStatus,
@@ -17,11 +20,22 @@ import {
   getOtpCodeFromMailpit,
   mailIds,
 } from "../helpers/mailpit";
+import { createRoundWithClient } from "../helpers/rounds";
 import { authMethodOf, readStoredTokens } from "../helpers/stored-session";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
 const t = translatorFor("auth");
+const introductionText = translatorFor("introduction");
+const sharedText = translatorFor("shared");
 test.use({ storageState: { cookies: [], origins: [] } });
+
+function anonymousClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+}
 for (const destination of [
   "/rounds",
   "/rounds/new",
@@ -38,10 +52,8 @@ for (const destination of [
     await waitForHydration(page);
     await page.getByPlaceholder(t("emailPlaceholder")).fill(email);
     await waitForTurnstileToken(page, 1);
-    await page.getByRole("button", { name: t("otpSendCode") }).click();
-    await expect(
-      page.getByRole("heading", { name: t("otpTitle") }),
-    ).toBeVisible();
+    await page.getByRole("button", { name: t("emailContinue") }).click();
+    await expect(page.getByPlaceholder(t("otpCodePlaceholder"))).toBeVisible();
 
     // 届いたコードを確認して目的の画面へ進む。
     const code = await getOtpCodeFromMailpit(email, previous);
@@ -54,14 +66,159 @@ for (const destination of [
     );
     const tokens = await readStoredTokens(page.context());
     expect(authMethodOf(tokens.accessToken)).toBe("otp");
-
-    await expect(
-      page.getByRole("heading", { name: t("otpTitle") }),
-    ).toHaveCount(0);
   });
 }
 
-test("未登録メールもコード入力へ進むが誤コードで保護画面へ入れない", async ({
+test("未登録メールへ届いたコードを確認すると、パスワードなしで登録されて一覧へ進み、ローカルDBに利用者が作られる", async ({
+  page,
+}) => {
+  // 新規メールを送付してコード入力へ進む。
+  const email = `signup-${randomUUID()}@aims.test`;
+  const previous = await mailIds(email);
+  await page.goto("/signin");
+  await waitForHydration(page);
+  await page.getByPlaceholder(t("emailPlaceholder")).fill(email);
+  await waitForTurnstileToken(page, 1);
+  await page.getByRole("button", { name: t("emailContinue") }).click();
+  await expect(page.getByPlaceholder(t("otpCodePlaceholder"))).toBeVisible();
+
+  // 認証リンクのないメールのコードを確認して登録を完了する。
+  const message = await getEmailFromMailpit(email, undefined, previous);
+  expect(message.html).toContain("15");
+  expect(message.html).not.toMatch(/href\s*=|ConfirmationURL|パスワード/i);
+  const code = await getOtpCodeFromMailpit(email, previous);
+  await page.getByPlaceholder(t("otpCodePlaceholder")).fill(code);
+  await page.getByRole("button", { name: t("otpVerify"), exact: true }).click();
+  await expect(page).toHaveURL(/\/rounds$/);
+  const tokens = await readStoredTokens(page.context());
+  expect(await emailOfUser(tokens.userId)).toBe(email);
+});
+
+test("未登録メールで保護画面の設定項目から認証すると、確認後に同じ画面と設定項目へ戻る", async ({
+  page,
+}) => {
+  // 設定項目を指す遷移元付きのサインインで、新規メールを送付する。
+  const email = `signup-return-${randomUUID()}@aims.test`;
+  const previous = await mailIds(email);
+  await page.goto(
+    `/signin?returnTo=${encodeURIComponent("/rounds/new#settings/account/email")}`,
+  );
+  await waitForHydration(page);
+  await page.getByPlaceholder(t("emailPlaceholder")).fill(email);
+  await waitForTurnstileToken(page, 1);
+  await page.getByRole("button", { name: t("emailContinue") }).click();
+  await expect(page.getByPlaceholder(t("otpCodePlaceholder"))).toBeVisible();
+
+  // 届いたコードを確認して、遷移元へ進む。
+  await page
+    .getByPlaceholder(t("otpCodePlaceholder"))
+    .fill(await getOtpCodeFromMailpit(email, previous));
+  await page.getByRole("button", { name: t("otpVerify"), exact: true }).click();
+  await expect(page).toHaveURL(/\/rounds\/new#settings\/account\/email$/);
+});
+
+test("登録済みメールで確認しても、同じ利用者IDと元の記録と他のセッションを維持する", async ({
+  page,
+}) => {
+  test.setTimeout(150000);
+  // 実OTPで元の利用者と記録を準備する。
+  const email = `existing-signin-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email });
+  const client = anonymousClient();
+  try {
+    const first = await signInWithEmailOtp(client, email);
+    const originalId = first.data.user?.id;
+    expect(first.error).toBeNull();
+    expect(originalId).toBeDefined();
+    const name = `登録前の記録-${randomUUID()}`;
+    await createRoundWithClient(client, {
+      name,
+      roundDate: "2026-08-24",
+      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+    });
+
+    // 同じメールを送付してコード入力へ進む。
+    await waitForOtpSendWindow(email);
+    const previous = await mailIds(email);
+    await page.goto("/signin");
+    await waitForHydration(page);
+    await page.getByPlaceholder(t("emailPlaceholder")).fill(email);
+    await waitForTurnstileToken(page, 1);
+    await page.getByRole("button", { name: t("emailContinue") }).click();
+    await expect(page.getByPlaceholder(t("otpCodePlaceholder"))).toBeVisible();
+
+    // 確認しても元のIDのまま記録へ戻り、別セッションも維持する。
+    await page
+      .getByPlaceholder(t("otpCodePlaceholder"))
+      .fill(await getOtpCodeFromMailpit(email, previous));
+    await page
+      .getByRole("button", { name: t("otpVerify"), exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/rounds$/);
+    const restored = await readStoredTokens(page.context());
+    expect(restored.userId).toBe(originalId);
+    await expect(page.getByText(name)).toBeVisible();
+    expect((await client.auth.getUser()).data.user?.id).toBe(originalId);
+  } finally {
+    await client.auth.stopAutoRefresh();
+  }
+});
+
+for (const registered of [false, true]) {
+  test(`登録${registered ? "済み" : "前"}のメールを送付しても、登録有無を示さず同じ案内のコード入力へ進む`, async ({
+    page,
+  }) => {
+    // メールを送ってコード入力へ進む。
+    const email = `same-screen-${registered}-${randomUUID()}@aims.test`;
+    if (registered) await createConfirmedUser({ email });
+    await page.goto("/signin");
+    await waitForHydration(page);
+    await page.getByPlaceholder(t("emailPlaceholder")).fill(email);
+    await waitForTurnstileToken(page, 1);
+    await page.getByRole("button", { name: t("emailContinue") }).click();
+
+    // 共通の案内だけが表示され、登録の有無による見出しや失敗は現れない。
+    await expect(page.getByText(t("otpDescription", { email }))).toBeVisible();
+    await expect(page.getByText(t("otpSpamNote"))).toBeVisible();
+    await expect(page.getByRole("heading")).toHaveCount(0);
+  });
+}
+
+test.describe("認証済み", () => {
+  test.use({ storageState: SHARED_AUTH_STATE_PATH });
+
+  test("遷移元のない/signinを開くと、ホームへ移動する", async ({ page }) => {
+    await page.goto("/signin");
+
+    await expect(page).toHaveURL(/\/rounds$/);
+  });
+
+  test("有効な遷移元付きの/signinを開くと、その遷移元へ移動する", async ({
+    page,
+  }) => {
+    await page.goto(
+      `/signin?returnTo=${encodeURIComponent("/rounds/new#settings/account")}`,
+    );
+
+    await expect(page).toHaveURL(/\/rounds\/new#settings\/account$/);
+  });
+});
+
+test("サインイン画面でAIMSロゴを押すと、紹介画面へ移動する", async ({
+  page,
+}) => {
+  await page.goto("/signin");
+  await waitForHydration(page);
+
+  await page.getByRole("link", { name: sharedText("logoAlt") }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.getByRole("heading", { name: introductionText("catch") }),
+  ).toBeVisible();
+});
+
+test("未登録メールもコード入力へ進むが誤コードで保護画面へ入れず、同じ画面に留まる", async ({
   page,
 }) => {
   // 未登録メールを送付し共通のコード入力へ進む。
@@ -71,10 +228,8 @@ test("未登録メールもコード入力へ進むが誤コードで保護画�
     .getByPlaceholder(t("emailPlaceholder"))
     .fill(`unknown-${randomUUID()}@aims.test`);
   await waitForTurnstileToken(page, 1);
-  await page.getByRole("button", { name: t("otpSendCode") }).click();
-  await expect(
-    page.getByRole("heading", { name: t("otpTitle") }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: t("emailContinue") }).click();
+  await expect(page.getByPlaceholder(t("otpCodePlaceholder"))).toBeVisible();
 
   // 誤コードを確認すると理由を表示し同じ画面に留まる。
   await page.getByPlaceholder(t("otpCodePlaceholder")).fill("000000");

@@ -860,6 +860,7 @@ describe("changeEmailReducer の再送の待ちとチェック", () => {
   it.each([
     [60, 59],
     [1, 0],
+    [0, 0],
   ])("1秒の事実で再送の待ちが%i秒から%i秒になる", (from, to) => {
     // Given
     const flow = flowWith({ ...onCodeStep, resendCooldown: from });

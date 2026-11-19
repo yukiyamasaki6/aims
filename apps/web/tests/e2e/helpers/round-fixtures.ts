@@ -6,7 +6,7 @@ import { createRoundWithClient, signInAsTestUser } from "./rounds";
 
 export type Credentials = { email: string; password: string };
 
-// ラウンドの有無で表示が変わるテスト用に、使い捨てのユーザーでサインアップしてサインインする。
+// ラウンドの有無で表示が変わるテスト用に、使い捨てのユーザーを作ってサインインする。
 export async function signInFreshUser(
   page: Page,
   prefix = "e2e-rounds",

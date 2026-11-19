@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AUTH_CODE_LENGTH,
+  decrementResendCooldown,
   RESEND_COOLDOWN_SECONDS,
   validateAuthCode,
   validateResendWait,
@@ -85,5 +86,17 @@ describe("再送の待ち時間", () => {
 
     // Then
     expect(result).toBe(waitMessage);
+  });
+});
+
+describe("再送待機の残り秒数の刻み", () => {
+  it("残り秒数が2・1・0のとき、1秒の刻みで1・0・0になり、負にならない", () => {
+    // Given
+
+    // When
+    const results = [2, 1, 0].map(decrementResendCooldown);
+
+    // Then
+    expect(results).toEqual([1, 0, 0]);
   });
 });

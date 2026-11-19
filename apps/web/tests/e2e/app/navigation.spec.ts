@@ -37,24 +37,6 @@ async function signInAsDisposableUser(page: Page, prefix: string) {
   await waitForHydration(page);
 }
 
-test.describe("ロゴ", () => {
-  test.use({ storageState: { cookies: [], origins: [] } });
-
-  test("サインイン画面でAIMSロゴを押すと、紹介画面へ移動する", async ({
-    page,
-  }) => {
-    await page.goto("/signin");
-    await waitForHydration(page);
-
-    await page.getByRole("link", { name: "AIMS" }).click();
-
-    await expect(page).toHaveURL(/\/$/);
-    await expect(
-      page.getByRole("heading", { name: introductionText("catch") }),
-    ).toBeVisible();
-  });
-});
-
 test.describe("認証済み", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -163,9 +145,9 @@ test.describe("セッション喪失", () => {
     await waitForOtpSendWindow(email);
     const previous = await mailIds(email);
     await waitForTurnstileToken(page, 1);
-    await page.getByRole("button", { name: authText("otpSendCode") }).click();
+    await page.getByRole("button", { name: authText("emailContinue") }).click();
     await expect(
-      page.getByRole("heading", { name: authText("otpTitle") }),
+      page.getByPlaceholder(authText("otpCodePlaceholder")),
     ).toBeVisible();
     markOtpSent(email);
     await page
@@ -234,13 +216,19 @@ for (const signedIn of [false, true]) {
         ? SHARED_AUTH_STATE_PATH
         : { cookies: [], origins: [] },
     });
-    test("廃止済みの再設定URLも任意の未定義URLも見つからない画面を返す", async ({
+    test("廃止済みの再設定URLとサインアップのURLも任意の未定義URLも見つからない画面を返す", async ({
       page,
     }) => {
-      for (const path of ["/reset-password", "/unknown-auth-page"]) {
+      for (const path of [
+        "/reset-password",
+        "/signup",
+        "/signup?returnTo=%2Frounds",
+        "/unknown-auth-page",
+      ]) {
         const response = await page.goto(path);
         expect(response?.status()).toBe(404);
-        await expect(page).toHaveURL(new RegExp(`${path}$`));
+        const { pathname, search } = new URL(page.url());
+        expect(pathname + search).toBe(path);
         await expect(
           page.getByRole("heading", { name: "404", exact: true }),
         ).toBeVisible();

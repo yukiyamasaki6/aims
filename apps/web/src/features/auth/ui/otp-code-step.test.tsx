@@ -51,7 +51,7 @@ function renderStep(form: Props, idPrefix = form.idPrefix) {
 
 describe("OtpCodeStep", () => {
   describe("表示", () => {
-    it("見出しと、メールアドレスを含む説明と迷惑メールの案内を描く", () => {
+    it("見出しを描かず、メールアドレスを含む説明と迷惑メールの案内を描く", () => {
       // Given
 
       // When
@@ -59,15 +59,19 @@ describe("OtpCodeStep", () => {
       renderStep(form);
 
       // Then
-      expect(
-        screen.getByRole("heading", { name: authText("otpTitle") }),
-      ).toBeInTheDocument();
+      expect(screen.queryByRole("heading")).not.toBeInTheDocument();
       expect(
         screen.getByText(
           authText("otpDescription", { email: "me@example.com" }),
         ),
       ).toBeInTheDocument();
       expect(screen.getByText(authText("otpSpamNote"))).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: authText("back") }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: authText("emailContinue") }),
+      ).not.toBeInTheDocument();
     });
 
     it("認証コードの欄に、nameとメールのコードの自動入力のautocompleteを付ける", () => {
