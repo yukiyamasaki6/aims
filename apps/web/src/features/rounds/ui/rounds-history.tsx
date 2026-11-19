@@ -125,7 +125,6 @@ function HistoryFrame({
             <HistoryFilterForm
               key={session.id}
               input={input}
-              onClose={close}
               onApply={(next) => {
                 if (activeId.current !== session.id) return;
                 onApply?.(next);

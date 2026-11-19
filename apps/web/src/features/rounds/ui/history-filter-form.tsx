@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Eraser } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
@@ -114,54 +114,45 @@ function UnitToggle({
   );
 }
 
-// 先頭の行(スクロールしない)。右端に閉じるボタンを置き、表示単位の切り替えは、閉じるボタンを除いた領域の水平方向の中央に置く。
+// 先頭の行(スクロールしない)。表示単位の切り替えを行の中央に、リセット(消しゴム)を右端に置く。左右の空きは同じ基準の幅から広がり、行に余裕があれば切り替えが中央に来る。狭いときは左の空きが縮む。
 function FilterHeaderRow({
   unit,
   onUnitChange,
-  onClose,
 }: {
   unit: HistoryUnit;
   onUnitChange: (unit: HistoryUnit) => void;
-  onClose: () => void;
 }) {
   const t = useTranslations("rounds");
   return (
     <div className="flex shrink-0 items-center gap-2 p-3">
-      <div className="flex min-w-0 flex-1 justify-center">
-        <UnitToggle unit={unit} onChange={onUnitChange} />
+      <div className="min-w-0 flex-1 basis-0" />
+      <UnitToggle unit={unit} onChange={onUnitChange} />
+      <div className="flex min-w-8 flex-1 basis-0 justify-end">
+        <button
+          type="reset"
+          data-testid="history-controls-reset"
+          className={cn(
+            buttonVariants({ variant: "ghost" }),
+            "size-8 shrink-0 px-0",
+          )}
+        >
+          <Eraser aria-hidden="true" className="size-5" />
+          <span className="sr-only">{t("historyControlsReset")}</span>
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={onClose}
-        data-testid="history-filter-close"
-        className={cn(
-          buttonVariants({ variant: "ghost" }),
-          "size-8 shrink-0 px-0",
-        )}
-      >
-        <X aria-hidden="true" className="size-5" />
-        <span className="sr-only">{t("historyFilterClose")}</span>
-      </button>
     </div>
   );
 }
 
-// 下部の行(スクロールしない)。リセット・検索は、行の幅を半分ずつ占める(`min-w-0`は付けず、狭いときは文言の幅を優先する)。
+// 下部の行(スクロールしない)。検索だけを置く。
 function FilterActionRow() {
   const t = useTranslations("rounds");
   return (
-    <div className="flex shrink-0 items-center gap-2 p-3">
-      <button
-        type="reset"
-        data-testid="history-controls-reset"
-        className={cn(buttonVariants({ variant: "outline" }), "flex-1")}
-      >
-        {t("historyControlsReset")}
-      </button>
+    <div className="flex shrink-0 items-center p-3">
       <button
         type="submit"
         data-testid="history-controls-apply"
-        className={cn(buttonVariants(), "flex-1")}
+        className={cn(buttonVariants(), "w-full")}
       >
         {t("historyControlsApply")}
       </button>
@@ -169,15 +160,13 @@ function FilterActionRow() {
   );
 }
 
-// 編集セッションごとの下書きと検証を持つ単一フォーム。input は現在の入力値で、開いたときの下書きの元であり、検索のたびに、使わない単位の値を引き継ぐ基準(base)にもなる(横長で検索後も開いたままのとき、更新された値が届く)。上から、表示単位の切り替えと閉じるボタンの行(スクロールしない)、入力欄(スクロールする)、リセット・検索の行(スクロールしない)。
+// 編集セッションごとの下書きと検証を持つ単一フォーム。input は現在の入力値で、開いたときの下書きの元であり、検索のたびに、使わない単位の値を引き継ぐ基準(base)にもなる(横長で検索後も開いたままのとき、更新された値が届く)。上から、表示単位の切り替えとリセットの行(スクロールしない)、入力欄(スクロールする)、検索の行(スクロールしない)。
 export function HistoryFilterForm({
   input,
   onApply,
-  onClose,
 }: {
   input: HistoryInput;
   onApply: (input: HistoryInput) => void;
-  onClose: () => void;
 }) {
   const { draft, errors, change, apply, reset } = useFilterDraft(
     input,
@@ -208,7 +197,6 @@ export function HistoryFilterForm({
       <FilterHeaderRow
         unit={draft.unit}
         onUnitChange={(unit) => change({ unit })}
-        onClose={onClose}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
         <HistoryRangeFields

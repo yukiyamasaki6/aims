@@ -43,7 +43,6 @@ export const roundsMessages = {
     historyEnd: "該当するラウンドは以上です",
     historyEndDistance: "該当する距離は以上です",
     historyFilterTitle: "フィルター",
-    historyFilterClose: "閉じる",
     historyFilterActive: "適用中",
     historyControlsApply: "検索",
     historyUnitLabel: "表示単位",
