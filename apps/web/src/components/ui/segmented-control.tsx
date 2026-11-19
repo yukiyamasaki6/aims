@@ -46,7 +46,7 @@ function SegmentedControl({
           key={option.value}
           value={option.value}
           data-testid={testId ? `${testId}-${option.value}` : undefined}
-          className="relative z-10 inline-flex h-7 cursor-pointer items-center justify-center rounded-full px-4 text-muted-foreground text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 data-checked:text-foreground"
+          className="relative z-10 inline-flex h-7 cursor-pointer items-center justify-center whitespace-nowrap rounded-full px-2.5 text-muted-foreground text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 data-checked:text-foreground"
         >
           {option.label}
         </Radio.Root>
