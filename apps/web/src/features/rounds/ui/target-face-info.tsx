@@ -23,7 +23,7 @@ const CENTER_CROSS_STROKE_WIDTH_CM = 0.1;
 // 相対位置で正しく配置して描画する。的選択UIのように、実際のレイアウトの違いを
 // 一目で見分けたい場面で使う。center_yはデータ上「上が正」のため、SVGのy軸
 // （下が正）に合わせて符号を反転させる。
-function TargetFaceIcon({
+export function TargetFaceIcon({
   spots,
   size,
 }: {
