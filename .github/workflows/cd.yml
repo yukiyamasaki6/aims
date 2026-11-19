@@ -12,7 +12,8 @@ on:
 
 concurrency:
   group: deploy-prod-db
-  cancel-in-progress: true
+  # DBと認証設定の反映を途中で取り消さないため
+  cancel-in-progress: false
 
 jobs:
   deploy-prod-db:
