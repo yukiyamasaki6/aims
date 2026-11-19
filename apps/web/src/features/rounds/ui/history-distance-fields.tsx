@@ -15,7 +15,7 @@ import { TargetFaceIcon } from "./target-face-info";
 
 // 距離のタイルと追加のタイルの大きさ(幅80px、高さ112px)。縦長で固定にし、項目の有無で並びの高さがばらつかないようにする。
 const TILE_SIZE_CLASS = "h-28 w-20 shrink-0";
-// 的の図の領域(図と同じ48px)。未指定と見つからない表示も同じ領域に収める。
+// 的の図の領域(図と同じ48px)。未指定(空)と見つからない表示も同じ領域に収める。
 const FACE_SIZE = 48;
 
 const TILE_CLASS = cn(
@@ -45,22 +45,18 @@ function DistanceTileContent({
       <span className="leading-5">
         {t("historyDistanceMarked", { distance: String(row.distance) })}
       </span>
-      <span className="text-muted-foreground leading-5">
-        {row.arrowsPerEnd === null
-          ? t("historyFilterNone")
-          : t("distanceArrowsPerEnd", {
-              arrowsPerEnd: String(row.arrowsPerEnd),
-            })}
+      <span className="h-5 text-muted-foreground leading-5">
+        {row.arrowsPerEnd !== null &&
+          t("distanceArrowsPerEnd", {
+            arrowsPerEnd: String(row.arrowsPerEnd),
+          })}
       </span>
       <span
         className="flex items-center justify-center overflow-hidden text-muted-foreground text-xs"
         style={{ width: FACE_SIZE, height: FACE_SIZE }}
       >
-        {face === null ? (
-          t("historyFilterNone")
-        ) : face === "missing" ? (
-          t("targetFaceMissing")
-        ) : (
+        {face === "missing" && t("targetFaceMissing")}
+        {face !== null && face !== "missing" && (
           <TargetFaceIcon spots={face.target_face_spots} size={FACE_SIZE} />
         )}
       </span>
