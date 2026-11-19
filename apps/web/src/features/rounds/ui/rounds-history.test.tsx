@@ -2234,7 +2234,7 @@ describe("RoundsHistory", () => {
         expect(before.select).toBeNull();
         expect(unitRadio("distance")).toHaveAttribute("aria-checked", "true");
         expect(screen.queryByTestId("history-filter-distance-add")).toBeNull();
-        expect(selectButton()?.textContent).toBe(
+        expect(selectButton()).toHaveAccessibleName(
           roundsText("historyFilterDistanceSelect"),
         );
       });
@@ -3127,7 +3127,7 @@ describe("RoundsHistory", () => {
 
         // Then
         expect(before).toEqual([]);
-        expect(addButton()).toHaveTextContent(roundsText("addDistance"));
+        expect(addButton()).toHaveAccessibleName(roundsText("addDistance"));
         expect(dialogInput("distance")).toHaveValue("");
         expect(dialogInput("arrowsPerEnd")).toHaveValue("");
         expect(
