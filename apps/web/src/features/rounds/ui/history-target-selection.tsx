@@ -17,7 +17,7 @@ export type TargetFilter = Pick<HistoryInput, "format" | "bowType">;
 // 的の領域の寸法(履歴専用)。的の情報(`TargetFaceInfo`)の実寸(幅は全体像48+間隔4+拡大図75、高さは全体像48)。的の情報、的が見つからない表示、指定なしの表示は、全てこの寸法の入れ物に入れ、選んでも行や一覧の項目の大きさが変わらないようにする。`TargetFaceInfo`自体は他の画面と共有するため寸法を持たせない。
 const TARGET_SLOT_SIZE = { width: 127, height: 48 };
 
-export function TargetSlot({ children }: { children: ReactNode }) {
+function TargetSlot({ children }: { children: ReactNode }) {
   return (
     <span
       className="flex items-center justify-center overflow-hidden text-center text-sm"

@@ -6,7 +6,7 @@ import type {
   TargetFaceRing,
   TargetFaceSpotLayout,
 } from "../domain/target-face";
-import { TargetFaceInfo } from "./target-face-info";
+import { TargetFaceIcon, TargetFaceInfo } from "./target-face-info";
 
 const roundsText = translatorFor("rounds");
 
@@ -126,5 +126,24 @@ describe("TargetFaceInfo", () => {
 
     expect(container).toHaveTextContent(roundsText("targetFaceMissing"));
     expect(container.querySelector("svg")).toBeNull();
+  });
+});
+
+describe("TargetFaceIcon", () => {
+  it("全体像の図を指定の大きさで描く", () => {
+    // Given
+    const spots = [
+      { center_x: 0, center_y: 0, target_face_rings: [yellowRing, redRing] },
+    ];
+
+    // When
+    const { container } = render(<TargetFaceIcon spots={spots} size={48} />);
+
+    // Then
+    const figures = container.querySelectorAll("svg");
+    expect(figures).toHaveLength(1);
+    expect(figures[0]).toHaveAttribute("width", "48");
+    expect(figures[0]).toHaveAttribute("height", "48");
+    expect(figures[0].querySelectorAll("circle")).toHaveLength(2);
   });
 });

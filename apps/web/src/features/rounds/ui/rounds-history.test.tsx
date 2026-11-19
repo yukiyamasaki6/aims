@@ -2234,7 +2234,7 @@ describe("RoundsHistory", () => {
         expect(before.select).toBeNull();
         expect(unitRadio("distance")).toHaveAttribute("aria-checked", "true");
         expect(screen.queryByTestId("history-filter-distance-add")).toBeNull();
-        expect(selectButton()?.textContent).toBe(
+        expect(selectButton()).toHaveAccessibleName(
           roundsText("historyFilterDistanceSelect"),
         );
       });
@@ -3127,7 +3127,7 @@ describe("RoundsHistory", () => {
 
         // Then
         expect(before).toEqual([]);
-        expect(addButton()).toHaveTextContent(roundsText("addDistance"));
+        expect(addButton()).toHaveAccessibleName(roundsText("addDistance"));
         expect(dialogInput("distance")).toHaveValue("");
         expect(dialogInput("arrowsPerEnd")).toHaveValue("");
         expect(
@@ -3142,7 +3142,7 @@ describe("RoundsHistory", () => {
         expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
       });
 
-      it("距離だけを入れて「追加」を押すと、ダイアログが閉じ、射数/エンドの行のない距離の要約が出て、適用前は取得も記憶の変更も起きない", async () => {
+      it("距離だけを入れて「追加」を押すと、ダイアログが閉じ、距離のタイルが出て、適用前は取得も記憶の変更も起きない", async () => {
         // Given
         const user = await renderWithDistances();
         const fetches = fake.store.loadList.mock.calls.length;
@@ -3153,12 +3153,6 @@ describe("RoundsHistory", () => {
         // Then
         expect(summaries()).toHaveLength(1);
         expect(summaries()[0]).toHaveTextContent("50m");
-        expect(summaries()[0]).not.toHaveTextContent(
-          roundsText("distanceArrowsPerEnd", { arrowsPerEnd: "6" }),
-        );
-        expect(summaries()[0]).toHaveTextContent(
-          roundsText("historyFilterNone"),
-        );
         expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
         expect(memory.stored()).toEqual(DEFAULT_HISTORY_VIEW_STATE);
       });
@@ -3177,12 +3171,13 @@ describe("RoundsHistory", () => {
         );
       });
 
-      it("的を選択済みの距離を確定すると要約に的を表示する", async () => {
+      it("的を選択済みの距離を確定すると距離のタイルに的の図を表示する", async () => {
         // Given
         procedures.fetching.savedTargetFaces.mockReturnValue(FACES);
         const user = await renderWithDistances();
         await user.click(addButton());
         await user.type(dialogInput("distance"), "50");
+        await user.type(dialogInput("arrowsPerEnd"), "6");
 
         await user.click(screen.getByTestId("history-distance-dialog-target"));
         await user.click(
@@ -3203,8 +3198,118 @@ describe("RoundsHistory", () => {
         expect(typedDistance).toBe("50");
         expect(targetLabel).not.toBe(roundsText("historyFilterNone"));
         await waitForDistanceDialogClosed();
-        expect(summaries()[0]).not.toHaveTextContent(
-          roundsText("historyFilterNone"),
+        expect(summaries()[0].querySelector("svg")).not.toBeNull();
+      });
+
+      it("距離のタイルは上から距離、射数/エンド、的の順で、的の図を出す", async () => {
+        // Given
+        procedures.fetching.savedTargetFaces.mockReturnValue(FACES);
+        const remembered = distanceRow(50, {
+          arrowsPerEnd: 6,
+          targetFaceId: OUTDOOR_FACE.id,
+        });
+
+        // When
+        await renderWithDistances([remembered]);
+
+        // Then
+        const tile = summaries()[0];
+        expect(tile.textContent).toMatch(
+          new RegExp(
+            `50m.*${roundsText("distanceArrowsPerEnd", { arrowsPerEnd: "6" })}`,
+          ),
+        );
+        expect(tile.querySelector("svg")).not.toBeNull();
+      });
+
+      it("的が保存した一覧に無いタイルは、射数/エンドを出したまま「的データを取得できません」を出す", async () => {
+        // Given
+        procedures.fetching.savedTargetFaces.mockReturnValue([INDOOR_FACE]);
+
+        // When
+        await renderWithDistances([
+          distanceRow(50, { arrowsPerEnd: 6, targetFaceId: OUTDOOR_FACE.id }),
+        ]);
+
+        // Then
+        const tile = summaries()[0];
+        expect(tile).toHaveTextContent(roundsText("targetFaceMissing"));
+        expect(tile).toHaveTextContent(
+          roundsText("distanceArrowsPerEnd", { arrowsPerEnd: "6" }),
+        );
+      });
+
+      it("「距離を追加」は最後のタイルの次にあり、追加・削除のたびに末尾に残り、タイルの件数には数えない", async () => {
+        // Given
+        const user = await renderWithDistances();
+        const isAfterLastTile = () => {
+          const tiles = summaries();
+          const last = tiles[tiles.length - 1];
+          return (
+            last === undefined ||
+            Boolean(
+              last.compareDocumentPosition(addButton()) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+            )
+          );
+        };
+
+        // When
+        const positions = [isAfterLastTile()];
+        await addDistance(user, "50");
+        positions.push(isAfterLastTile());
+        await addDistance(user, "30");
+        positions.push(isAfterLastTile());
+        await user.click(screen.getByTestId("history-filter-distance-0"));
+        await user.click(screen.getByTestId("history-distance-dialog-delete"));
+        await waitForDistanceDialogClosed();
+        positions.push(isAfterLastTile());
+
+        // Then
+        expect(positions).toEqual([true, true, true, true]);
+        expect(summaries()).toHaveLength(1);
+        expect(summaries()[0]).toHaveTextContent("30m");
+        expect(addButton()).toBeVisible();
+        applyFilter();
+        expect(fake.store.loadList).toHaveBeenLastCalledWith(
+          conditionWith([distanceRow(30)]),
+          null,
+          expect.any(Number),
+        );
+      });
+
+      it("Tabでタイルを射つ順に進んだ次が「距離を追加」で、Enterでタイルは編集の、追加は追加のダイアログを開き、閉じると起点へフォーカスが戻る", async () => {
+        // Given
+        const user = await renderWithDistances([
+          distanceRow(50),
+          distanceRow(30),
+        ]);
+        screen.getByTestId("history-filter-distance-0").focus();
+
+        // When
+        await user.tab();
+        const second = document.activeElement;
+        await user.tab();
+        const third = document.activeElement;
+        await user.keyboard("{Enter}");
+        const addOpened = (
+          await screen.findByTestId("history-distance-dialog-confirm")
+        ).textContent;
+        await user.keyboard("{Escape}");
+        await waitForDistanceDialogClosed();
+        await user.click(screen.getByTestId("history-filter-distance-1"));
+        const editOpened = dialogInput("distance");
+        const editValue = (editOpened as HTMLInputElement).value;
+        await user.keyboard("{Escape}");
+        await waitForDistanceDialogClosed();
+
+        // Then
+        expect(second).toBe(screen.getByTestId("history-filter-distance-1"));
+        expect(third).toBe(addButton());
+        expect(addOpened).toBe(roundsText("historyDistanceAdd"));
+        expect(editValue).toBe("30");
+        await waitFor(() =>
+          expect(screen.getByTestId("history-filter-distance-1")).toHaveFocus(),
         );
       });
 
@@ -3350,6 +3455,25 @@ describe("RoundsHistory", () => {
           expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
         },
       );
+
+      it("距離と射数/エンドの両方が不正なときは、両方の欄の下にエラーを出し、どちらも入力できる", async () => {
+        // Given
+        const user = await renderWithDistances();
+        await user.click(addButton());
+        await user.type(dialogInput("distance"), "101");
+        await user.type(dialogInput("arrowsPerEnd"), "13");
+
+        // When
+        await user.click(confirmButton());
+
+        // Then
+        expect(dialogError("distanceInvalid")).not.toBeNull();
+        expect(dialogError("arrowsPerEndInvalid")).not.toBeNull();
+        await user.clear(dialogInput("distance"));
+        await user.type(dialogInput("distance"), "50");
+        expect(dialogInput("distance")).toHaveValue("50");
+        expect(confirmButton()).toBeInTheDocument();
+      });
 
       it("エラーの後に入力を直しても、確定を押すまでエラーは残り、押すとエラーが消えて確定する", async () => {
         // Given
@@ -4013,6 +4137,34 @@ describe("RoundsHistory", () => {
         expect(
           screen.queryByText(roundsText("historyFilterDistances")),
         ).toBeNull();
+      });
+
+      it("距離を指定済みの距離単位は距離のタイル1件で、削除すると「距離を選択」に戻り、押すと選択のダイアログが開く", async () => {
+        // Given
+        const user = await renderDistanceUnit({
+          distanceRow: distanceRow(50, { arrowsPerEnd: 6 }),
+        });
+        const shown = {
+          tile: summary()?.textContent,
+          select: selectButton(),
+        };
+
+        // When
+        await user.click(screen.getByTestId("history-filter-distance-row"));
+        await user.click(screen.getByTestId("history-distance-dialog-delete"));
+        await waitForDistanceDialogClosed();
+        await user.click(screen.getByTestId("history-filter-distance-select"));
+
+        // Then
+        expect(shown.tile).toContain("50m");
+        expect(shown.tile).toContain(
+          roundsText("distanceArrowsPerEnd", { arrowsPerEnd: "6" }),
+        );
+        expect(shown.select).toBeNull();
+        expect(summary()).toBeNull();
+        expect(
+          screen.getByTestId("history-distance-dialog-confirm"),
+        ).toHaveTextContent(roundsText("historyDistanceDecide"));
       });
 
       it("単位が距離のときは、距離の指定の直上に「距離構成」の見出しが、指定の有無によらず出る", async () => {

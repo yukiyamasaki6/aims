@@ -50,7 +50,7 @@ function NumberField({
   const t = useTranslations("rounds");
   const testId = `${TEST_ID}-${field}`;
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-1">
       <label htmlFor={testId} className="text-muted-foreground text-xs">
         {label}
       </label>
@@ -154,20 +154,22 @@ function DistanceForm({
 
   return (
     <div className="flex flex-col gap-4">
-      <NumberField
-        field="distance"
-        label={t("historyFilterDistance")}
-        value={draft.distance}
-        error={errorOf("distanceInvalid")}
-        onChange={(distance) => setDraft({ ...draft, distance })}
-      />
-      <NumberField
-        field="arrowsPerEnd"
-        label={t("historyFilterArrowsPerEnd")}
-        value={draft.arrowsPerEnd}
-        error={errorOf("arrowsPerEndInvalid")}
-        onChange={(arrowsPerEnd) => setDraft({ ...draft, arrowsPerEnd })}
-      />
+      <div className="grid grid-cols-2 items-start gap-3">
+        <NumberField
+          field="distance"
+          label={t("historyFilterDistance")}
+          value={draft.distance}
+          error={errorOf("distanceInvalid")}
+          onChange={(distance) => setDraft({ ...draft, distance })}
+        />
+        <NumberField
+          field="arrowsPerEnd"
+          label={t("historyFilterArrowsPerEnd")}
+          value={draft.arrowsPerEnd}
+          error={errorOf("arrowsPerEndInvalid")}
+          onChange={(arrowsPerEnd) => setDraft({ ...draft, arrowsPerEnd })}
+        />
+      </div>
       <div className="flex flex-col gap-1">
         <label
           htmlFor={`${TEST_ID}-target`}
