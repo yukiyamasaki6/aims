@@ -2,18 +2,13 @@
 // 認証の画面の経路の文字列は、経路表(src/routes.ts)が持つ。保護対象の画面の範囲は、ラウンドの画面の根の経路(ROUNDS_PATH)とその配下である。根は、サインインの後の既定の行き先でもある。
 // 遷移元は、パスとクエリに加えてハッシュ(設定パネルの表示)を含む。ハッシュは同じ文書の中の表示だけを決め、行き先のオリジンとパスを変えないため、検証の対象にしない。
 import {
-  RESET_PASSWORD_PATH,
   ROUNDS_HOME_PATH,
   ROUNDS_PATH,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
 } from "@/routes";
 
-const GUEST_ONLY_PATHS: readonly string[] = [
-  SIGN_IN_PATH,
-  SIGN_UP_PATH,
-  RESET_PASSWORD_PATH,
-];
+const GUEST_ONLY_PATHS: readonly string[] = [SIGN_IN_PATH, SIGN_UP_PATH];
 export const RETURN_TO_PARAM = "returnTo";
 const BASE = "http://localhost";
 

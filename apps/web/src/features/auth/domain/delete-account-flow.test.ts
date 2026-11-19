@@ -1,267 +1,309 @@
 import { describe, expect, it } from "vitest";
-import type { AuthFailureKind } from "./auth-failure";
 import {
-  beginDeleteAccount,
+  beginDeleteCodeSend,
+  beginDeleteCodeVerify,
   type DeleteAccountFlow,
   deleteAccountReducer,
   initialDeleteAccountFlow,
 } from "./delete-account-flow";
 
-const checked: DeleteAccountFlow = {
-  ...initialDeleteAccountFlow,
-  captchaToken: "token-1",
-};
-const validInput = { password: "password-current1", offline: false };
-
-describe("beginDeleteAccount", () => {
-  it("パスワードを入力し、チェックが済み、オンラインなら、送信中にして、パスワードとトークンを頼む", () => {
-    // Given
-    // When
-    const result = beginDeleteAccount(checked, validInput);
-
-    // Then
-    expect(result.request).toEqual({
-      password: "password-current1",
-      captchaToken: "token-1",
-    });
-    expect(result.state).toMatchObject({
-      submitting: true,
-      error: null,
-      fieldErrors: {},
-    });
-  });
-
-  it("開始すると、以前のエラーを消す", () => {
-    // Given
-    const failed = { ...checked, error: "other" as const };
-
-    // When
-    const result = beginDeleteAccount(failed, validInput);
-
-    // Then
-    expect(result.state.error).toBeNull();
-  });
-
-  it("送信中は、他の条件に依らず開始せず、状態を変えない", () => {
-    // Given
-    const submitting = { ...checked, submitting: true };
-
-    // When
-    const valid = beginDeleteAccount(submitting, validInput);
-    const invalid = beginDeleteAccount(
-      { ...initialDeleteAccountFlow, submitting: true },
-      { password: "", offline: true },
-    );
-
-    // Then
-    expect(valid.request).toBeNull();
-    expect(valid.state).toBe(submitting);
-    expect(invalid.request).toBeNull();
-    expect(invalid.state.fieldErrors).toEqual({});
-    expect(invalid.state.error).toBeNull();
-  });
-
-  it("パスワードが未入力なら、理由を示して開始しない", () => {
-    // Given
-    // When
-    const result = beginDeleteAccount(checked, {
-      password: "",
-      offline: false,
-    });
-
-    // Then
-    expect(result.request).toBeNull();
-    expect(result.state.fieldErrors).toEqual({ currentPassword: "required" });
-    expect(result.state.submitting).toBe(false);
-  });
-
-  it("空文字は未入力として開始せず、空白1文字は入力として開始する(空白だけの入力は認証サービスの照合に任せる)", () => {
-    // Given
-    // When
-    const empty = beginDeleteAccount(checked, { password: "", offline: false });
-    const blank = beginDeleteAccount(checked, {
-      password: " ",
-      offline: false,
-    });
-
-    // Then
-    expect(empty.request).toBeNull();
-    expect(blank.request).toEqual({ password: " ", captchaToken: "token-1" });
-  });
-
-  it("チェックが済んでいなければ、依頼を返さず、送信中の待ちにする", () => {
-    // Given
-    // When
-    const result = beginDeleteAccount(initialDeleteAccountFlow, validInput);
-
-    // Then
-    expect(result.request).toBeNull();
-    expect(result.state).toMatchObject({
-      submitting: true,
-      awaitingCheck: true,
-      fieldErrors: {},
-      error: null,
-    });
-  });
-
-  it("失敗の通知で待ちが解けた後に押すと、すぐには失敗を示さず、通常どおり待ちにする", () => {
-    // Given
-    const waiting = beginDeleteAccount(
-      initialDeleteAccountFlow,
-      validInput,
-    ).state;
-    const released = deleteAccountReducer(waiting, {
-      type: "checkWaitReleased",
-    });
-
-    // When
-    const result = beginDeleteAccount(released, validInput);
-
-    // Then
-    expect(result.request).toBeNull();
-    expect(result.state).toMatchObject({
-      submitting: true,
-      awaitingCheck: true,
-      error: null,
-    });
-    expect(result.state.fieldErrors.captcha).toBeUndefined();
-  });
-
-  it("未入力なら、チェックの状態によらず、未入力だけを示す", () => {
-    // Given
-    // When
-    const result = beginDeleteAccount(initialDeleteAccountFlow, {
-      password: "",
-      offline: false,
-    });
-
-    // Then
-    expect(result.request).toBeNull();
-    expect(result.state.fieldErrors).toEqual({ currentPassword: "required" });
-  });
-
-  it("オフラインなら、開始せず、オフラインを示す(チェックを待たず、チェックのエラーも示さない)", () => {
-    // Given
-    // When
-    const result = beginDeleteAccount(initialDeleteAccountFlow, {
-      password: "password-current1",
-      offline: true,
-    });
-
-    // Then
-    expect(result.request).toBeNull();
-    expect(result.state).toMatchObject({
-      error: "offline",
-      fieldErrors: {},
-      submitting: false,
-    });
-  });
-
-  it("オフラインでも、パスワードが未入力なら、オフラインより先に未入力を示す", () => {
-    // Given
-    // When
-    const result = beginDeleteAccount(checked, { password: "", offline: true });
-
-    // Then
-    expect(result.request).toBeNull();
-    expect(result.state.error).toBeNull();
-    expect(result.state.fieldErrors).toEqual({ currentPassword: "required" });
-  });
+const checked = deleteAccountReducer(initialDeleteAccountFlow, {
+  type: "captchaChecked",
+  token: "check",
 });
+const sending = beginDeleteCodeSend(checked, false).state;
+const entering = deleteAccountReducer(sending, {
+  type: "codeSentTo",
+  userId: "user-1",
+  email: "archer@example.test",
+});
+// コード入力で再送待機の60秒が過ぎ、チェックを取り直した状態。
+function afterResendWait(flow: DeleteAccountFlow) {
+  let next = flow;
+  for (let second = 0; second < 60; second += 1)
+    next = deleteAccountReducer(next, { type: "cooldownTicked" });
+  return deleteAccountReducer(next, {
+    type: "captchaChecked",
+    token: "resend-check",
+  });
+}
 
-describe("deleteAccountReducer", () => {
-  it("チェックの完了で、トークンを持つ", () => {
+describe("削除の段階", () => {
+  it("初期の段階は意思確認で、対象を持たず処理中でない", () => {
     // Given
     // When
-    const next = deleteAccountReducer(initialDeleteAccountFlow, {
-      type: "captchaChecked",
-      token: "token-2",
-    });
-
+    const flow = initialDeleteAccountFlow;
     // Then
-    expect(next.captchaToken).toBe("token-2");
+    expect(flow).toMatchObject({
+      step: "confirmation",
+      userId: null,
+      email: "",
+      pending: null,
+    });
   });
-
-  it("チェックの失効(トークンなし)で、トークンを手放す", () => {
+  it("チェックが完了した意思確認での送信は、送付先を入力で受けずに開始し、意思確認のまま処理中になる", () => {
     // Given
     // When
-    const next = deleteAccountReducer(checked, {
-      type: "captchaChecked",
-      token: null,
-    });
-
+    const send = beginDeleteCodeSend(checked, false);
     // Then
-    expect(next.captchaToken).toBeNull();
+    expect(send.request).toEqual({
+      captchaToken: "check",
+      known: null,
+    });
+    expect(send.state).toMatchObject({
+      step: "confirmation",
+      pending: "send",
+    });
   });
-
-  it.each<AuthFailureKind>([
-    "current_password_invalid",
-    "rate_limited",
-    "captcha_failed",
-    "unreachable",
-    "other",
-  ])(
-    "%sで失敗すると、送信中を終え、その理由を示し、チェックを未完了に戻す",
-    (kind) => {
+  it("チェックが未完了の意思確認での送信は、要求を出さず、意思確認のまま処理中としてチェックを待つ", () => {
+    // Given
+    // When
+    const send = beginDeleteCodeSend(initialDeleteAccountFlow, false);
+    // Then
+    expect(send.request).toBeNull();
+    expect(send.state).toMatchObject({
+      step: "confirmation",
+      awaitingCheck: true,
+      pending: "send",
+    });
+  });
+  it("送付が受理されると、対象とメールを持ってコード入力へ進み、処理中を解いて60秒の再送待機を始める", () => {
+    // Given
+    // When
+    const next = deleteAccountReducer(sending, {
+      type: "codeSentTo",
+      userId: "user-1",
+      email: "archer@example.test",
+    });
+    // Then
+    expect(next).toMatchObject({
+      step: "code",
+      userId: "user-1",
+      email: "archer@example.test",
+      pending: null,
+      resendCooldown: 60,
+      error: null,
+    });
+  });
+  it("コード入力での確認は、対象とメールとコードで開始し、コード入力のまま処理中になる", () => {
+    // Given
+    // When
+    const verify = beginDeleteCodeVerify(entering, {
+      code: "123456",
+      offline: false,
+    });
+    // Then
+    expect(verify.request).toEqual({
+      userId: "user-1",
+      email: "archer@example.test",
+      code: "123456",
+    });
+    expect(verify.state).toMatchObject({
+      step: "code",
+      pending: "verify",
+    });
+  });
+  it("再送待機の60秒とチェックの取り直しの後の再送は、送付済みの対象とメールで開始する", () => {
+    // Given
+    const waited = afterResendWait(entering);
+    // When
+    const send = beginDeleteCodeSend(waited, false);
+    // Then
+    expect(send.request).toEqual({
+      captchaToken: "resend-check",
+      known: { userId: "user-1", email: "archer@example.test" },
+    });
+    expect(send.state).toMatchObject({ step: "code", pending: "send" });
+  });
+  it("再送が受理されると、コード入力のまま対象を保ち、再送待機を60秒から始め直す", () => {
+    // Given
+    const resending = beginDeleteCodeSend(afterResendWait(entering), false);
+    // When
+    const next = deleteAccountReducer(resending.state, {
+      type: "codeSentTo",
+      userId: "user-1",
+      email: "archer@example.test",
+    });
+    // Then
+    expect(next).toMatchObject({
+      step: "code",
+      userId: "user-1",
+      resendCooldown: 60,
+      pending: null,
+    });
+  });
+  it("意思確認ではコードの確認を開始しない", () => {
+    // Given
+    // When
+    const verify = beginDeleteCodeVerify(checked, {
+      code: "123456",
+      offline: false,
+    });
+    // Then
+    expect(verify.request).toBeNull();
+    expect(verify.state).toBe(checked);
+  });
+  it("オフラインでは送信を開始せず、意思確認のままオフラインの理由を持つ", () => {
+    // Given
+    // When
+    const send = beginDeleteCodeSend(checked, true);
+    // Then
+    expect(send.request).toBeNull();
+    expect(send.state).toMatchObject({
+      step: "confirmation",
+      error: "offline",
+      pending: null,
+    });
+  });
+  it("送信の処理中は二重の送信を受け付けない", () => {
+    // Given
+    // When
+    const next = beginDeleteCodeSend(sending, false);
+    // Then
+    expect(next.request).toBeNull();
+    expect(next.state).toMatchObject({ pending: "send" });
+  });
+  it("再送待機の60秒が過ぎる前の再送は開始せず、コード入力のまま再送の不備を持つ", () => {
+    // Given
+    const early = deleteAccountReducer(entering, {
+      type: "captchaChecked",
+      token: "resend-check",
+    });
+    // When
+    const send = beginDeleteCodeSend(early, false);
+    // Then
+    expect(send.request).toBeNull();
+    expect(send.state.step).toBe("code");
+    expect(send.state.fieldErrors.resend).toBeDefined();
+  });
+  it.each(["refused", "failed"] as const)(
+    "意思確認での送信が%sで終わると、意思確認に留まり、その理由を持ち、処理中を解く",
+    (type) => {
       // Given
-      const submitting = { ...checked, submitting: true };
-
       // When
-      const next = deleteAccountReducer(submitting, {
-        type: "failed",
-        failure: { kind },
+      const next = deleteAccountReducer(sending, {
+        type,
+        failure: { kind: "rate_limited" },
       });
-
       // Then
       expect(next).toMatchObject({
-        submitting: false,
-        error: kind,
-        captchaToken: null,
+        step: "confirmation",
+        userId: null,
+        pending: null,
+        error: "rate_limited",
       });
     },
   );
-});
-
-describe("deleteAccountReducer: セキュリティチェックの待ち", () => {
-  const waiting = beginDeleteAccount(
-    initialDeleteAccountFlow,
-    validInput,
-  ).state;
-
-  it("待ちの間、トークンが無い再押下では何も変えず、届いた後の開始では依頼を返す", () => {
+  it.each(["code_expired", "rate_limited", "unreachable"] as const)(
+    "コード入力でのコード確認が%sで終わると、意思確認へ戻らずコード入力に留まり、その理由を持ち、処理中を解く",
+    (kind) => {
+      // Given
+      const verifying = beginDeleteCodeVerify(entering, {
+        code: "123456",
+        offline: false,
+      }).state;
+      // When
+      const next = deleteAccountReducer(verifying, {
+        type: "failed",
+        failure: { kind },
+      });
+      // Then
+      expect(next).toMatchObject({
+        step: "code",
+        userId: "user-1",
+        email: "archer@example.test",
+        pending: null,
+        error: kind,
+      });
+    },
+  );
+  it("コード入力から戻ると、意思確認へ戻り、チェックのトークンとエラーを消し、対象とメールと再送待機を保つ", () => {
     // Given
-    const arrived = deleteAccountReducer(waiting, {
-      type: "captchaChecked",
-      token: "token-2",
-    });
-
+    const verifying = beginDeleteCodeVerify(entering, {
+      code: "123456",
+      offline: false,
+    }).state;
+    const failed = deleteAccountReducer(
+      deleteAccountReducer(verifying, {
+        type: "failed",
+        failure: { kind: "code_expired" },
+      }),
+      { type: "captchaChecked", token: "resend-check" },
+    );
     // When
-    const again = beginDeleteAccount(waiting, validInput);
-    const resumed = beginDeleteAccount(arrived, validInput);
-
+    const next = deleteAccountReducer(failed, { type: "emailStepReturned" });
     // Then
-    expect(again.state).toBe(waiting);
-    expect(resumed.request).toEqual({
-      password: "password-current1",
-      captchaToken: "token-2",
-    });
-    expect(resumed.state).toMatchObject({
-      submitting: true,
-      awaitingCheck: false,
+    expect(next).toMatchObject({
+      step: "confirmation",
+      captchaToken: null,
+      error: null,
+      fieldErrors: {},
+      userId: "user-1",
+      email: "archer@example.test",
+      resendCooldown: 60,
+      pending: null,
     });
   });
-
-  it("待ちを解く事実は、待ちを解いて送信中を終え、チェックのエラーを示す", () => {
+  it("確認の処理中は戻る操作を受け付けず、コード入力のまま状態を変えない", () => {
     // Given
-
+    const verifying = beginDeleteCodeVerify(entering, {
+      code: "123456",
+      offline: false,
+    }).state;
     // When
-    const result = deleteAccountReducer(waiting, { type: "checkWaitReleased" });
-
+    const next = deleteAccountReducer(verifying, { type: "emailStepReturned" });
     // Then
-    expect(result).toMatchObject({
-      submitting: false,
-      awaitingCheck: false,
-      fieldErrors: { captcha: "incomplete" },
+    expect(next).toEqual(verifying);
+  });
+  it("再送待機中に戻った意思確認での送信は開始せず、意思確認のまま再送待機の不備を持ち、待機が過ぎると送付済みの対象で開始できる", () => {
+    // Given
+    const returned = deleteAccountReducer(entering, {
+      type: "emailStepReturned",
+    });
+    // When
+    const early = beginDeleteCodeSend(
+      deleteAccountReducer(returned, {
+        type: "captchaChecked",
+        token: "resend-check",
+      }),
+      false,
+    );
+    const late = beginDeleteCodeSend(afterResendWait(returned), false);
+    // Then
+    expect(early.request).toBeNull();
+    expect(early.state).toMatchObject({
+      step: "confirmation",
+      pending: null,
+    });
+    expect(early.state.fieldErrors.resend).toBeDefined();
+    expect(late.request).toEqual({
+      captchaToken: "resend-check",
+      known: { userId: "user-1", email: "archer@example.test" },
+    });
+    expect(late.state).toMatchObject({ step: "confirmation", pending: "send" });
+  });
+  it("確認に成功した後の失敗では、処理中でも意思確認へ戻り、その他の失敗を持ち、処理中を解き、トークンを破棄し、対象とメールと再送待機を保つ", () => {
+    // Given
+    const verifying = beginDeleteCodeVerify(
+      deleteAccountReducer(entering, {
+        type: "captchaChecked",
+        token: "resend-check",
+      }),
+      { code: "123456", offline: false },
+    ).state;
+    // When
+    const next = deleteAccountReducer(verifying, {
+      type: "returnedWithFailure",
+    });
+    // Then
+    expect(next).toMatchObject({
+      step: "confirmation",
+      error: "other",
+      pending: null,
+      captchaToken: null,
+      userId: "user-1",
+      email: "archer@example.test",
+      resendCooldown: 60,
     });
   });
 });

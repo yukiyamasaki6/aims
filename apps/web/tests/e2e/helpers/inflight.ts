@@ -1,15 +1,10 @@
 import type { BrowserContext, Frame, Page, Request } from "@playwright/test";
-import {
-  RESET_PASSWORD_PATH,
-  ROUNDS_PATH,
-  SIGN_IN_PATH,
-  SIGN_UP_PATH,
-} from "@/routes";
+import { ROUNDS_PATH, SIGN_IN_PATH, SIGN_UP_PATH } from "@/routes";
 
 // proxy.tsの対象のパスへの要求のうち、応答がまだ届いていないものを、contextごとに記録する。
 // proxy.tsは応答にSet-Cookieでセッションを付けるため、保存先のCookieを書き換えた後にその応答が届くと、書き換えを元に戻す。
 export const PROXY_PATH = new RegExp(
-  `^(${[ROUNDS_PATH, SIGN_IN_PATH, SIGN_UP_PATH, RESET_PASSWORD_PATH].join("|")})(/|$)`,
+  `^(${[ROUNDS_PATH, SIGN_IN_PATH, SIGN_UP_PATH].join("|")})(/|$)`,
 );
 
 // 記録から外れたとき(完了、失敗、文書の破棄)に解決する。

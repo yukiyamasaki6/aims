@@ -135,7 +135,11 @@ function routeOf(view: SettingsView | null): SettingsRoute {
   };
 }
 
-const deleteAccount: DeleteAccount = { submit: vi.fn(async () => {}) };
+const deleteAccount: DeleteAccount = {
+  sendCode: vi.fn(async () => {}),
+  verifyCode: vi.fn(async () => {}),
+  tickCooldown: vi.fn(() => () => {}),
+};
 
 function entry(view: SettingsView) {
   return <SettingsPanelEntry route={routeOf(view)} />;
@@ -182,7 +186,6 @@ describe("SettingsPanelEntry", () => {
   describe("表示", () => {
     it.each([
       ["email", "changeEmailTitle"],
-      ["password", "changePasswordTitle"],
       ["delete-account", "deleteAccountTitle"],
     ] as const)(
       "%sの表示では、項目の画面の見出し(%s)を表示し、サインアウトの行は表示しない",
@@ -201,7 +204,7 @@ describe("SettingsPanelEntry", () => {
       },
     );
 
-    it.each(["email", "password", "delete-account"] as const)(
+    it.each(["email", "delete-account"] as const)(
       "セキュリティチェックのサイトキーの環境変数が無くても、%sの画面を例外を投げずに描く",
       (view) => {
         // Given
@@ -232,24 +235,6 @@ describe("SettingsPanelEntry", () => {
 
       // Then
       expect(render).not.toThrow();
-    });
-  });
-
-  describe("アカウント削除", () => {
-    it("セキュリティチェックのサイトキーの環境変数を、チェックへ渡す。無ければ空にする", () => {
-      // Given
-      vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "site-key-1");
-      const withKey = renderEntry("delete-account");
-      const keyed = widget.siteKey;
-      withKey.unmount();
-      vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", undefined);
-
-      // When
-      renderEntry("delete-account");
-
-      // Then
-      expect(keyed).toBe("site-key-1");
-      expect(widget.siteKey).toBe("");
     });
   });
 });

@@ -2,11 +2,11 @@
 
 import { useTranslations } from "next-intl";
 import type { FormEvent, RefObject } from "react";
-import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { AuthField } from "./auth-field";
 import { AuthHeader } from "./auth-header";
-import { Turnstile, type TurnstileReset } from "./turnstile";
+import { OtpSendForm } from "./otp-send-form";
+import type { TurnstileReset } from "./turnstile";
 
 type OtpEmailStepProps = {
   // エラー文の要素のidの接頭辞(`${idPrefix}-email-error`)。
@@ -16,6 +16,8 @@ type OtpEmailStepProps = {
   onEmailChange: (value: string) => void;
   emailError: string | undefined;
   submitting: boolean;
+  resendCooldown: number;
+  resendError: string | undefined;
   error: string | null;
   hydrated: boolean;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
@@ -33,6 +35,8 @@ export function OtpEmailStep({
   onEmailChange,
   emailError,
   submitting,
+  resendCooldown,
+  resendError,
   error,
   hydrated,
   onSubmit,
@@ -43,41 +47,39 @@ export function OtpEmailStep({
   waiting,
 }: OtpEmailStepProps) {
   const t = useTranslations("auth");
-  const errorId = `${idPrefix}-email-error`;
   return (
     <>
       <AuthHeader title={title} />
-      <form
+      <OtpSendForm
         onSubmit={onSubmit}
-        noValidate
-        data-hydrated={hydrated}
-        className="flex w-full flex-col gap-3"
+        hydrated={hydrated}
+        siteKey={siteKey}
+        checkRef={checkRef}
+        onCheck={onCheck}
+        onFailed={onFailed}
+        waiting={waiting}
+        submitting={submitting}
+        label={t("otpSendCode")}
+        variant="default"
+        resendCooldown={resendCooldown}
+        resendError={resendError}
+        error={error}
       >
-        <AuthField errorId={errorId} error={emailError}>
+        <AuthField errorId={`${idPrefix}-email-error`} error={emailError}>
           {(aria) => (
             <Input
               type="email"
               name="email"
-              autoComplete="username"
+              autoComplete="email"
               placeholder={t("emailPlaceholder")}
+              readOnly={submitting}
               value={email}
               onChange={(e) => onEmailChange(e.target.value)}
               {...aria}
             />
           )}
         </AuthField>
-        <Turnstile
-          siteKey={siteKey}
-          ref={checkRef}
-          onVerify={onCheck}
-          onFailed={onFailed}
-          waiting={waiting}
-        />
-        <BusyButton type="submit" busy={submitting}>
-          {t("otpSendCode")}
-        </BusyButton>
-      </form>
-      {error && <p className="text-center text-destructive text-sm">{error}</p>}
+      </OtpSendForm>
     </>
   );
 }

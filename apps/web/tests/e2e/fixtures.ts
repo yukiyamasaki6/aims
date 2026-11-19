@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +11,11 @@ import {
   type Page,
   type Request,
 } from "@playwright/test";
+import {
+  prepareConfirmedUserSession,
+  SHARED_AUTH_STATE_PATH,
+  setIsolatedEmail,
+} from "./helpers/auth";
 import { trackInflight } from "./helpers/inflight";
 import { mockTurnstile } from "./helpers/turnstile";
 
@@ -29,7 +35,7 @@ function watchAuthentication(context: BrowserContext) {
       unexpected.push("Cloudflare request");
     if (
       request.isNavigationRequest() &&
-      /^\/(signin|signup|reset-password)(\/|$)/.test(url.pathname)
+      /^\/(signin|signup)(\/|$)/.test(url.pathname)
     ) {
       unexpected.push(url.pathname);
     }
@@ -48,8 +54,42 @@ function watchAuthentication(context: BrowserContext) {
 export const test = base.extend<{
   profile: RestartableProfile;
   turnstile: boolean;
+  caseUser: undefined;
 }>({
   turnstile: [true, { option: true }],
+  caseUser: [
+    async ({ context, storageState, baseURL }, use) => {
+      if (storageState !== SHARED_AUTH_STATE_PATH) {
+        await use(undefined);
+        return;
+      }
+      if (!baseURL) throw new Error("Missing application URL in e2e fixture.");
+      const email = `case-${randomUUID()}@aims.test`;
+      setIsolatedEmail(email);
+      await context.clearCookies();
+      const userId = await prepareConfirmedUserSession(context, baseURL, {
+        email,
+        password: "unused",
+      });
+      // 共有利用者の端末の記憶を、サインイン後の端末と同じくケースの利用者のものへ替える。
+      // 記憶を空のままにすると、アプリが利用者の切り替えとして最初の画面を読み込み直し、直後の操作と競合する。
+      await context.addInitScript(
+        ({ origin, email, userId }) => {
+          if (
+            location.origin !== origin ||
+            localStorage.getItem("aims:e2e-case") === email
+          )
+            return;
+          localStorage.clear();
+          localStorage.setItem("aims:e2e-case", email);
+          localStorage.setItem("aims:local-user-id", userId);
+        },
+        { origin: new URL(baseURL).origin, email, userId },
+      );
+      await use(undefined);
+    },
+    { auto: true },
+  ],
   page: async ({ page, turnstile }, use) => {
     if (turnstile) await mockTurnstile(page);
     const verify = turnstile ? undefined : watchAuthentication(page.context());

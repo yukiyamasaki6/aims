@@ -9,7 +9,6 @@ import {
 
 const ITEMS = [
   { view: "email", textKey: "changeEmailItem" },
-  { view: "password", textKey: "changePasswordItem" },
   { view: "delete-account", textKey: "deleteAccountItem" },
 ] as const satisfies readonly {
   view: SettingsItemView;

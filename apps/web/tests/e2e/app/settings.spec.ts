@@ -3,7 +3,6 @@ import type { Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import {
   CHANGE_EMAIL_HASH,
-  CHANGE_PASSWORD_HASH,
   DELETE_ACCOUNT_HASH,
   ROUNDS_HOME_PATH,
   SETTINGS_ACCOUNT_HASH,
@@ -79,17 +78,13 @@ test.describe("認証済み", () => {
   });
 
   test.describe("中を使う", () => {
-    test("分類「アカウント」にメールアドレス変更・パスワード変更・アカウント削除・サインアウトがあり、レフトパネルにサインアウトのボタンは無く、本文に分類の見出しは無い", async ({
+    test("分類「アカウント」にメールアドレス変更・アカウント削除・サインアウトがあり、レフトパネルにサインアウトのボタンは無く、本文に分類の見出しは無い", async ({
       page,
     }) => {
       await openHomeThenSettings(page);
 
       const panel = settingsPanel(page);
-      for (const item of [
-        "changeEmailItem",
-        "changePasswordItem",
-        "deleteAccountItem",
-      ] as const) {
+      for (const item of ["changeEmailItem", "deleteAccountItem"] as const) {
         await expect(
           panel.getByRole("link", { name: settingsText(item) }),
         ).toBeVisible();
@@ -110,7 +105,6 @@ test.describe("認証済み", () => {
 
     for (const [item, title, hash] of [
       ["changeEmailItem", "changeEmailTitle", CHANGE_EMAIL_HASH],
-      ["changePasswordItem", "changePasswordTitle", CHANGE_PASSWORD_HASH],
       ["deleteAccountItem", "deleteAccountTitle", DELETE_ACCOUNT_HASH],
     ] as const) {
       test(`「${settingsText(item)}」項目を押すと、設定パネルの中に項目の画面が出て、URLが${hash}になる`, async ({
@@ -136,9 +130,9 @@ test.describe("認証済み", () => {
     }) => {
       await openHomeThenSettings(page);
       await settingsPanel(page)
-        .getByRole("link", { name: settingsText("changePasswordItem") })
+        .getByRole("link", { name: settingsText("changeEmailItem") })
         .click();
-      await expect(page).toHaveURL(new RegExp(`${CHANGE_PASSWORD_HASH}$`));
+      await expect(page).toHaveURL(new RegExp(`${CHANGE_EMAIL_HASH}$`));
 
       await accountCategory(page).click();
 
@@ -154,7 +148,6 @@ test.describe("未認証", () => {
   for (const [name, path] of [
     ["サインイン", "/signin"],
     ["サインアップ", "/signup"],
-    ["パスワード再設定", "/reset-password"],
     ["紹介", "/"],
     ["オフライン", "/offline"],
     ["見つからない旨", `/not-found-${randomUUID().slice(0, 8)}`],

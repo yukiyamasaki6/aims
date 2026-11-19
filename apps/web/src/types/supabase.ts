@@ -661,7 +661,10 @@ export type Database = {
         };
         Returns: Json;
       };
-      delete_account: { Args: Record<PropertyKey, never>; Returns: undefined };
+      delete_account: {
+        Args: { expected_user_id: string };
+        Returns: undefined;
+      };
       disable_distance: {
         Args: { p_distance_event_id: string; p_distance_id: string };
         Returns: Json;
@@ -695,6 +698,7 @@ export type Database = {
         };
         Returns: Json;
       };
+      email_otp_access_token_hook: { Args: { event: Json }; Returns: Json };
       history_rounds: {
         Args: {
           p_bow_type: string;

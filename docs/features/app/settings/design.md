@@ -6,15 +6,14 @@
 パネルの開閉と表示はハッシュだけから決める。開く操作とパネルの中の移動は`history.pushState`で履歴を1つずつ積み、閉じる操作は開いた起点まで履歴を戻す。
 パネルは`@base-ui/react`のモーダルのダイアログで、フォーカスの閉じ込め、外側の`aria-hidden`、Esc、外側の押下、入れ子のダイアログ(サインアウトの確認)の扱いを任せる。
 ハッシュはサーバーへ送られないため、保護(`proxy.ts`)と枠の保存(`app/offline-pwa`)は背景の画面のものがそのまま効き、設定のための経路・枠・保護の範囲を持たない。
-項目の画面(メールアドレス変更、パスワード変更、アカウント削除)とサインアウトは認証の部品で、入口が組み立ててパネルへ渡す。
+項目の画面(メールアドレス変更、アカウント削除)とサインアウトは認証の部品で、入口が組み立ててパネルへ渡す。
 
 ## 画面と状態
 
 | ハッシュ | 表示 |
 | :--- | :--- |
-| `#settings/account` | 分類「アカウント」。メールアドレス変更、パスワード変更、アカウント削除の項目と、サインアウトを、囲み枠なしで項目間だけを区切る一覧に並べる。本文に分類の見出しは置かない。 |
+| `#settings/account` | 分類「アカウント」。メールアドレス変更、アカウント削除の項目と、サインアウトを、囲み枠なしで項目間だけを区切る一覧に並べる。本文に分類の見出しは置かない。 |
 | `#settings/account/email` | メールアドレス変更の画面(`auth/change-email`) |
-| `#settings/account/password` | パスワード変更の画面(`auth/change-password`) |
 | `#settings/account/delete-account` | アカウント削除の画面(`auth/delete-account`) |
 | `#settings`、`#settings/`で始まる上記以外 | 分類「アカウント」として開き、`history.replaceState`でハッシュを`#settings/account`に書き換える(履歴を増やさない)。 |
 | 上記以外(ハッシュなし、`#settingsfoo`など) | 閉じている。ハッシュは変えない。 |
@@ -55,7 +54,7 @@
   本文4項目と分類タブは、いずれも既存の文字14px・行高20px(`text-sm`)を維持する。本文はButton基本クラス、分類は`CategoryLink`の指定を使い、rowに文字サイズや行高の上書きを加えない。
   区切り線の位置と色は一覧側が担い、`row`自身は境界線を追加しない。
   リンクは`cn(buttonVariants({ variant: "ghost", size: "row" }))`を使い、`Button`と同じ`cn`(`twMerge`)で角丸と境界線のクラスを解決する。
-- メールアドレス変更、パスワード変更、アカウント削除、サインアウトの全4項目は、文字ラベルだけで示し、アイコンを置かない。
+- メールアドレス変更、アカウント削除、サインアウトの全3項目は、文字ラベルだけで示し、アイコンを置かない。
 - 境界線の色は`border-foreground/40`である。既存の`--border`は、白の背景に対するコントラストが約1.3:1で、目視でほぼ見えなかった。`--ring`や`--muted-foreground`は意味(フォーカス、補助の文字)が違うため使わない。
 - フォーカスリングは`Button`の規約のまま外側に描く。一覧を囲む`overflow-hidden`を持たないため切れず、フォーカス中の行は`z-10`で隣の行の背景に覆われない。
 - 色と大きさは、既存のトークン(`globals.css`)とButtonの規約だけを使う。配置と見た目はE2Eで確かめない(`agents/testing.md`)。
@@ -77,14 +76,14 @@
 
 ## 構成とデータの流れ
 
-- `src/routes.ts`(経路表): 設定のハッシュ`SETTINGS_HASH`(`#settings`)、`SETTINGS_ACCOUNT_HASH`(`#settings/account`)、`CHANGE_EMAIL_HASH`(`#settings/account/email`)、`CHANGE_PASSWORD_HASH`(`#settings/account/password`)、`DELETE_ACCOUNT_HASH`(`#settings/account/delete-account`)を持つ。設定のパスと枠は持たない。
-- `src/features/settings/domain/settings-location.ts`(ドメイン): ハッシュから表示(`account`、`email`、`password`、`delete-account`、または閉)と正規化の要否を返す規則、表示からハッシュを返す規則、履歴の状態と文書の識別子から段数を読む規則と、積む状態を作る規則。純関数で、経路表のハッシュを読む。
+- `src/routes.ts`(経路表): 設定のハッシュ`SETTINGS_HASH`(`#settings`)、`SETTINGS_ACCOUNT_HASH`(`#settings/account`)、`CHANGE_EMAIL_HASH`(`#settings/account/email`)、`DELETE_ACCOUNT_HASH`(`#settings/account/delete-account`)を持つ。設定のパスと枠は持たない。
+- `src/features/settings/domain/settings-location.ts`(ドメイン): ハッシュから表示(`account`、`email`、`delete-account`、または閉)と正規化の要否を返す規則、表示からハッシュを返す規則、履歴の状態と文書の識別子から段数を読む規則と、積む状態を作る規則。純関数で、経路表のハッシュを読む。
 - `src/features/settings/ui/use-settings-route.ts`(UI): ハッシュと履歴の読み書き。`popstate`、`hashchange`と自分の書き込みを`useSyncExternalStore`で購読し、事前描画と水和では閉とする(枠は静的なため、開くのは水和の後)。正規化、開く、移る、閉じる、閉じたときのフォーカスの戻し先の種類を返す。閉じるの`history.go`の後の`replaceState`は、起点に着いた`popstate`で行う。
 - `src/features/settings/ui/settings-panel.tsx`(UI): パネル。`components/ui/dialog.tsx`の`Dialog`の上に、見出し、閉じる、分類の一覧、表示の領域を描く。処理中の値を持ち、表示が変わると解く。項目の画面は、入口が渡す描画の関数に、戻る操作と処理中の知らせを渡して描き、表示が変わると外す(入力と途中の経過は残らない)。
 - `src/features/settings/ui/settings-account.tsx`(UI): 分類「アカウント」の本文。項目の行(経路表のハッシュを`href`に持つリンク。押下は既定の動作を止めて、受け取った移る操作を呼ぶ)と、入口が渡すサインアウトの行を並べる。
 - `src/features/settings/ui/settings-messages.ts`(UI): 文言(名前空間`settings`。見出し、閉じる、分類、項目)。
 - `src/app/(main)/layout.tsx`(入口): `useSettingsRoute`を呼び、開いているか・開く操作・戻し先の種類をレフトパネルへ、経路の操作を設定パネルの入口へ渡す。設定パネルの入口は`LeftPanel`の外(兄弟)に描く(メニューの文脈を受けないため)。
-- `src/app/(main)/settings-panel-entry.tsx`(入口): `SettingsPanel`に、サインアウトの行(`useSession`の`signOut`で作る`SignOutButton`)と、項目の画面の描画の関数を渡す。項目の画面は、手続きを生成して`ChangeEmailForm`、`ChangePasswordForm`、`DeleteAccountForm`(手続きは`useDeleteAccount`)を描き、戻る操作と処理中の知らせを渡す。
+- `src/app/(main)/settings-panel-entry.tsx`(入口): `SettingsPanel`に、サインアウトの行(`useSession`の`signOut`で作る`SignOutButton`)と、項目の画面の描画の関数を渡す。項目の画面は、手続きを生成して`ChangeEmailForm`、`DeleteAccountForm`(手続きは`useDeleteAccount`)を描き、戻る操作と処理中の知らせを渡す。
 - レフトパネルの「設定」項目(設定パネルを開くだけで、現在のビューにならない)、閉じた後のフォーカスは`app/navigation`、未認証の遷移元のハッシュは`auth/signin`、オフラインは`app/offline-pwa`に従う。
 - 各ファイルの層は`docs/architecture.md`の「1. 構造」に従う。
 
@@ -107,8 +106,10 @@
 
 ## 制約と未対応
 
-- 分類は「アカウント」の1つで、項目の並びは、メールアドレス変更、パスワード変更、アカウント削除(リンク)、サインアウト(入口が渡す)の順である。
-- パネルを描くのは`(main)`のレイアウトだけで、サインイン・サインアップ・パスワード再設定・紹介・`/offline`・見つからない旨の画面では、ハッシュを読まない。
+- 分類は「アカウント」の1つで、項目の並びは、メールアドレス変更、アカウント削除(リンク)、サインアウト(入口が渡す)の順である。
+- パネルを描くのは`(main)`のレイアウトだけで、サインイン・サインアップ・紹介・`/offline`・見つからない旨の画面では、ハッシュを読まない。
 - 読み込み時に開いたパネルを閉じた後も、進むの履歴にはパネルの中で移った項目が残り、進むで開く。
 - アドレス欄でハッシュを手入力で書き換えた履歴の項目は、状態が`null`で、Next.jsの印`__NA`を持たない(水和の前に「設定」項目を押した項目も同じ)。そこから積んだ項目と、そこでの正規化・閉じるの`replaceState`の項目も`__NA`を持たない(Next.jsは今の状態から`__NA`を写すため)。これらの項目へブラウザの戻る・進むで移ると、Next.jsの`popstate`の処理がページ全体を読み込み直し、背景の画面の状態(入力途中の内容など)は失われる。読み込み直した画面では、ハッシュが指す表示の設定パネルが、読み込み時に開いたパネルとして開く。この場合は受け入れ、対処しない。
 - 旧版の`/settings`配下のURLは、他の存在しないURLと同じに扱う(オンラインは見つからない旨の画面、オフラインは`/offline`。`app/offline-pwa`)。
+
+未知項目は既存の一般規則で正規化する。廃止したパスワード項目の定数・専用判定・互換遷移は持たない。

@@ -1,15 +1,14 @@
 <p>AIMSをご利用いただきありがとうございます。</p>
 
-<p>このメールアドレスは、すでにAIMSに登録されています。</p>
+<p>以下のコードを入力して、認証を完了してください。</p>
 
-<p>
-  サインインする場合は、以下のページにアクセスしてください。<br>
-  <a href="{{ .SiteURL }}/signin">{{ .SiteURL }}/signin</a>
+<p style="font-size: 32px; font-weight: bold; letter-spacing: 4px;">
+  {{ .Token }}
 </p>
 
 <p>
-  パスワードをお忘れの場合は、以下のページから再設定できます。<br>
-  <a href="{{ .SiteURL }}/reset-password">{{ .SiteURL }}/reset-password</a>
+  認証コードの有効期限は15分間です。<br>
+  新しい認証コードをリクエストすると、古いコードは無効になります。
 </p>
 
 <p>本メールに心当たりがない場合は、何も操作せずに本メールを破棄してください。</p>

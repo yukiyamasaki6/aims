@@ -9,6 +9,7 @@ import {
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignInForm } from "@/features/auth/ui/signin-form";
+import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 
@@ -26,6 +27,7 @@ export default function SignInPage() {
     createSignIn({
       authenticator: createSupabaseAuth(createClient),
       pageReplace: createBrowserPageLoad(),
+      clock: createBrowserClock(),
       connectivity: createBrowserConnectivity(),
     }),
   );

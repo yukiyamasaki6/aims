@@ -29,6 +29,8 @@ function createForm(overrides: Partial<Props> = {}) {
     pending: null,
     error: null,
     onBack: vi.fn(),
+    verifyLabel: authText("otpVerify"),
+    verifyVariant: "default",
     onVerify: vi.fn((e) => e.preventDefault()),
     onResend: vi.fn(),
     siteKey: "site-key",
@@ -126,17 +128,17 @@ describe("OtpCodeStep", () => {
 
       // When
       const form = createForm({ codeError: "コードのエラー" });
-      renderStep(form, "reset-password");
+      renderStep(form, "custom-otp");
 
       // Then
       const input = screen.getByPlaceholderText("123456");
       expect(screen.getByText("コードのエラー")).toHaveAttribute(
         "id",
-        "reset-password-code-error",
+        "custom-otp-code-error",
       );
       expect(input).toHaveAttribute(
         "aria-describedby",
-        "reset-password-code-error",
+        "custom-otp-code-error",
       );
       expect(input).toHaveAttribute("aria-invalid", "true");
     });
@@ -319,6 +321,27 @@ describe("OtpCodeStep", () => {
       // Then
       expect(zeroLabel).toBe(authText("otpResend"));
       expect(oneLabel).toBe("再送（1秒）");
+    });
+  });
+
+  describe("確認ボタンの文言", () => {
+    it("渡された文言を確認ボタンに描く", () => {
+      // Given
+
+      // When
+      const form = createForm({
+        verifyLabel: authText("deleteAccountVerify"),
+        verifyVariant: "destructive",
+      });
+      renderStep(form);
+
+      // Then
+      expect(
+        screen.getByRole("button", { name: authText("deleteAccountVerify") }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: authText("otpVerify") }),
+      ).toBeNull();
     });
   });
 });

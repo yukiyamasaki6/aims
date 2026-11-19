@@ -112,9 +112,9 @@ test("未認証で紹介画面を開くと画面の枠が保存され、サイ�
   await expect(page.getByText(roundsText("homeEmpty"))).toBeVisible();
   await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
   await expect(page.getByPlaceholder("you@example.com")).toHaveCount(0);
-  await expect(
-    page.getByPlaceholder(authText("passwordPlaceholder")),
-  ).toHaveCount(0);
+  await expect(page.getByPlaceholder(authText("emailPlaceholder"))).toHaveCount(
+    0,
+  );
   expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
 
   // オフラインで履歴を開き、Service Workerが返した履歴の枠と「ネットワークに接続されていません」が表示され、サインイン画面とラウンドの無い表示が出ないことを確かめる。

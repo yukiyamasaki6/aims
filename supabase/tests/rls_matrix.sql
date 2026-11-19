@@ -557,8 +557,8 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.create_distance(uuid,uuid,uuid,text,bigint,bigint,bigint,uuid,boolean)',   'authenticated', true),
   ('public.create_round(uuid,uuid,text,date,text,text,jsonb)',                        'anon',          false),
   ('public.create_round(uuid,uuid,text,date,text,text,jsonb)',                        'authenticated', true),
-  ('public.delete_account()',                                                        'anon',          false),
-  ('public.delete_account()',                                                        'authenticated', true),
+  ('public.delete_account(uuid)',                                                        'anon',          false),
+  ('public.delete_account(uuid)',                                                        'authenticated', true),
   ('public.disable_distance(uuid,uuid)',                                              'anon',          false),
   ('public.disable_distance(uuid,uuid)',                                              'authenticated', true),
   ('public.disable_round(uuid,uuid)',                                                 'anon',          false),
@@ -567,6 +567,8 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.distance_config_over_limit(numeric,numeric,numeric)',                     'authenticated', true),
   ('public.distances_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb,jsonb)', 'anon',          false),
   ('public.distances_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb,jsonb)', 'authenticated', true),
+  ('public.email_otp_access_token_hook(jsonb)', 'anon', false),
+  ('public.email_otp_access_token_hook(jsonb)', 'authenticated', false),
   ('public.handle_new_user()',                                                        'anon',          false),
   ('public.handle_new_user()',                                                        'authenticated', false),
   ('public.history_rounds(text,text,date,date,jsonb)',                                'anon',          false),
@@ -611,7 +613,8 @@ select is_empty(
       select case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end as role_name
     ) g
     where p.pronamespace = 'public'::regnamespace and a.privilege_type = 'EXECUTE'
-      and g.role_name not in (select role_name from rls_role)$$,
+      and g.role_name not in (select role_name from rls_role)
+      and not (p.proname = 'email_otp_access_token_hook' and g.role_name = 'supabase_auth_admin')$$,
   'publicの全関数のEXECUTEは、検証対象ロールと内部ロールにしか付いていない'
 );
 

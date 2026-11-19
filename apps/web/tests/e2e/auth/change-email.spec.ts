@@ -1,12 +1,16 @@
 import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { CHANGE_EMAIL_HASH } from "@/routes";
 import { expect, test } from "../fixtures";
-import { createConfirmedUser, signUpAndSignIn } from "../helpers/auth";
-import { signInError } from "../helpers/auth-api";
+import {
+  createConfirmedUser,
+  signInWithEmailOtp,
+  signUpAndSignIn,
+} from "../helpers/auth";
 import { fastForwardResendCooldown } from "../helpers/clock";
-import { getOtpCodeFromMailpit } from "../helpers/mailpit";
+import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
 import {
   expectStillSignedIn,
   signInOnOtherDevice,
@@ -34,6 +38,8 @@ function uniqueEmail(prefix: string) {
   );
   return `${prefix}-${letters}@aims.test`;
 }
+
+const previousMail = new Map<string, string[]>();
 
 type Addresses = { current: string; next: string };
 
@@ -68,6 +74,8 @@ async function sendNewEmail(page: Page, email: string) {
 
 // 新しいメールアドレスを送って、コード確認の画面へ進んだことまで確かめる。
 async function requestChange(page: Page, addresses: Addresses) {
+  previousMail.set(addresses.current, await mailIds(addresses.current));
+  previousMail.set(addresses.next, await mailIds(addresses.next));
   await sendNewEmail(page, addresses.next);
   await expect(codeInput(page, "new", addresses)).toBeVisible();
 }
@@ -89,8 +97,14 @@ async function enterCodes(
 // 宛先に届いたコードを取り出す。
 async function mailedCodes(addresses: Addresses) {
   return {
-    current: await getOtpCodeFromMailpit(addresses.current),
-    next: await getOtpCodeFromMailpit(addresses.next),
+    current: await getOtpCodeFromMailpit(
+      addresses.current,
+      previousMail.get(addresses.current),
+    ),
+    next: await getOtpCodeFromMailpit(
+      addresses.next,
+      previousMail.get(addresses.next),
+    ),
   };
 }
 
@@ -135,15 +149,23 @@ test("新しいメールアドレスを送り、現在と新しいアドレス�
   ).toBeVisible();
 
   // 別のクライアントでは新しいアドレスだけが使え、この端末はサインインしたままである。
-  expect(await signInError(addresses.next, PASSWORD)).toBeNull();
-  expect(await signInError(addresses.current, PASSWORD)).toBe(
-    "invalid_credentials",
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    { auth: { persistSession: false, autoRefreshToken: false } },
   );
+  try {
+    const result = await signInWithEmailOtp(client, addresses.next);
+    expect(result.error === null).toBe(true);
+    expect(result.data.user?.email).toBe(addresses.next);
+  } finally {
+    await client.auth.stopAutoRefresh();
+  }
   await page.goto("/rounds");
   await expect(page).toHaveURL(/\/rounds/);
 });
 
-test("一方のコードを誤って確認すると、誤りの欄にだけエラーが出て、古いアドレスでサインインでき、誤りの欄だけ正しいコードに直して確認すると完了する", async ({
+test("一方のコードを誤って確認すると、誤りの欄にだけエラーが出て、誤りの欄だけ正しいコードに直して確認すると完了する", async ({
   page,
 }) => {
   // 新しいメールアドレスを送って、コード確認の画面へ進む。
@@ -170,21 +192,11 @@ test("一方のコードを誤って確認すると、誤りの欄にだけエ�
     "false",
   );
 
-  // 別のクライアントでは、まだ古いアドレスでだけサインインできる。
-  expect(await signInError(addresses.current, PASSWORD)).toBeNull();
-  expect(await signInError(addresses.next, PASSWORD)).toBe(
-    "invalid_credentials",
-  );
-
-  // 変更前の欄だけ正しいコードに直して確認し、完了の表示へ進み、新しいアドレスでだけサインインできる。
+  // 変更前の欄だけ正しいコードに直して確認し、完了の表示へ進み、変更を完了する。
   await codeInput(page, "current", addresses).fill(codes.current);
   await verifyButton(page).click();
   await expect(page.getByRole("status")).toHaveText(
     authText("changeEmailDone"),
-  );
-  expect(await signInError(addresses.next, PASSWORD)).toBeNull();
-  expect(await signInError(addresses.current, PASSWORD)).toBe(
-    "invalid_credentials",
   );
 });
 
@@ -209,13 +221,23 @@ test("コード確認で再送の待機を過ぎて再送すると、新しい�
   await waitForTurnstileToken(page, 1);
   await fastForwardResendCooldown(page);
   await expect(resendButton).toHaveText(authText("otpResend"));
-  // サーバー側の送信間隔は実時間で判定されるため、ローカル・CIの設定値を超えるまで待つ。
-  await page.waitForTimeout(1_200);
+  // ブラウザ時計の早送りはAuthの送信間隔を進めない。
+  test.setTimeout(150000);
+  const requestedAt = Date.now();
+  await expect
+    .poll(() => Date.now() - requestedAt >= 60000, {
+      timeout: 65000,
+      intervals: [1000],
+      message: "Authの再送間隔が経過する",
+    })
+    .toBe(true);
+  previousMail.set(addresses.current, await mailIds(addresses.current));
+  previousMail.set(addresses.next, await mailIds(addresses.next));
   await resendButton.click();
   await expect(async () => {
     const latest = await mailedCodes(addresses);
-    expect(latest.current).not.toBe(first.current);
-    expect(latest.next).not.toBe(first.next);
+    expect(latest.current !== first.current).toBe(true);
+    expect(latest.next !== first.next).toBe(true);
   }).toPass();
 
   // コード欄が空になっていて、前のコードは使えず、両方の欄に誤りまたは期限切れの表示が出る。

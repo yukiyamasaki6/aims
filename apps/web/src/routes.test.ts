@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   CHANGE_EMAIL_HASH,
-  CHANGE_PASSWORD_HASH,
   DELETE_ACCOUNT_HASH,
   FRAME_PATHS,
   frameHtmlOf,
@@ -60,7 +59,6 @@ describe("routes", () => {
         SETTINGS_HASH,
         SETTINGS_ACCOUNT_HASH,
         CHANGE_EMAIL_HASH,
-        CHANGE_PASSWORD_HASH,
         DELETE_ACCOUNT_HASH,
       ];
 
@@ -69,7 +67,6 @@ describe("routes", () => {
         "#settings",
         "#settings/account",
         "#settings/account/email",
-        "#settings/account/password",
         "#settings/account/delete-account",
       ]);
     });

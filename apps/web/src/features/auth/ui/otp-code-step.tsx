@@ -24,6 +24,9 @@ type OtpCodeStepProps = {
   pending: Pending;
   error: string | null;
   onBack: () => void;
+  // 確認ボタンの文言と見た目。
+  verifyLabel: string;
+  verifyVariant: "default" | "destructive";
   onVerify: (e: FormEvent<HTMLFormElement>) => void;
   onResend: () => void;
   siteKey: string;
@@ -44,6 +47,8 @@ export function OtpCodeStep({
   pending,
   error,
   onBack,
+  verifyLabel,
+  verifyVariant,
   onVerify,
   onResend,
   siteKey,
@@ -69,6 +74,8 @@ export function OtpCodeStep({
         pending={pending}
         errorId={`${idPrefix}-code-error`}
         onSubmit={onVerify}
+        verifyLabel={verifyLabel}
+        verifyVariant={verifyVariant}
       />
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
       <p className="text-center text-muted-foreground text-sm">
@@ -98,6 +105,8 @@ function CodeEntryForm({
   pending,
   errorId,
   onSubmit,
+  verifyLabel,
+  verifyVariant,
 }: {
   code: string;
   onCodeChange: (value: string) => void;
@@ -105,6 +114,8 @@ function CodeEntryForm({
   pending: Pending;
   errorId: string;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
+  verifyLabel: string;
+  verifyVariant: "default" | "destructive";
 }) {
   const t = useTranslations("auth");
   return (
@@ -127,10 +138,11 @@ function CodeEntryForm({
       </AuthField>
       <BusyButton
         type="submit"
+        variant={verifyVariant}
         busy={pending !== null}
         spinner={pending === "verify"}
       >
-        {t("otpVerify")}
+        {verifyLabel}
       </BusyButton>
     </form>
   );

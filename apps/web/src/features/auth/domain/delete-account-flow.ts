@@ -1,111 +1,108 @@
-import type { AuthFailure, AuthFailureKind } from "./auth-failure";
 import {
-  applyCheckedToken,
-  applyCheckWaitReleased,
-  type CheckEvent,
-  isCaptchaCompleted,
-} from "./captcha-token";
-import type { FieldErrors, Start } from "./flow";
-import { validatePasswordPresent } from "./password";
+  beginSendCodeToCurrent,
+  beginVerifyCode,
+  type EmailOtpEvent,
+  type EmailOtpFlow,
+  emailOtpReducer,
+  initialEmailOtpFlow,
+} from "./email-otp-flow";
+import type { Start } from "./flow";
 
-// アカウント削除の流れ。開始の可否、入力の検証の順序、失敗の後の状態、セキュリティチェックのトークンの消費を守る集約。
-
-export type DeleteAccountFlow = {
-  readonly captchaToken: string | null;
-  readonly submitting: boolean;
-  // チェック未完了のまま押され、トークンを待っている(送信中のまま)。
-  readonly awaitingCheck: boolean;
-  readonly fieldErrors: FieldErrors<"currentPassword" | "captcha">;
-  readonly error: AuthFailureKind | null;
+// 共通のメール確認コードの流れに、送付先の利用者を加えたもの。段階は、意思確認(confirmation)とコード入力(code)。
+export type DeleteAccountFlow = Omit<EmailOtpFlow, "step"> & {
+  readonly step: "confirmation" | "code";
+  readonly userId: string | null;
+  readonly email: string;
 };
-
 export const initialDeleteAccountFlow: DeleteAccountFlow = {
-  captchaToken: null,
-  submitting: false,
-  awaitingCheck: false,
-  fieldErrors: {},
-  error: null,
+  ...initialEmailOtpFlow,
+  step: "confirmation",
+  userId: null,
+  email: "",
 };
+// codeSent: 送付先の利用者を伴う`codeSentTo`で置き換える。
+// returnedWithFailure: コード確認に成功した後の失敗で、意思確認へ戻る。
+export type DeleteAccountEvent =
+  | Exclude<EmailOtpEvent, { type: "codeSent" }>
+  | { type: "codeSentTo"; userId: string; email: string }
+  | { type: "returnedWithFailure" };
 
-// 再認証の入力。現在のパスワードと、チェックのトークン。
-export type Reauthentication = {
-  readonly password: string;
-  readonly captchaToken: string;
-};
+function otpFlow(flow: DeleteAccountFlow): EmailOtpFlow {
+  return { ...flow, step: flow.step === "code" ? "code" : "email" };
+}
 
-// 開始の命令。判定の順序は、実行中(待ち以外) → 入力の判定 → オフラインの判定 → チェックの判定。
-// 実行中(待ち以外)なら開始しない。待ちの間は、トークンが無い再押下では何も変えず、トークンが届いた後の開始は通常の開始と同じに進む。
-// 入力の不備は、現在のパスワードの未入力を示す。
-// 入力に不備が無くオフラインなら、通信もトークンの消費もせず、オフラインを示す(チェックの状態によらず、待たない)。
-// 入力に不備もオフラインも無いとき、チェックが完了なら送信中にして依頼を返し、未完了(失敗の後を含む)なら依頼を返さず送信中の待ちにする。
-// 開始では以前のエラーを消す。
-// 送信中の間はエラーを持たない。
-export function beginDeleteAccount(
+function fromOtp(
   flow: DeleteAccountFlow,
-  input: { password: string; offline: boolean },
-): Start<DeleteAccountFlow, Reauthentication> {
-  const { captchaToken } = flow;
-  if (
-    flow.submitting &&
-    (!flow.awaitingCheck || !isCaptchaCompleted(captchaToken))
-  ) {
-    return { state: flow, request: null };
-  }
-  const idle = { ...flow, submitting: false, awaitingCheck: false };
-  const currentPassword = validatePasswordPresent(input.password);
-  if (currentPassword) {
-    return {
-      state: {
-        ...idle,
-        error: null,
-        fieldErrors: {
-          ...(currentPassword && { currentPassword }),
-        },
-      },
-      request: null,
-    };
-  }
-  if (input.offline) {
-    return {
-      state: { ...idle, error: "offline", fieldErrors: {} },
-      request: null,
-    };
-  }
-  const running = { ...idle, submitting: true, error: null, fieldErrors: {} };
-  if (!isCaptchaCompleted(captchaToken)) {
-    return { state: { ...running, awaitingCheck: true }, request: null };
-  }
+  next: EmailOtpFlow,
+): DeleteAccountFlow {
   return {
-    state: running,
-    request: { password: input.password, captchaToken },
+    ...flow,
+    ...next,
+    step: next.step === "code" ? "code" : "confirmation",
   };
 }
 
-// 画面で起きた事実。開始の命令は含まない(beginDeleteAccount)。
-// checkWaitReleased: チェックの部品の失敗、または待ちの上限(`captcha-token.ts`)。待ちの間だけ待ちを解いてチェックのエラーを示す。
-// failed: 削除が行われなかった、または結果が分からない失敗。再認証が使ったトークンは使えないため、成功した再認証の後の失敗も含め、全て消費する。
-export type DeleteAccountEvent =
-  | { type: "captchaChecked"; token: string | null }
-  | CheckEvent
-  | { type: "failed"; failure: AuthFailure };
+// known: 初回は送付先が未確定でnull。再送では、最初の送付先。
+export function beginDeleteCodeSend(
+  flow: DeleteAccountFlow,
+  offline: boolean,
+): Start<
+  DeleteAccountFlow,
+  {
+    captchaToken: string;
+    known: { userId: string; email: string } | null;
+  }
+> {
+  const started = beginSendCodeToCurrent(otpFlow(flow), { offline });
+  return {
+    state: fromOtp(flow, started.state),
+    request: started.request && {
+      captchaToken: started.request.captchaToken,
+      known:
+        flow.userId === null
+          ? null
+          : { userId: flow.userId, email: flow.email },
+    },
+  };
+}
+
+export function beginDeleteCodeVerify(
+  flow: DeleteAccountFlow,
+  input: { code: string; offline: boolean },
+): Start<DeleteAccountFlow, { userId: string; email: string; code: string }> {
+  if (!flow.userId) return { state: flow, request: null };
+  const started = beginVerifyCode(otpFlow(flow), {
+    ...input,
+    email: flow.email,
+  });
+  return {
+    state: fromOtp(flow, started.state),
+    request: started.request && { ...started.request, userId: flow.userId },
+  };
+}
 
 export function deleteAccountReducer(
   flow: DeleteAccountFlow,
   event: DeleteAccountEvent,
 ): DeleteAccountFlow {
   switch (event.type) {
-    case "captchaChecked":
-      return applyCheckedToken(flow, event.token);
-    case "checkWaitReleased":
-      return applyCheckWaitReleased(flow, { submitting: false });
-    // 画面のチェックのやり直しは、手続きが画面の約束で頼む。
-    case "failed":
+    case "returnedWithFailure":
       return {
-        ...flow,
-        submitting: false,
-        awaitingCheck: false,
-        captchaToken: null,
-        error: event.failure.kind,
+        ...fromOtp(
+          flow,
+          emailOtpReducer(otpFlow({ ...flow, pending: null }), {
+            type: "emailStepReturned",
+          }),
+        ),
+        error: "other",
       };
+    case "codeSentTo":
+      return {
+        ...fromOtp(flow, emailOtpReducer(otpFlow(flow), { type: "codeSent" })),
+        userId: event.userId,
+        email: event.email,
+      };
+    default:
+      return fromOtp(flow, emailOtpReducer(otpFlow(flow), event));
   }
 }

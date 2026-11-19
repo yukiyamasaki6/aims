@@ -7,13 +7,16 @@ import {
   clickSignInAndAwaitRounds,
   createConfirmedUser,
   getSharedEmail,
+  markOtpSent,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
   signOutFromSettings,
   signUpAndSignIn,
   waitForHydration,
+  waitForOtpSendWindow,
 } from "../helpers/auth";
 import { expectKeypadSettled } from "../helpers/keypad";
+import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
 import {
   getDistanceIds,
   getRoundRow,
@@ -138,14 +141,21 @@ async function signInOnPage(
   user: { email: string; password: string },
 ) {
   await page.getByPlaceholder("you@example.com").fill(user.email);
-  await page
-    .getByPlaceholder(authText("passwordPlaceholder"))
-    .fill(user.password);
-  const signInButton = page.getByRole("button", {
-    name: authText("signInSubmit"),
-  });
+  await waitForOtpSendWindow(user.email);
+  const previous = await mailIds(user.email);
   await waitForTurnstileToken(page, 1);
-  await clickSignInAndAwaitRounds(page, signInButton);
+  await page.getByRole("button", { name: authText("otpSendCode") }).click();
+  await expect(
+    page.getByRole("heading", { name: authText("otpTitle") }),
+  ).toBeVisible();
+  markOtpSent(user.email);
+  await page
+    .getByPlaceholder(authText("otpCodePlaceholder"))
+    .fill(await getOtpCodeFromMailpit(user.email, previous));
+  await clickSignInAndAwaitRounds(
+    page,
+    page.getByRole("button", { name: authText("otpVerify"), exact: true }),
+  );
 }
 
 async function signOutOnPage(page: Page) {

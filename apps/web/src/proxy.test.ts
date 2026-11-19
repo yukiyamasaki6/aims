@@ -6,7 +6,6 @@ import {
   FRAME_PATHS,
   HOME_PATH,
   OFFLINE_PATH,
-  RESET_PASSWORD_PATH,
   ROUNDS_PATH,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
@@ -30,7 +29,6 @@ describe("proxy", () => {
     it.each([
       "/signin",
       "/signup",
-      "/reset-password",
       "/rounds/1/edit",
       ROUNDS_PATH,
       `${ROUNDS_PATH}/1`,
@@ -71,7 +69,6 @@ describe("proxy", () => {
     const probes = [
       SIGN_IN_PATH,
       SIGN_UP_PATH,
-      RESET_PASSWORD_PATH,
       "/rounds/1/edit",
       "/rounds/new",
       ROUNDS_PATH,

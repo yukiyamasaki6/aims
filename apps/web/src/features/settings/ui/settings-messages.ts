@@ -5,7 +5,6 @@ export const settingsMessages = {
     close: "閉じる",
     accountTitle: "アカウント",
     changeEmailItem: "メールアドレス変更",
-    changePasswordItem: "パスワード変更",
     deleteAccountItem: "アカウント削除",
   },
 } as const;

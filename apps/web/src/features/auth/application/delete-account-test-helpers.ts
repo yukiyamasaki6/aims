@@ -6,8 +6,8 @@ import type { SignInChange } from "./auth-changes";
 import type { CallResult } from "./call-result";
 import {
   type AccountDeletionResult,
+  type CurrentAccountResult,
   createDeleteAccount,
-  type ReauthenticationResult,
 } from "./delete-account";
 import { createSession, type SessionReading } from "./session";
 
@@ -15,7 +15,7 @@ const accepted: CallResult = { kind: "accepted" };
 
 // アカウント削除の手続きと、それが保持を取る実物のセッションを、境界(認証サービス、データベース、端末の消去、ページ遷移、時計、通信)の偽物で組む。
 // 認証サービスの偽物は、サインインの状態(state.status)を持ち、この端末のサインインを終えると未認証にする。
-// 既定は、再認証が成功(利用者"user-1")、削除が成功、消去が成功。
+// 既定は、OTP確認が成功(利用者"user-1")、削除が成功、消去が成功。
 export function createDeleteAccountHarness({
   offline = false,
   here = "/rounds#settings/account/delete-account",
@@ -30,13 +30,17 @@ export function createDeleteAccountHarness({
       ? { status: "authenticated", userId: "user-1" }
       : { status: state.status };
   const authenticator = {
-    reauthenticate: vi.fn(
-      async (_request: {
-        password: string;
-        captchaToken: string;
-      }): Promise<ReauthenticationResult> => ({
-        kind: "verified",
+    readCurrentAccount: vi.fn(
+      async (): Promise<CurrentAccountResult> => ({
+        kind: "current",
         userId: "user-1",
+        email: "archer@example.test",
+      }),
+    ),
+    sendCode: vi.fn(async (): Promise<CallResult> => accepted),
+    verifyCode: vi.fn(
+      async (): Promise<import("./email-otp").CodeVerification> => ({
+        kind: "verified",
       }),
     ),
     readSession: vi.fn(async (_options?: { refresh?: boolean }) => readingOf()),
@@ -83,6 +87,7 @@ export function createDeleteAccountHarness({
     account,
     eraser,
     session,
+    clock,
     connectivity,
   });
   return {

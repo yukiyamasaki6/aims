@@ -77,7 +77,7 @@ describe("destinationOf: 遷移元の検証", () => {
       ["/signin", "/signin"],
       ["クエリ付きの/signin", "/signin?returnTo=%2Frounds"],
       ["/signup", "/signup"],
-      ["/reset-password", "/reset-password"],
+      ["/unknown-page", "/unknown-page"],
       ["ルート", "/"],
       ["/roundsで始まる別のパス", "/roundsx"],
       ["/rounds配下から/signinへ抜けるドットセグメント", "/rounds/../signin"],
@@ -275,11 +275,6 @@ describe("redirectFor", () => {
         pathname: "/signup",
         search: "?returnTo=%2Frounds%2Fx",
       },
-      "/rounds",
-    ],
-    [
-      "認証済みでパスワード再設定を開くと、ラウンド一覧",
-      { signedIn: true, pathname: "/reset-password" },
       "/rounds",
     ],
   ])("%s", (_name, override, expected) => {

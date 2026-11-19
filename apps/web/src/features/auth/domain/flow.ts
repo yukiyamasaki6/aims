@@ -1,9 +1,8 @@
 import type { AuthCodeError, ResendWaitError } from "./auth-code";
 import type { CaptchaError } from "./captcha-token";
 import type { EmailError } from "./email-address";
-import type { CurrentPasswordError, PasswordError } from "./password";
 
-// 操作の流れ(集約)が共通に使う型。4つの操作の集約が、同じ形の命令の結果を返す。
+// 操作の流れ(集約)が共通に使う型。各操作の集約が、同じ形の命令の結果を返す。
 
 // メールアドレス変更のコード欄の誤りの種類。required: 未入力。expiredOrInvalid: 認証サービスが誤りまたは期限切れとした。
 type CodeFieldError = AuthCodeError | "expiredOrInvalid";
@@ -11,9 +10,6 @@ type CodeFieldError = AuthCodeError | "expiredOrInvalid";
 // 欄ごとの入力の誤りの種類。欄の名前ごとに、その欄で起きる誤りの種類が決まる。
 export type FieldErrorKinds = {
   email: EmailError;
-  password: PasswordError;
-  currentPassword: CurrentPasswordError;
-  newPassword: PasswordError;
   code: AuthCodeError;
   currentCode: CodeFieldError;
   newCode: CodeFieldError;

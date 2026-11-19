@@ -21,7 +21,7 @@ function setLocation(search = "", hash = "") {
   });
 }
 
-const auth = vi.hoisted(() => ({ signInWithPassword: vi.fn() }));
+const auth = vi.hoisted(() => ({ signInWithOtp: vi.fn(), verifyOtp: vi.fn() }));
 const connection = vi.hoisted(() => ({
   createBrowserClient: vi.fn(() => ({ auth })),
 }));
@@ -55,17 +55,13 @@ vi.mock("@marsidev/react-turnstile", () => ({
 }));
 
 function submitButton() {
-  return screen.getByRole("button", { name: authText("signInSubmit") });
+  return screen.getByRole("button", { name: authText("otpSendCode") });
 }
 
 async function fillAndVerify(user: ReturnType<typeof userEvent.setup>) {
   await user.type(
     screen.getByPlaceholderText("you@example.com"),
     "user@example.com",
-  );
-  await user.type(
-    screen.getByPlaceholderText(authText("passwordPlaceholder")),
-    "password1",
   );
   await user.click(screen.getByRole("button", { name: "チェックを完了" }));
 }
@@ -130,13 +126,24 @@ describe("サインイン画面の入口", () => {
   it("遷移元付きのURLで開いた成功では、その遷移元へ遷移する", async () => {
     // Given
     setLocation("?returnTo=%2Frounds%2Fnew");
-    auth.signInWithPassword.mockResolvedValue({ error: null });
+    auth.signInWithOtp.mockResolvedValue({ error: null });
+    auth.verifyOtp.mockResolvedValue({
+      data: { session: {}, user: { id: "user-1" } },
+      error: null,
+    });
     const user = userEvent.setup();
     render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
     await user.click(submitButton());
+    await user.type(
+      screen.getByPlaceholderText(authText("otpCodePlaceholder")),
+      "123456",
+    );
+    await user.click(
+      screen.getByRole("button", { name: authText("otpVerify") }),
+    );
 
     // Then
     expect(page.replace).toHaveBeenCalledExactlyOnceWith("/rounds/new");
@@ -144,18 +151,29 @@ describe("サインイン画面の入口", () => {
 
   it("遷移元がハッシュを持たず、今のURLにハッシュがあるときは、成功時にハッシュ付きの遷移元へ遷移する", async () => {
     // Given
-    setLocation("?returnTo=%2Frounds%2Fhistory", "#settings/account/password");
-    auth.signInWithPassword.mockResolvedValue({ error: null });
+    setLocation("?returnTo=%2Frounds%2Fhistory", "#settings/account/email");
+    auth.signInWithOtp.mockResolvedValue({ error: null });
+    auth.verifyOtp.mockResolvedValue({
+      data: { session: {}, user: { id: "user-1" } },
+      error: null,
+    });
     const user = userEvent.setup();
     render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
     await user.click(submitButton());
+    await user.type(
+      screen.getByPlaceholderText(authText("otpCodePlaceholder")),
+      "123456",
+    );
+    await user.click(
+      screen.getByRole("button", { name: authText("otpVerify") }),
+    );
 
     // Then
     expect(page.replace).toHaveBeenCalledExactlyOnceWith(
-      "/rounds/history#settings/account/password",
+      "/rounds/history#settings/account/email",
     );
   });
 
@@ -165,13 +183,24 @@ describe("サインイン画面の入口", () => {
       `?returnTo=${encodeURIComponent("/rounds#settings/account")}`,
       "#settings/account/email",
     );
-    auth.signInWithPassword.mockResolvedValue({ error: null });
+    auth.signInWithOtp.mockResolvedValue({ error: null });
+    auth.verifyOtp.mockResolvedValue({
+      data: { session: {}, user: { id: "user-1" } },
+      error: null,
+    });
     const user = userEvent.setup();
     render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
     await user.click(submitButton());
+    await user.type(
+      screen.getByPlaceholderText(authText("otpCodePlaceholder")),
+      "123456",
+    );
+    await user.click(
+      screen.getByRole("button", { name: authText("otpVerify") }),
+    );
 
     // Then
     expect(page.replace).toHaveBeenCalledExactlyOnceWith(
@@ -182,13 +211,24 @@ describe("サインイン画面の入口", () => {
   it("遷移元が無いときは、設定のハッシュがあっても足さず、既定の行き先へ遷移する", async () => {
     // Given
     setLocation("", "#settings/account");
-    auth.signInWithPassword.mockResolvedValue({ error: null });
+    auth.signInWithOtp.mockResolvedValue({ error: null });
+    auth.verifyOtp.mockResolvedValue({
+      data: { session: {}, user: { id: "user-1" } },
+      error: null,
+    });
     const user = userEvent.setup();
     render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
     await user.click(submitButton());
+    await user.type(
+      screen.getByPlaceholderText(authText("otpCodePlaceholder")),
+      "123456",
+    );
+    await user.click(
+      screen.getByRole("button", { name: authText("otpVerify") }),
+    );
 
     // Then
     expect(page.replace).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);

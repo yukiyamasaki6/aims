@@ -1,10 +1,5 @@
 import type { AuthFailureKind } from "../domain/auth-failure";
 import type { FieldErrorKinds } from "../domain/flow";
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../domain/password";
-
-// パスワードの規則の文面。入力が規則に合わないときと、認証サービスが弱いパスワードとして拒否したときに、同じ文面を示す。
-const passwordRule = `${PASSWORD_MIN_LENGTH}〜${PASSWORD_MAX_LENGTH}文字の半角英数記号で、英字と数字を含めてください。`;
-
 // authの画面の文言(名前空間: auth)。結果の種類ごとの文言は、種類の値をキーにした入れ子の表に置く。
 export const authMessages = {
   ja: {
@@ -14,15 +9,10 @@ export const authMessages = {
         "ネットワークに接続されていません。接続を確認してから再度お試しください。",
       unreachable:
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      invalid_credentials: "メールアドレスまたはパスワードが間違っています。",
       code_expired: "認証コードが正しくないか、有効期限が切れています。",
       rate_limited:
         "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
       captcha_failed: "認証に失敗しました。もう一度お試しください。",
-      weak_password: passwordRule,
-      current_password_invalid: "現在のパスワードが正しくありません。",
-      same_password:
-        "現在のパスワードと同じパスワードにはできません。別のパスワードを入力してください。",
       email_exists:
         "このメールアドレスは使えません。別のメールアドレスを入力してください。",
       same_email: "現在と異なるメールアドレスを入力してください。",
@@ -33,17 +23,6 @@ export const authMessages = {
       email: {
         required: "メールアドレスを入力してください。",
         invalidFormat: "メールアドレスの形式が正しくありません。",
-      },
-      password: {
-        required: "パスワードを入力してください。",
-        invalidRule: passwordRule,
-      },
-      currentPassword: {
-        required: "現在のパスワードを入力してください。",
-      },
-      newPassword: {
-        required: "新しいパスワードを入力してください。",
-        invalidRule: passwordRule,
       },
       captcha: {
         incomplete:
@@ -70,23 +49,10 @@ export const authMessages = {
     // 共通
     back: "戻る",
     emailPlaceholder: "you@example.com",
-    passwordPlaceholder: "パスワード",
-    passwordShow: "パスワードを表示",
-    passwordHide: "パスワードを非表示",
     // サインイン
     signInTitle: "サインイン",
-    signInSubmit: "サインイン",
-    signInForgotPassword: "パスワードをお忘れですか",
     // サインアップ
     signUpTitle: "サインアップ",
-    signUpPasswordTitle: "パスワードを設定",
-    signUpPasswordLabel: "パスワード",
-    signUpPasswordSubmit: "登録してサインイン",
-    // パスワードの再設定
-    resetTitle: "パスワードを再設定",
-    resetPasswordTitle: "新しいパスワードを設定",
-    resetPasswordLabel: "新しいパスワード",
-    resetPasswordSubmit: "パスワードを変更",
     // メールアドレスの変更
     changeEmailTitle: "メールアドレス変更",
     changeEmailCurrent: "現在のメールアドレス: {email}",
@@ -96,12 +62,6 @@ export const authMessages = {
     changeEmailCurrentCodeLabel: "変更前（{email}）",
     changeEmailNewCodeLabel: "変更後（{email}）",
     changeEmailDone: "メールアドレスを変更しました",
-    // パスワードの変更
-    changePasswordTitle: "パスワード変更",
-    changePasswordCurrentPlaceholder: "現在のパスワード",
-    changePasswordNewPlaceholder: "新しいパスワード",
-    changePasswordSubmit: "パスワードを変更",
-    changePasswordDone: "パスワードを変更しました。",
     // アカウントの削除
     deleteAccountTitle: "アカウント削除",
     deleteAccountIrreversible: "アカウントを削除すると元に戻せません。",
@@ -110,11 +70,10 @@ export const authMessages = {
     deleteAccountItemOthersRemain:
       "ラウンドに他の編集可能な利用者がいる場合は削除されません",
     deleteAccountItemDuration: "削除には時間がかかる場合があります",
-    deleteAccountPrompt: "削除するにはパスワードを入力してください。",
-    deleteAccountPasswordPlaceholder: "現在のパスワード",
+    deleteAccountPrompt:
+      "内容を確認して、削除する場合はボタンを押してください。",
+    deleteAccountVerify: "確認して削除",
     deleteAccountSubmit: "アカウントを削除",
-    // パスワードの設定(サインアップと再設定で共通)
-    passwordFieldPlaceholder: "{label}（{min}文字以上・英数字を含む）",
     // 認証コード
     otpSendCode: "認証コードを送信",
     otpTitle: "認証コードを入力",

@@ -253,7 +253,7 @@ function composeSession(inputs: Inputs, records: Records) {
   });
 }
 
-// アカウント削除(再認証、削除、端末の記録の消去、セッションの終了)。
+// アカウント削除(コードの送付と確認、削除、端末の記録の消去、セッションの終了)。
 function composeAccount(
   inputs: Inputs,
   records: Records,
@@ -271,6 +271,7 @@ function composeAccount(
       eraseHistoryViewMemory,
     ]),
     session,
+    clock: inputs.clock,
     connectivity: inputs.connectivity,
   });
 }

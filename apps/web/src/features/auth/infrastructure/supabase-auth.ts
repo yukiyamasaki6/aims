@@ -13,18 +13,18 @@ import type {
   EmailChangeConfirmResult,
   EmailChangeRequestResult,
 } from "../application/change-email";
-import type { ChangePasswordAuthenticator } from "../application/change-password";
 import type {
+  CurrentAccountResult,
   DeleteAccountAuthenticator,
-  ReauthenticationResult,
 } from "../application/delete-account";
-import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
+import type {
+  CodeVerification,
+  EmailOtpAuthenticator,
+} from "../application/email-otp";
 import type {
   SessionAuthenticator,
   SessionReading,
 } from "../application/session";
-import type { SignInAuthenticator } from "../application/sign-in";
-import type { OtherSessionsSignOut } from "../application/sign-up";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 
 // 認証サービスの語彙(エラーのクラス名とコード、イベントの名前、セッションの形)を知るのは、このファイルだけである。
@@ -32,12 +32,9 @@ import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 
 // 利用者のセッションで認証サービスに触る、唯一の実装。入口がブラウザの接続を渡す。各手続きは、使う頼みごとだけの約束の型で受け取る。
 // 接続は、作る関数を受け取り、頼みごとのたびに取得する(環境変数の欠落は届かない失敗になる)。ブラウザでは同じ接続が返る。
-export type SupabaseAuth = SignInAuthenticator &
-  PasswordSetupAuthenticator &
-  ChangePasswordAuthenticator &
+export type SupabaseAuth = EmailOtpAuthenticator &
   ChangeEmailAuthenticator &
   DeleteAccountAuthenticator &
-  OtherSessionsSignOut &
   SessionAuthenticator &
   SignInChanges;
 
@@ -49,52 +46,13 @@ export function createSupabaseAuth(
   const auth = () => getClient().auth;
 
   return {
-    signIn: ({ email, password, captchaToken }) =>
-      toCallResult(() =>
-        auth().signInWithPassword({
-          email,
-          password,
-          options: { captchaToken },
-        }),
-      ),
-    sendCode: ({ purpose, email, captchaToken }) =>
-      toCallResult(() =>
-        purpose === "sign-up"
-          ? auth().signInWithOtp({ email, options: { captchaToken } })
-          : auth().resetPasswordForEmail(email, { captchaToken }),
-      ),
-    verifyCode: ({ purpose, email, code }) =>
-      toCallResult(() =>
-        auth().verifyOtp({
-          email,
-          token: code,
-          type: purpose === "sign-up" ? "email" : "recovery",
-        }),
-      ),
-    // パスワードの長さと強さの正本は認証サービスで、validation_failed(72バイトを超えるなど)も規則の文面で示す。
-    // 全体の対応には足さない。メールアドレスの形式の誤りなど、他の操作のvalidation_failedを規則の文面にしてしまうため。
-    // 同じパスワードの拒否(same_password)も、サインアップ、再設定で共通に写す。
-    setPassword: (password) =>
-      toCallResult(
-        () => auth().updateUser({ password }),
-        PASSWORD_REJECTION_KINDS,
-      ),
-    // 現在のパスワードは、必ず付ける(認証サービスが検証する)。コードの意味は専用の対応で写し、他の操作の対応は継がない。
-    updatePassword: ({ currentPassword, newPassword }) =>
-      toCallResult(
-        () =>
-          auth().updateUser({
-            password: newPassword,
-            current_password: currentPassword,
-          }),
-        CHANGE_PASSWORD_REJECTION_KINDS,
-      ),
+    sendCode: ({ email, captchaToken, shouldCreateUser }) =>
+      sendEmailCode(auth, { email, captchaToken, shouldCreateUser }),
+    verifyCode: ({ email, code }) => verifyEmailCode(auth, email, code),
+    readCurrentAccount: () => readCurrentAccount(auth),
     ...createChangeEmailAuthenticator(auth),
-    reauthenticate: (request) => reauthenticate(auth, request),
     // この端末のサインインだけを終える。終えられたかは、呼び出し側が、この後のサインインの状態の読み取りで決める。
     signOutHere: () => toCallResult(() => signOut(auth(), "local")),
-    // この端末以外の全てのサインインを終える。
-    signOutOthers: () => toCallResult(() => signOut(auth(), "others")),
     subscribe: (listener) => {
       const {
         data: { subscription },
@@ -114,8 +72,8 @@ export function createSupabaseAuth(
   };
 }
 
-// 認証サービスのサインアウトの呼び出しは、ここだけである。scopeは、この端末のセッションだけ(local)か、この端末以外(others)。
-function signOut(auth: Auth, scope: "local" | "others") {
+// この端末のセッションだけを終了する。
+function signOut(auth: Auth, scope: "local") {
   return auth.signOut({ scope });
 }
 
@@ -164,30 +122,10 @@ type RejectionKind = Exclude<
 
 // 認証サービスが拒否したときの、エラーコードと失敗の種類の対応。
 const REJECTION_KINDS = new Map<string, RejectionKind>([
-  ["invalid_credentials", "invalid_credentials"],
   ["otp_expired", "code_expired"],
   ["over_email_send_rate_limit", "rate_limited"],
   ["over_request_rate_limit", "rate_limited"],
   ["captcha_failed", "captcha_failed"],
-  ["weak_password", "weak_password"],
-]);
-
-// パスワードの設定(サインアップ、再設定)だけが、上の対応に足して使う対応。
-const PASSWORD_REJECTION_KINDS = new Map<string, RejectionKind>([
-  ...REJECTION_KINDS,
-  ["validation_failed", "weak_password"],
-  ["same_password", "same_password"],
-]);
-
-// パスワードの変更だけが使う対応。上の対応は継がない。
-// 現在のパスワードの誤りは、サインインのinvalid_credentialsと別のコードである。
-// current_password_requiredは、メッセージが同文でもコードで区別し、対応に置かずotherにする(画面が未入力を送らないため、起きたときは不整合)。
-const CHANGE_PASSWORD_REJECTION_KINDS = new Map<string, RejectionKind>([
-  ["current_password_invalid", "current_password_invalid"],
-  ["same_password", "same_password"],
-  ["weak_password", "weak_password"],
-  ["validation_failed", "weak_password"],
-  ["over_request_rate_limit", "rate_limited"],
 ]);
 
 // メールアドレスの変更だけが使う対応。他の操作の対応に、他の利用者と重複するメールアドレスの拒否を足す。
@@ -195,13 +133,6 @@ const CHANGE_PASSWORD_REJECTION_KINDS = new Map<string, RejectionKind>([
 const CHANGE_EMAIL_REJECTION_KINDS = new Map<string, RejectionKind>([
   ...REJECTION_KINDS,
   ["email_exists", "email_exists"],
-]);
-
-// アカウント削除の再認証だけが使う対応。サインインの照合と同じ操作だが、パスワードの誤りは現在のパスワードの誤りとして示す。
-const REAUTHENTICATION_REJECTION_KINDS = new Map<string, RejectionKind>([
-  ["invalid_credentials", "current_password_invalid"],
-  ["over_request_rate_limit", "rate_limited"],
-  ["captcha_failed", "captcha_failed"],
 ]);
 
 type AuthServiceError = { name?: string; code?: string };
@@ -233,37 +164,54 @@ async function toCallResult(
   }
 }
 
-// 現在の利用者のメールアドレスを認証サービスで確かめ(401・403の拒否はサインインの喪失)、そのメールアドレスと現在のパスワードで再認証する。
-// 新しいセッション(JWTのamrにpasswordの認証が付く)はSDKが採用する。接続の取得もtryの中で行い、得られないときは届かなかった失敗にする。
-async function reauthenticate(
+async function sendEmailCode(
   auth: () => Auth,
-  { password, captchaToken }: { password: string; captchaToken: string },
-): Promise<ReauthenticationResult> {
+  request: { email: string; captchaToken: string; shouldCreateUser: boolean },
+): Promise<CallResult> {
   try {
-    const { data: current, error: userError } = await auth().getUser();
-    if (userError) {
-      return userError.status === 401 || userError.status === 403
-        ? { kind: "lost" }
-        : {
-            kind: "failed",
-            failure: toAuthFailure(userError, REAUTHENTICATION_REJECTION_KINDS),
-          };
-    }
-    const { email } = current.user;
-    if (email === undefined) {
-      return { kind: "failed", failure: { kind: "other" } };
-    }
-    const { data, error } = await auth().signInWithPassword({
+    const { email, ...options } = request;
+    const { error } = await auth().signInWithOtp({ email, options });
+    if (!error || (!options.shouldCreateUser && error.code === "otp_disabled"))
+      return { kind: "accepted" };
+    return { kind: "failed", failure: toAuthFailure(error, REJECTION_KINDS) };
+  } catch {
+    return { kind: "failed", failure: UNREACHABLE };
+  }
+}
+
+async function verifyEmailCode(
+  auth: () => Auth,
+  email: string,
+  code: string,
+): Promise<CodeVerification> {
+  try {
+    const { data, error } = await auth().verifyOtp({
       email,
-      password,
-      options: { captchaToken },
+      token: code,
+      type: "email",
     });
-    return error
-      ? {
-          kind: "failed",
-          failure: toAuthFailure(error, REAUTHENTICATION_REJECTION_KINDS),
-        }
-      : { kind: "verified", userId: data.user.id };
+    if (error)
+      return { kind: "failed", failure: toAuthFailure(error, REJECTION_KINDS) };
+    return data.session && data.user
+      ? { kind: "verified" }
+      : { kind: "failed", failure: { kind: "other" } };
+  } catch {
+    return { kind: "failed", failure: UNREACHABLE };
+  }
+}
+
+async function readCurrentAccount(
+  auth: () => Auth,
+): Promise<CurrentAccountResult> {
+  try {
+    const { data, error } = await auth().getUser();
+    if (error)
+      return error.status === 401 || error.status === 403
+        ? { kind: "lost" }
+        : { kind: "failed", failure: toAuthFailure(error, REJECTION_KINDS) };
+    return data.user?.email
+      ? { kind: "current", userId: data.user.id, email: data.user.email }
+      : { kind: "failed", failure: { kind: "other" } };
   } catch {
     return { kind: "failed", failure: UNREACHABLE };
   }
@@ -354,7 +302,7 @@ async function confirmEmailChange(
 // 認証サービスのイベント名を、内側の出来事に写す。通知しない出来事はnull。
 // SIGNED_IN、利用者のいる起動時のセッションの復元は、signed-in。SIGNED_OUTはsigned-out。
 // 利用者のいない起動時と、その他の出来事(TOKEN_REFRESHED、PASSWORD_RECOVERY、USER_UPDATEDなど)は通知しない。
-// 利用者のいない起動時は、未サインインではなく確かめられなかっただけの可能性があるため、記録を消さない。再設定の途中のセッションは、利用者として記録しない。
+// 利用者のいない起動時は、未サインインではなく確かめられなかっただけの可能性があるため、記録を消さない。
 function toSignInChange(
   event: AuthChangeEvent,
   session: Session | null,

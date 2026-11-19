@@ -25,6 +25,8 @@ function createForm(overrides: Partial<Props> = {}) {
     onEmailChange: vi.fn(),
     emailError: undefined,
     submitting: false,
+    resendCooldown: 0,
+    resendError: undefined,
     error: null,
     hydrated: true,
     onSubmit: vi.fn((e) => e.preventDefault()),
@@ -62,7 +64,7 @@ describe("OtpEmailStep", () => {
     // Then
     const input = screen.getByPlaceholderText("you@example.com");
     expect(input).toHaveAttribute("name", "email");
-    expect(input).toHaveAttribute("autocomplete", "username");
+    expect(input).toHaveAttribute("autocomplete", "email");
   });
 
   describe("画面の違いを受け取る表示", () => {
@@ -71,11 +73,11 @@ describe("OtpEmailStep", () => {
 
       // When
       const form = createForm();
-      renderStep(form, { title: "パスワードを再設定" });
+      renderStep(form, { title: authText("signInTitle") });
 
       // Then
       expect(
-        screen.getByRole("heading", { name: authText("resetTitle") }),
+        screen.getByRole("heading", { name: authText("signInTitle") }),
       ).toBeInTheDocument();
     });
 
@@ -86,16 +88,13 @@ describe("OtpEmailStep", () => {
       const form = createForm({
         emailError: "メールのエラー",
       });
-      renderStep(form, { idPrefix: "reset-password" });
+      renderStep(form, { idPrefix: "signin" });
 
       // Then
       const input = screen.getByPlaceholderText("you@example.com");
       const message = screen.getByText("メールのエラー");
-      expect(message).toHaveAttribute("id", "reset-password-email-error");
-      expect(input).toHaveAttribute(
-        "aria-describedby",
-        "reset-password-email-error",
-      );
+      expect(message).toHaveAttribute("id", "signin-email-error");
+      expect(input).toHaveAttribute("aria-describedby", "signin-email-error");
       expect(input).toHaveAttribute("aria-invalid", "true");
     });
   });
@@ -203,5 +202,44 @@ describe("OtpEmailStep", () => {
       // Then
       expect(container.querySelector("p.text-destructive")).toBeNull();
     });
+  });
+});
+
+describe("OtpEmailStepの失敗と再送待機の表示", () => {
+  it("再送待機の残り秒数を受け取ると、送信ボタンに残り秒数を表示する", () => {
+    // Given
+
+    // When
+    const form = createForm({ resendCooldown: 42 });
+    renderStep(form);
+
+    // Then
+    expect(
+      screen.getByRole("button", {
+        name: authText("otpResendWait", { seconds: "42" }),
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("再送の失敗の文を受け取ると、フォームの中に表示する", () => {
+    // Given
+
+    // When
+    const form = createForm({ resendError: "再送の失敗" });
+    const { container } = renderStep(form);
+
+    // Then
+    expect(container.querySelector("form")).toHaveTextContent("再送の失敗");
+  });
+
+  it("フォーム全体の失敗の文を受け取ると、表示する", () => {
+    // Given
+
+    // When
+    const form = createForm({ error: "全体の失敗" });
+    renderStep(form);
+
+    // Then
+    expect(screen.getByText("全体の失敗")).toBeInTheDocument();
   });
 });
