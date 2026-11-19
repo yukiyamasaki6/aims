@@ -6,6 +6,7 @@
 - **紐付け**: auth.users.idとpublic.users.idを1:1で維持し、既存利用者と記録を再作成しない。
 - **パスワードの禁止**: Custom Access Token Hookで今回の方式がpasswordならトークン発行を拒否する。許可はotp・token_refresh・email_changeだけで、欠落とその他も拒否する。
 - **保存データ**: 切替処理は既存パスワードハッシュを変更しない。OTP新規登録でAuthが内部のランダム値を保存しても、パスワード認証への利用を禁止する。
+- **旧コード**: 切替で旧confirmation/recoveryコードを失効させない。切替直後は最大15分、旧コードが有効なまま残るのを許容する。コードは本人のメールにしか届かず、回復コードをメールOTPと同等とする方針と整合し、パスワード認証は復活しない。
 - **既存セッション**: 今回の方式がtoken_refreshなら、過去のamrにpasswordがあっても更新を許す。切替時に一斉失効・署名鍵変更を行わない。
 - **Hook権限**: claimsをそのまま返すSECURITY INVOKER関数を使い、実行はsupabase_auth_adminだけに許可する。PUBLIC・anon・authenticatedから実行できない。
 
