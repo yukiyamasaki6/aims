@@ -1,5 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
-
 // 認証サービスの直接の呼び出し。画面を通さずに、応答のステータスとエラーコードを確かめるために使う。
 
 function environment() {
@@ -11,7 +9,7 @@ function environment() {
   return { url, anonKey };
 }
 
-export type AuthApiResponse = { status: number; errorCode: string | null };
+type AuthApiResponse = { status: number; errorCode: string | null };
 
 async function respond(response: Response): Promise<AuthApiResponse> {
   const body = await response.json().catch(() => null);
@@ -61,19 +59,4 @@ export async function refreshStatus(
       body: JSON.stringify({ refresh_token: refreshToken }),
     }),
   );
-}
-
-// 検証の対象のセッションとは別のクライアントで、その資格情報でサインインできるかを確かめる。
-// サインインできれば null、拒否されればエラーコードを返す。
-export async function signInError(email: string, password: string) {
-  const { url, anonKey } = environment();
-  const client = createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { error } = await client.auth.signInWithPassword({
-    email,
-    password,
-    options: { captchaToken: "test-captcha-token" },
-  });
-  return error?.code ?? null;
 }

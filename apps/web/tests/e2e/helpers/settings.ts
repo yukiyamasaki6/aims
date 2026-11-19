@@ -53,17 +53,12 @@ export function homeHeading(page: Page) {
 }
 
 // 設定パネルの中の項目の画面の水和が済むまで待つ。背景のホームも目印を持つため、パネルの中に絞る。
-export async function waitForPanelHydration(page: Page) {
-  await expect(
-    settingsPanel(page).locator('[data-hydrated="true"]'),
-  ).toBeAttached();
-}
-
-// ハッシュ付きのURLを直接開き、設定パネルが開いて、項目の画面の水和が済むまで待つ。
 export async function openSettingsAt(page: Page, hash: string) {
   await page.goto(`${ROUNDS_PATH}${hash}`);
   await expect(settingsPanel(page)).toBeVisible();
-  await waitForPanelHydration(page);
+  await expect(
+    settingsPanel(page).locator('[data-hydrated="true"]'),
+  ).toBeAttached();
 }
 
 // 項目の画面のヘッダーの戻る。

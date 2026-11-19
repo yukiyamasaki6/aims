@@ -1,23 +1,22 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import type { PasswordSetup } from "../application/password-setup";
-import { PasswordSetupForm } from "./password-setup-form";
+import type { SignUp } from "../application/sign-up";
+import { EmailOtpForm } from "./email-otp-form";
 
 export function SignUpForm({
   signUp,
   siteKey,
 }: {
-  signUp: PasswordSetup;
+  signUp: SignUp;
   siteKey: string;
 }) {
   const t = useTranslations("auth");
-  const copy = {
-    idPrefix: "signup",
-    emailTitle: t("signUpTitle"),
-    passwordTitle: t("signUpPasswordTitle"),
-    passwordLabel: t("signUpPasswordLabel"),
-    passwordSubmit: t("signUpPasswordSubmit"),
-  };
-  return <PasswordSetupForm procedure={signUp} copy={copy} siteKey={siteKey} />;
+  return (
+    <EmailOtpForm
+      procedure={signUp}
+      siteKey={siteKey}
+      copy={{ idPrefix: "signup", emailTitle: t("signUpTitle") }}
+    />
+  );
 }

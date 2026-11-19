@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   CHANGE_EMAIL_HASH,
-  CHANGE_PASSWORD_HASH,
   DELETE_ACCOUNT_HASH,
   SETTINGS_ACCOUNT_HASH,
 } from "@/routes";
@@ -17,7 +16,6 @@ describe("settingsLocationOf", () => {
   it.each([
     ["#settings/account", "account"],
     ["#settings/account/email", "email"],
-    ["#settings/account/password", "password"],
     ["#settings/account/delete-account", "delete-account"],
   ])("%sは、正規化せずに%sの表示で開く", (hash, view) => {
     // Given
@@ -65,7 +63,6 @@ describe("settingsHashOf", () => {
   it.each([
     ["account", SETTINGS_ACCOUNT_HASH],
     ["email", CHANGE_EMAIL_HASH],
-    ["password", CHANGE_PASSWORD_HASH],
     ["delete-account", DELETE_ACCOUNT_HASH],
   ] as [SettingsView, string][])(
     "%sの表示のハッシュは、経路表の%sである",

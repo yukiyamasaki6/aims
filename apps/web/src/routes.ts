@@ -66,13 +66,11 @@ export const SETTINGS_ACCOUNT_HASH = `${SETTINGS_HASH}/account`;
 
 // 分類「アカウント」の項目の画面。
 export const CHANGE_EMAIL_HASH = `${SETTINGS_ACCOUNT_HASH}/email`;
-export const CHANGE_PASSWORD_HASH = `${SETTINGS_ACCOUNT_HASH}/password`;
 export const DELETE_ACCOUNT_HASH = `${SETTINGS_ACCOUNT_HASH}/delete-account`;
 
 // 認証の画面の経路。
 export const SIGN_IN_PATH = "/signin";
 export const SIGN_UP_PATH = "/signup";
-export const RESET_PASSWORD_PATH = "/reset-password";
 
 // アプリの紹介画面。ロゴの行き先。
 export const HOME_PATH = "/";

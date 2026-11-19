@@ -24,7 +24,7 @@ function setup(respond: () => Promise<DbResponse>) {
 }
 
 describe("createSupabaseAccountDeletion", () => {
-  it("成功の応答は、削除された結果に写し、RPC名はdelete_accountで、引数(パスワードを含む)を渡さない", async () => {
+  it("成功の応答は、削除された結果に写し、RPCへ対象IDを渡す", async () => {
     // Given
     const { account, rpc } = setup(async () => ({
       data: null,
@@ -33,15 +33,17 @@ describe("createSupabaseAccountDeletion", () => {
     }));
 
     // When
-    const result = await account.delete();
+    const result = await account.delete("user-1");
 
     // Then
     expect(result).toEqual({ kind: "deleted" });
-    expect(rpc).toHaveBeenCalledExactlyOnceWith("delete_account", {});
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("delete_account", {
+      expected_user_id: "user-1",
+    });
   });
 
   it.each([
-    ["PT403(確認からの経過)も、その他", "PT403", "other"],
+    ["PT403(対象不一致)は、その他", "PT403", "other"],
     [
       "他のコード(PT403以外)は、削除が行われなかったことが確実なその他",
       "P0001",
@@ -61,7 +63,7 @@ describe("createSupabaseAccountDeletion", () => {
     }));
 
     // When
-    const result = await account.delete();
+    const result = await account.delete("user-1");
 
     // Then
     expect(result).toEqual({ kind: "failed", failure: { kind } });
@@ -95,7 +97,7 @@ describe("createSupabaseAccountDeletion", () => {
     const { account } = setup(respond);
 
     // When
-    const result = await account.delete();
+    const result = await account.delete("user-1");
 
     // Then
     expect(result).toEqual({
@@ -103,4 +105,21 @@ describe("createSupabaseAccountDeletion", () => {
       failure: { kind: "unreachable" },
     });
   });
+});
+
+it.each([
+  ["PT403", "otp_confirmation_required", "otp_required"],
+  ["PT403", "account_deletion_forbidden", "other"],
+  ["P0001", "otp_confirmation_required", "other"],
+])("%sと%sの組合せだけを%sへ変換する", async (code, message, kind) => {
+  // Given
+  const { account } = setup(async () => ({
+    data: null,
+    error: { code, message },
+    status: 403,
+  }));
+  // When
+  const result = await account.delete("user-1");
+  // Then
+  expect(result).toEqual({ kind: "failed", failure: { kind } });
 });

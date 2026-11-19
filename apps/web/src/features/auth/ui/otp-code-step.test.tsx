@@ -126,17 +126,17 @@ describe("OtpCodeStep", () => {
 
       // When
       const form = createForm({ codeError: "コードのエラー" });
-      renderStep(form, "reset-password");
+      renderStep(form, "custom-otp");
 
       // Then
       const input = screen.getByPlaceholderText("123456");
       expect(screen.getByText("コードのエラー")).toHaveAttribute(
         "id",
-        "reset-password-code-error",
+        "custom-otp-code-error",
       );
       expect(input).toHaveAttribute(
         "aria-describedby",
-        "reset-password-code-error",
+        "custom-otp-code-error",
       );
       expect(input).toHaveAttribute("aria-invalid", "true");
     });

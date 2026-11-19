@@ -1,13 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { signInWithEmailOtp, testUserSession } from "./auth";
 
 const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点的（アウトドア・122cm）
 
 // ローカル・CIのTURNSTILE_SECRET_KEYはCloudflareのテスト専用
 // シークレット（常に検証を通過する）のため、captchaTokenの値自体は
 // 任意の非空文字列でよい。
-export async function signInAsTestUser(email: string, password: string) {
+export async function signInAsTestUser(
+  email: string,
+  _password: string,
+  fresh = false,
+) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -16,12 +21,14 @@ export async function signInAsTestUser(email: string, password: string) {
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-      options: { captchaToken: "test-captcha-token" },
-    });
-    if (error) throw error;
+    const stored = fresh ? undefined : testUserSession(email);
+    const { data, error } = stored
+      ? await supabase.auth.setSession(stored)
+      : await signInWithEmailOtp(supabase, email);
+    if (error || !data.user)
+      throw new Error(
+        `OTP verification failed: ${error?.code ?? "missing user"}`,
+      );
     return { supabase, userId: data.user.id };
   } catch (error) {
     await supabase.auth.stopAutoRefresh();

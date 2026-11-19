@@ -10,7 +10,12 @@ import {
 describe("DeleteAccountProvider", () => {
   it("提供したアカウント削除の手続きを、子孫のuseDeleteAccountが返す", () => {
     // Given
-    const deleteAccount: DeleteAccount = { submit: vi.fn() };
+    const deleteAccount: DeleteAccount = {
+      submit: vi.fn(),
+      sendCode: vi.fn(),
+      verifyCode: vi.fn(),
+      tickCooldown: vi.fn(),
+    };
     const wrapper = ({ children }: { children: ReactNode }) => (
       <DeleteAccountProvider deleteAccount={deleteAccount}>
         {children}
@@ -26,7 +31,12 @@ describe("DeleteAccountProvider", () => {
 
   it("子要素を描画する", () => {
     // Given
-    const deleteAccount: DeleteAccount = { submit: vi.fn() };
+    const deleteAccount: DeleteAccount = {
+      submit: vi.fn(),
+      sendCode: vi.fn(),
+      verifyCode: vi.fn(),
+      tickCooldown: vi.fn(),
+    };
 
     // When
     const { getByText } = render(

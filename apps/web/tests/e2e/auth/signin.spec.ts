@@ -1,267 +1,329 @@
-import type { Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import {
-  CHANGE_PASSWORD_HASH,
-  ROUNDS_PATH,
-  SETTINGS_ACCOUNT_HASH,
-  SIGN_IN_PATH,
-} from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
-  SHARED_AUTH_STATE_PATH,
+  signInWithEmailOtp,
   waitForHydration,
 } from "../helpers/auth";
-import { settingsPanel } from "../helpers/settings";
 import {
-  expectTurnstileReset,
-  releaseTurnstileToken,
-  turnstileTokenCount,
-  waitForTurnstileToken,
-} from "../helpers/turnstile";
-import { expectHidden, expectUncovered } from "../helpers/visibility";
+  getUserStatus,
+  refreshStatus,
+  updatePasswordDirect,
+} from "../helpers/auth-api";
+import {
+  getEmailFromMailpit,
+  getOtpCodeFromMailpit,
+  mailIds,
+} from "../helpers/mailpit";
+import { authMethodOf, readStoredTokens } from "../helpers/stored-session";
+import { waitForTurnstileToken } from "../helpers/turnstile";
 
-const authText = translatorFor("auth");
-
-const EMAIL_PLACEHOLDER = "you@example.com";
-const PASSWORD_PLACEHOLDER = authText("passwordPlaceholder");
-
-async function openSignIn(page: Page, returnTo?: string) {
-  const query = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "";
-  await page.goto(`/signin${query}`);
-  await waitForHydration(page);
-  return page.getByRole("button", { name: authText("signInSubmit") });
-}
-
-async function fillCredentials(page: Page, email: string, password: string) {
-  await page.getByPlaceholder(EMAIL_PLACEHOLDER).fill(email);
-  await page.getByPlaceholder(PASSWORD_PLACEHOLDER).fill(password);
-}
-
-async function createUniqueUser(prefix: string) {
-  const email = `${prefix}-${Date.now()}@aims.test`;
-  const password = "password1";
-  await createConfirmedUser({ email, password });
-  return { email, password };
-}
-
-test("確認済みアカウントでサインインすると、ラウンド一覧へ遷移する", async ({
-  page,
-}) => {
-  const { email, password } = await createUniqueUser("signin");
-  const signInButton = await openSignIn(page);
-  await fillCredentials(page, email, password);
-  await waitForTurnstileToken(page, 1);
-  await expectHidden(page.locator("[data-turnstile-widget]"));
-  await signInButton.click();
-  await expect(page).toHaveURL(/\/rounds/);
-});
-
-test("許可された遷移元からサインインすると、その画面へ戻る", async ({
-  page,
-}) => {
-  const { email, password } = await createUniqueUser("signin-return-to");
-  const signInButton = await openSignIn(page, "/rounds/new");
-  await fillCredentials(page, email, password);
-  await waitForTurnstileToken(page, 1);
-  await signInButton.click();
-  await expect(page).toHaveURL(/\/rounds\/new$/);
-});
-
-test("未認証で設定パネルの項目を開いたURLを開くと、サインインに移り、サインインすると、遷移元のハッシュを含めて同じ画面でパスワード変更の画面が開く", async ({
-  page,
-}) => {
-  // 設定パネルのパスワード変更を開いたURLを未認証で開き、ハッシュを含む遷移元を付けてサインインへ移る。
-  const { email, password } = await createUniqueUser("signin-panel-return");
-  await page.goto(`${ROUNDS_PATH}${CHANGE_PASSWORD_HASH}`);
-  await expect(page).toHaveURL(/\/signin\?returnTo=/);
-  await waitForHydration(page);
-  expect(
-    decodeURIComponent(new URL(page.url()).search) + new URL(page.url()).hash,
-  ).toContain("settings/account/password");
-
-  // サインインすると、同じ画面でパスワード変更の画面が開く。
-  await fillCredentials(page, email, password);
-  await waitForTurnstileToken(page, 1);
-  await page.getByRole("button", { name: authText("signInSubmit") }).click();
-  await expect(page).toHaveURL(
-    new RegExp(`${ROUNDS_PATH}${CHANGE_PASSWORD_HASH}$`),
-  );
-  await expect(
-    settingsPanel(page).getByRole("heading", {
-      name: authText("changePasswordTitle"),
-    }),
-  ).toBeVisible();
-});
-
-test("未認証でハッシュ#settingsの設定パネルを開いたURLを開いてサインインすると、分類「アカウント」でパネルが開く", async ({
-  page,
-}) => {
-  // ハッシュ#settingsで開いて、サインインへ移る。
-  const { email, password } = await createUniqueUser("signin-panel-bare");
-  await page.goto(`${ROUNDS_PATH}#settings`);
-  await expect(page).toHaveURL(/\/signin\?returnTo=/);
-  await waitForHydration(page);
-
-  // サインインすると、分類「アカウント」のハッシュで開く。
-  await fillCredentials(page, email, password);
-  await waitForTurnstileToken(page, 1);
-  await page.getByRole("button", { name: authText("signInSubmit") }).click();
-  await expect(page).toHaveURL(
-    new RegExp(`${ROUNDS_PATH}${SETTINGS_ACCOUNT_HASH}$`),
-  );
-  await expect(settingsPanel(page)).toBeVisible();
-});
-
-test("外部URLを遷移元に指定してサインインすると、外部へ移動せずラウンド一覧へ遷移する", async ({
-  page,
-}) => {
-  const { email, password } = await createUniqueUser("signin-external");
-  const signInButton = await openSignIn(
-    page,
-    "https://evil.example.com/rounds",
-  );
-  await fillCredentials(page, email, password);
-  await waitForTurnstileToken(page, 1);
-  await signInButton.click();
-  await expect(page).toHaveURL(/\/rounds$/);
-  expect(new URL(page.url()).hostname).not.toBe("evil.example.com");
-});
-
-test("サインイン画面で「パスワードをお忘れですか」を押すと、パスワード再設定画面へ移動する", async ({
-  page,
-}) => {
-  await openSignIn(page);
-  await page
-    .getByRole("link", { name: authText("signInForgotPassword"), exact: true })
-    .click();
-  await expect(page).toHaveURL(/\/reset-password$/);
-  await expect(
-    page.getByRole("heading", { name: authText("resetTitle") }),
-  ).toBeVisible();
-});
-
-test.describe("認証済み", () => {
-  test.use({ storageState: SHARED_AUTH_STATE_PATH });
-
-  test("認証済みでサインイン画面を開くと、ラウンド一覧へリダイレクトされる", async ({
+const t = translatorFor("auth");
+test.use({ storageState: { cookies: [], origins: [] } });
+for (const destination of [
+  "/rounds",
+  "/rounds/new",
+  "/rounds#settings/account/email",
+]) {
+  test(`確認済み利用者がOTPでログインすると${destination}へ進む`, async ({
     page,
   }) => {
-    // 認証済みの状態は、storageStateで用意する。
-    await page.goto("/signin");
-    await expect(page).toHaveURL(/\/rounds/);
-  });
+    // メールを送付してコード入力へ進む。
+    const email = `signin-${randomUUID()}@aims.test`;
+    await createConfirmedUser({ email, legacyPassword: "old-password1" });
+    const previous = await mailIds(email);
+    await page.goto(`/signin?returnTo=${encodeURIComponent(destination)}`);
+    await waitForHydration(page);
+    await page.getByPlaceholder(t("emailPlaceholder")).fill(email);
+    await waitForTurnstileToken(page, 1);
+    await page.getByRole("button", { name: t("otpSendCode") }).click();
+    await expect(
+      page.getByRole("heading", { name: t("otpTitle") }),
+    ).toBeVisible();
 
-  test("認証済みでハッシュ付きの遷移元のサインイン画面を開くと、ハッシュごと遷移元へリダイレクトされ、設定パネルが開く", async ({
-    page,
-  }) => {
-    await page.goto(
-      `${SIGN_IN_PATH}?returnTo=${encodeURIComponent(`${ROUNDS_PATH}${SETTINGS_ACCOUNT_HASH}`)}`,
-    );
-
+    // 届いたコードを確認して目的の画面へ進む。
+    const code = await getOtpCodeFromMailpit(email, previous);
+    await page.getByPlaceholder(t("otpCodePlaceholder")).fill(code);
+    await page
+      .getByRole("button", { name: t("otpVerify"), exact: true })
+      .click();
     await expect(page).toHaveURL(
-      new RegExp(`${ROUNDS_PATH}${SETTINGS_ACCOUNT_HASH}$`),
+      new RegExp(`${destination.replaceAll("/", "\\/")}$`),
     );
-    await expect(settingsPanel(page)).toBeVisible();
-  });
+    const tokens = await readStoredTokens(page.context());
+    expect(authMethodOf(tokens.accessToken)).toBe("otp");
 
-  test("認証済みで遷移元付きのサインイン画面を開くと、遷移元へリダイレクトされる", async ({
-    page,
-  }) => {
-    await page.goto(`/signin?returnTo=${encodeURIComponent("/rounds/new")}`);
-    await expect(page).toHaveURL(/\/rounds\/new$/);
+    await expect(
+      page.getByRole("heading", { name: t("otpTitle") }),
+    ).toHaveCount(0);
   });
-});
+}
 
-test("認証に失敗すると、理由が表示されセキュリティチェックをやり直せる", async ({
+test("未登録メールもコード入力へ進むが誤コードで保護画面へ入れない", async ({
   page,
 }) => {
-  const signInButton = await openSignIn(page);
-  await fillCredentials(
-    page,
-    `signin-wrong-password-${Date.now()}@aims.test`,
-    "wrong-password",
-  );
+  // 未登録メールを送付し共通のコード入力へ進む。
+  await page.goto("/signin");
+  await waitForHydration(page);
+  await page
+    .getByPlaceholder(t("emailPlaceholder"))
+    .fill(`unknown-${randomUUID()}@aims.test`);
   await waitForTurnstileToken(page, 1);
-  // 失敗後の再検証をブロックし、リセットされたまま戻らないことを確認する。
-  await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
-  await signInButton.click();
+  await page.getByRole("button", { name: t("otpSendCode") }).click();
   await expect(
-    page.getByText(authText("failure.invalid_credentials")),
+    page.getByRole("heading", { name: t("otpTitle") }),
   ).toBeVisible();
-  await expect(signInButton).toHaveAttribute("aria-disabled", "false");
-  await expectTurnstileReset(page, 1);
+
+  // 誤コードを確認すると理由を表示し同じ画面に留まる。
+  await page.getByPlaceholder(t("otpCodePlaceholder")).fill("000000");
+  await page.getByRole("button", { name: t("otpVerify"), exact: true }).click();
+  await expect(page.getByText(t("failure.code_expired"))).toBeVisible();
+  await expect(page).toHaveURL(/\/signin$/);
 });
 
-test("セキュリティチェックの完了前に押しても、エラーなしで待ち、完了するとサインインできる", async ({
-  page,
-}) => {
-  // 自動のチェックが終わらない状態で、サインインを押す。
-  const { email, password } = await createUniqueUser("signin-check-wait");
-  await page.addInitScript(() => {
-    (
-      window as unknown as { e2eTurnstileFailFromCall: number }
-    ).e2eTurnstileFailFromCall = 1;
-  });
-  const signInButton = await openSignIn(page);
-  await fillCredentials(page, email, password);
-  await signInButton.click();
-  await expect(signInButton).toHaveAttribute("aria-disabled", "true");
-  await expect(
-    page.getByText(authText("fieldError.captcha.incomplete")),
-  ).toBeHidden();
-
-  // チェックが終わると、押し直さずにサインインしてラウンド一覧へ進む。
-  await releaseTurnstileToken(page);
-  await waitForTurnstileToken(page, 1);
-  await expect(page).toHaveURL(/\/rounds/);
-});
-
-test("オフラインで送信すると、オフラインの文言が表示される(再送信でも同じ)", async ({
-  page,
-}) => {
-  const { email, password } = await createUniqueUser("signin-offline");
-  const signInButton = await openSignIn(page);
-  await fillCredentials(page, email, password);
-  await waitForTurnstileToken(page, 1);
-  await page.context().setOffline(true);
-
-  await signInButton.click();
-  await expect(page.getByText(authText("failure.offline"))).toBeVisible();
-  await signInButton.click();
-
-  await expect(page.getByText(authText("failure.offline"))).toBeVisible();
-  await expect(page).toHaveURL(/\/signin/);
-});
-
-test("追加の操作が必要なセキュリティチェックの表示中に押しても、完了するとサインインできる", async ({
-  page,
-}) => {
-  // 追加の操作が必要なチェックが表示されている状態で、サインインを押す。
-  const { email, password } = await createUniqueUser("signin-interactive");
-  await page.addInitScript(() => {
-    (
-      window as unknown as { e2eTurnstileInteractive: boolean }
-    ).e2eTurnstileInteractive = true;
-  });
-  const signInButton = await openSignIn(page);
-  const widget = page.locator("[data-turnstile-widget]");
-  await expectUncovered(widget);
-  expect(await turnstileTokenCount(page)).toBe(0);
-  await fillCredentials(page, email, password);
-  await signInButton.click();
-  await expect(signInButton).toHaveAttribute("aria-disabled", "true");
-  await expectUncovered(widget);
-  await expect(
-    page.getByText(authText("fieldError.captcha.incomplete")),
-  ).toBeHidden();
-
-  // チェックを完了すると、押し直さずにサインインしてラウンド一覧へ進む。
-  await page.evaluate(() =>
-    (
-      window as unknown as { e2eTurnstileSolve: () => void }
-    ).e2eTurnstileSolve(),
+test("直接のパスワードgrantは正しい旧パスワードでもトークンを発行しない", async () => {
+  const email = `password-denied-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email, legacyPassword: "old-password1" });
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    { auth: { persistSession: false, autoRefreshToken: false } },
   );
-  await waitForTurnstileToken(page, 1);
-  await expect(page).toHaveURL(/\/rounds/);
+  try {
+    const { data, error } = await client.auth.signInWithPassword({
+      email,
+      password: "old-password1",
+      options: { captchaToken: "test-captcha-token" },
+    });
+    expect(error !== null).toBe(true);
+    expect(data.session === null).toBe(true);
+    const { error: denied } = await client.from("rounds").select("id");
+    expect(denied !== null).toBe(true);
+  } finally {
+    await client.auth.stopAutoRefresh();
+  }
+});
+
+test("OTP後に直接パスワードを更新しても新しいパスワード認証は復活しない", async () => {
+  const email = `updated-password-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email, legacyPassword: "old-password1" });
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  try {
+    const { data, error } = await signInWithEmailOtp(client, email);
+    expect(error === null && data.session !== null).toBe(true);
+    const updated = await updatePasswordDirect(
+      data.session?.access_token ?? "",
+      { password: "updated-password1" },
+    );
+    expect(updated.status).toBe(200);
+    expect((await getUserStatus(data.session?.access_token ?? "")).status).toBe(
+      200,
+    );
+    expect(
+      (await refreshStatus(data.session?.refresh_token ?? "")).status,
+    ).toBe(200);
+    await client.auth.signOut({ scope: "local" });
+    const attempt = await client.auth.signInWithPassword({
+      email,
+      password: "updated-password1",
+      options: { captchaToken: "test-captcha-token" },
+    });
+    expect(attempt.error !== null && attempt.data.session === null).toBe(true);
+  } finally {
+    await client.auth.stopAutoRefresh();
+  }
+});
+
+test("直接password signupを要求してもパスワードのセッションを発行できない", async () => {
+  const email = `direct-signup-${randomUUID()}@aims.test`;
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  try {
+    const registered = await client.auth.signUp({
+      email,
+      password: "old-password1",
+      options: { captchaToken: "test-captcha-token" },
+    });
+    expect(registered.data.session === null).toBe(true);
+    const attempt = await client.auth.signInWithPassword({
+      email,
+      password: "old-password1",
+      options: { captchaToken: "test-captcha-token" },
+    });
+    expect(attempt.data.session === null && attempt.error !== null).toBe(true);
+    expect((await client.from("rounds").select("id")).error !== null).toBe(
+      true,
+    );
+  } finally {
+    await client.auth.stopAutoRefresh();
+  }
+});
+
+test("直接回復要求のメールはコードだけで、回復コードの確認後に直接パスワードを更新してもそのパスワードでは認証できない", async () => {
+  const email = `recovery-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email, legacyPassword: "old-password1" });
+  const previous = await mailIds(email);
+  const options = { auth: { persistSession: false, autoRefreshToken: false } };
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    options,
+  );
+  const probe = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    options,
+  );
+  try {
+    const sent = await client.auth.resetPasswordForEmail(email, {
+      captchaToken: "test-captcha-token",
+    });
+    expect(sent.error === null).toBe(true);
+    const message = await getEmailFromMailpit(email, undefined, previous);
+    expect(message.html).not.toMatch(/href\s*=|ConfirmationURL|パスワード/i);
+
+    // 回復コードの確認は実Authが方式otpとして発行し、通常のメールOTPと同等に扱う。
+    const token = await getOtpCodeFromMailpit(email, previous);
+    const verified = await client.auth.verifyOtp({
+      email,
+      token,
+      type: "recovery",
+    });
+    const issued = verified.data.session;
+    expect(issued ? authMethodOf(issued.access_token) : null).toBe("otp");
+
+    // 更新API自体の成否は問わず、更新したパスワードでの認証が成立しないことを確かめる。
+    await client.auth.updateUser({ password: "recovered-password1" });
+    const passwordAttempt = await probe.auth.signInWithPassword({
+      email,
+      password: "recovered-password1",
+      options: { captchaToken: "test-captcha-token" },
+    });
+    expect(
+      passwordAttempt.data.session === null && passwordAttempt.error !== null,
+    ).toBe(true);
+    expect((await probe.from("rounds").select("id")).error !== null).toBe(true);
+  } finally {
+    await Promise.all([
+      client.auth.stopAutoRefresh(),
+      probe.auth.stopAutoRefresh(),
+    ]);
+  }
+});
+
+test("使用済みの実OTPを別のクライアントで再使用しても保護データを読めない", async () => {
+  const email = `reused-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email });
+  const options = { auth: { persistSession: false, autoRefreshToken: false } };
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    options,
+  );
+  const other = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    options,
+  );
+  try {
+    const first = await signInWithEmailOtp(client, email);
+    expect(first.data.session !== null && first.error === null).toBe(true);
+    const token = await getOtpCodeFromMailpit(email);
+    const reused = await other.auth.verifyOtp({ email, token, type: "email" });
+    expect(reused.data.session === null && reused.error !== null).toBe(true);
+    expect((await other.from("rounds").select("id")).error !== null).toBe(true);
+  } finally {
+    await Promise.all([
+      client.auth.stopAutoRefresh(),
+      other.auth.stopAutoRefresh(),
+    ]);
+  }
+});
+
+test("送付されたコードのメールを読むだけでは認証されず、送付した端末でコードを確認した後だけ保護データを読める", async () => {
+  const email = `mail-read-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email });
+  const options = { auth: { persistSession: false, autoRefreshToken: false } };
+  const sender = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    options,
+  );
+  const reader = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    options,
+  );
+  try {
+    const previous = await mailIds(email);
+    const sent = await sender.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false, captchaToken: "test-captcha-token" },
+    });
+    expect(sent.error === null).toBe(true);
+    const token = await getOtpCodeFromMailpit(email, previous);
+    const sessions = await Promise.all([
+      sender.auth.getSession(),
+      reader.auth.getSession(),
+    ]);
+    expect(sessions.map(({ data }) => data.session)).toEqual([null, null]);
+    expect((await sender.from("rounds").select("id")).error !== null).toBe(
+      true,
+    );
+    expect((await reader.from("rounds").select("id")).error !== null).toBe(
+      true,
+    );
+    const verified = await sender.auth.verifyOtp({
+      email,
+      token,
+      type: "email",
+    });
+    expect(verified.error === null && verified.data.session !== null).toBe(
+      true,
+    );
+    expect((await sender.from("rounds").select("id")).error === null).toBe(
+      true,
+    );
+    expect((await reader.auth.getSession()).data.session).toBeNull();
+  } finally {
+    await Promise.all([
+      sender.auth.stopAutoRefresh(),
+      reader.auth.stopAutoRefresh(),
+    ]);
+  }
+});
+
+test("ログインのメール本文は「認証コード」の件名と6桁のコードと「15分」の期限と「心当たりがない場合」の案内を持ち、リンクを持たない", async () => {
+  const email = `mail-body-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email });
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  try {
+    const previous = await mailIds(email);
+    const sent = await client.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false, captchaToken: "test-captcha-token" },
+    });
+    expect(sent.error === null).toBe(true);
+    const message = await getEmailFromMailpit(email, undefined, previous);
+    expect(message.subject).toContain("認証コード");
+    expect(message.html).toMatch(/>\s*\d{6}\s*</);
+    expect(message.html).toContain("15分");
+    expect(message.html).toContain("心当たりがない場合");
+    expect(message.html).not.toMatch(/href\s*=|ConfirmationURL|パスワード/i);
+  } finally {
+    await client.auth.stopAutoRefresh();
+  }
 });

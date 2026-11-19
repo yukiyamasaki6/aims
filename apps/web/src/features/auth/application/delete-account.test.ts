@@ -1,486 +1,564 @@
-import { describe, expect, it } from "vitest";
-import {
-  type AuthFailure,
-  type AuthFailureKind,
-  UNREACHABLE,
-} from "../domain/auth-failure";
+import { describe, expect, it, vi } from "vitest";
 import {
   type DeleteAccountEvent,
+  type DeleteAccountFlow,
   deleteAccountReducer,
   initialDeleteAccountFlow,
 } from "../domain/delete-account-flow";
-import { HOLD_TIMEOUT_MS } from "../domain/session-end-flow";
-import type {
-  AccountDeletionResult,
-  ReauthenticationResult,
-} from "./delete-account";
+import type { AccountDeletionResult } from "./delete-account";
 import { createDeleteAccountHarness } from "./delete-account-test-helpers";
+import type { CodeVerification } from "./email-otp";
 import { screenHarness } from "./screen-view-test-helpers";
 
-const input = { password: "password-current1" };
-const checkedFlow = { ...initialDeleteAccountFlow, captchaToken: "token-1" };
-const signedOut = { kind: "signed-out" } as const;
-
-function setup(options: Parameters<typeof createDeleteAccountHarness>[0] = {}) {
-  return {
-    ...createDeleteAccountHarness(options),
-    ...screenHarness<
-      ReturnType<typeof deleteAccountReducer>,
-      DeleteAccountEvent
-    >(deleteAccountReducer),
-  };
+function setup() {
+  const h = createDeleteAccountHarness();
+  const screen = screenHarness<DeleteAccountFlow, DeleteAccountEvent>(
+    deleteAccountReducer,
+  );
+  return { ...h, ...screen, view: screen.viewOf(initialDeleteAccountFlow) };
+}
+async function requireOtp(h: ReturnType<typeof setup>) {
+  h.account.delete.mockResolvedValueOnce({
+    kind: "failed",
+    failure: { kind: "otp_required" },
+  });
+  await h.deleteAccount.submit(h.view);
+  h.view.dispatch({ type: "captchaChecked", token: "check" });
+}
+async function sendOtp(h: ReturnType<typeof setup>) {
+  await requireOtp(h);
+  await h.deleteAccount.sendCode(h.view);
 }
 
-async function flush() {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-}
-
-const failed = (
-  kind: AuthFailureKind,
-): { kind: "failed"; failure: AuthFailure } => ({
-  kind: "failed",
-  failure: { kind },
+describe("アカウント削除", () => {
+  it("直近OTPのある利用者は対象IDを渡して削除し端末記録とセッションを終了する", async () => {
+    // Given
+    const h = setup();
+    // When
+    await h.deleteAccount.submit(h.view);
+    // Then
+    expect(h.account.delete).toHaveBeenCalledExactlyOnceWith("user-1");
+    expect(h.authenticator.sendCode).not.toHaveBeenCalled();
+    expect(h.eraser.erase).toHaveBeenCalledExactlyOnceWith("user-1");
+    expect(h.page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+    expect(h.view.observedState.submitting).toBe(true);
+  });
+  it("OTP不足では削除せず現在メールの要求段階へ進み保持を解く", async () => {
+    // Given
+    const h = setup();
+    h.account.delete.mockResolvedValue({
+      kind: "failed",
+      failure: { kind: "otp_required" },
+    });
+    // When
+    await h.deleteAccount.submit(h.view);
+    // Then
+    expect(h.view.observedState).toMatchObject({
+      step: "request",
+      userId: "user-1",
+      email: "archer@example.test",
+      submitting: false,
+    });
+    expect(h.eraser.erase).not.toHaveBeenCalled();
+    expect(h.authenticator.sendCode).not.toHaveBeenCalled();
+    expect(h.clock.pendingCount()).toBe(0);
+  });
+  it("コード送付は自動登録せず保持も取得しない", async () => {
+    // Given
+    const h = setup();
+    await requireOtp(h);
+    const hold = vi.spyOn(h.session, "holdEnd");
+    // When
+    await h.deleteAccount.sendCode(h.view);
+    // Then
+    expect(h.authenticator.sendCode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "archer@example.test",
+        captchaToken: "check",
+        shouldCreateUser: false,
+      }),
+    );
+    expect(h.view.observedState.step).toBe("code");
+    expect(hold).not.toHaveBeenCalled();
+  });
+  it("確認結果のIDが一致したとき同じ対象で削除を完了する", async () => {
+    // Given
+    const h = setup();
+    await sendOtp(h);
+    // When
+    await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
+    // Then
+    expect(h.authenticator.verifyCode).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "archer@example.test", code: "123456" }),
+    );
+    expect(h.account.delete.mock.calls).toEqual([["user-1"], ["user-1"]]);
+    expect(h.eraser.erase).toHaveBeenCalledExactlyOnceWith("user-1");
+    expect(h.page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+  });
+  it.each(["send", "verify"] as const)(
+    "%s前に利用者が切り替われば処理を止める",
+    async (operation) => {
+      // Given
+      const h = setup();
+      if (operation === "send") await requireOtp(h);
+      else await sendOtp(h);
+      h.authenticator.readCurrentAccount.mockResolvedValue({
+        kind: "current",
+        userId: "user-2",
+        email: "other@example.test",
+      });
+      // When
+      if (operation === "send") await h.deleteAccount.sendCode(h.view);
+      else await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
+      // Then
+      expect(h.account.delete).toHaveBeenCalledTimes(1);
+      expect(h.authenticator.verifyCode).not.toHaveBeenCalled();
+      expect(h.authenticator.sendCode).toHaveBeenCalledTimes(
+        operation === "send" ? 0 : 1,
+      );
+      expect(h.eraser.erase).not.toHaveBeenCalled();
+    },
+  );
+  it("確認応答の利用者が異なる場合はRPCを呼ばない", async () => {
+    // Given
+    const h = setup();
+    await sendOtp(h);
+    h.authenticator.verifyCode.mockResolvedValue({
+      kind: "verified",
+      userId: "user-2",
+    });
+    // When
+    await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
+    // Then
+    expect(h.account.delete).toHaveBeenCalledTimes(1);
+    expect(h.eraser.erase).not.toHaveBeenCalled();
+    expect(h.view.observedState.error).toBe("other");
+  });
+  it("同じIDでも送付先メールが変わればコードを確認しない", async () => {
+    // Given
+    const h = setup();
+    await sendOtp(h);
+    h.authenticator.readCurrentAccount.mockResolvedValue({
+      kind: "current",
+      userId: "user-1",
+      email: "changed@example.test",
+    });
+    // When
+    await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
+    // Then
+    expect(h.authenticator.verifyCode).not.toHaveBeenCalled();
+    expect(h.account.delete).toHaveBeenCalledTimes(1);
+  });
+  it("確認後もOTP不足なら再要求へ戻る", async () => {
+    // Given
+    const h = setup();
+    await sendOtp(h);
+    h.account.delete.mockResolvedValue({
+      kind: "failed",
+      failure: { kind: "otp_required" },
+    });
+    // When
+    await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
+    // Then
+    expect(h.view.observedState).toMatchObject({
+      step: "request",
+      pending: null,
+      submitting: false,
+    });
+    expect(h.eraser.erase).not.toHaveBeenCalled();
+  });
+  it.each(["code_expired", "rate_limited", "unreachable"] as const)(
+    "コード確認の%sでは削除せずコード段階を保つ",
+    async (kind) => {
+      // Given
+      const h = setup();
+      await sendOtp(h);
+      h.authenticator.verifyCode.mockResolvedValue({
+        kind: "failed",
+        failure: { kind },
+      });
+      // When
+      await h.deleteAccount.verifyCode({ code: "000000" }, h.view);
+      // Then
+      expect(h.view.observedState).toMatchObject({
+        step: "code",
+        error: kind,
+        pending: null,
+      });
+      expect(h.account.delete).toHaveBeenCalledTimes(1);
+      expect(h.eraser.erase).not.toHaveBeenCalled();
+    },
+  );
+  it("削除結果不明なら記録を消さず通信エラーを示す", async () => {
+    // Given
+    const h = setup();
+    h.account.delete.mockResolvedValue({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+    // When
+    await h.deleteAccount.submit(h.view);
+    // Then
+    expect(h.eraser.erase).not.toHaveBeenCalled();
+    expect(h.page.replace).not.toHaveBeenCalled();
+    expect(h.view.observedState.error).toBe("unreachable");
+  });
+  it("消去失敗でも削除済み利用者のセッションを終了する", async () => {
+    // Given
+    const h = setup();
+    h.eraser.erase.mockRejectedValue(new Error("storage"));
+    // When
+    await h.deleteAccount.submit(h.view);
+    // Then
+    expect(h.page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+  });
+  it("削除の二重押下はRPCを重複させない", async () => {
+    // Given
+    const h = setup();
+    // When
+    await Promise.all([
+      h.deleteAccount.submit(h.view),
+      h.deleteAccount.submit(h.view),
+    ]);
+    // Then
+    expect(h.account.delete).toHaveBeenCalledOnce();
+  });
+  it("90秒上限で保持を解き遅い削除成功で記録を消さない", async () => {
+    // Given
+    const h = setup();
+    const response = Promise.withResolvers<AccountDeletionResult>();
+    h.account.delete.mockReturnValue(response.promise);
+    const running = h.deleteAccount.submit(h.view);
+    await h.clock.advanceAsync(89999);
+    const before = h.view.observedState.submitting;
+    // When
+    await h.clock.advanceAsync(1);
+    await running;
+    response.resolve({ kind: "deleted" });
+    await h.clock.advanceAsync(1);
+    // Then
+    expect(before).toBe(true);
+    expect(h.view.observedState).toMatchObject({
+      submitting: false,
+      error: "unreachable",
+    });
+    expect(h.eraser.erase).not.toHaveBeenCalled();
+  });
+  it("確認中の90秒上限後は遅い成功でも削除RPCを開始しない", async () => {
+    // Given
+    const h = setup();
+    await sendOtp(h);
+    const response = Promise.withResolvers<CodeVerification>();
+    h.authenticator.verifyCode.mockReturnValue(response.promise);
+    const running = h.deleteAccount.verifyCode({ code: "123456" }, h.view);
+    await h.clock.advanceAsync(90000);
+    await running;
+    // When
+    response.resolve({ kind: "verified", userId: "user-1" });
+    await h.clock.advanceAsync(1);
+    // Then
+    expect(h.account.delete).toHaveBeenCalledTimes(1);
+    expect(h.eraser.erase).not.toHaveBeenCalled();
+  });
 });
 
-describe("アカウント削除の手続き", () => {
-  describe("成功", () => {
-    it("再認証と削除が成功すると、その利用者のIDで端末の記録を消し、この端末のサインインを終えて、遷移元の無いサインインへ移る", async () => {
-      // Given
-      const { deleteAccount, eraser, authenticator, page, viewOf } = setup({
-        here: "/rounds#settings/account/delete-account",
-      });
+it("確認応答を待つ間に現在メールが変わった場合は削除を開始しない", async () => {
+  // Given
+  const h = setup();
+  await sendOtp(h);
+  const response = Promise.withResolvers<CodeVerification>();
+  h.authenticator.verifyCode.mockReturnValue(response.promise);
+  const running = h.deleteAccount.verifyCode({ code: "123456" }, h.view);
+  await vi.waitFor(() => expect(h.authenticator.verifyCode).toHaveBeenCalled());
+  h.authenticator.readCurrentAccount.mockResolvedValue({
+    kind: "current",
+    userId: "user-1",
+    email: "changed@example.test",
+  });
+  // When
+  response.resolve({ kind: "verified", userId: "user-1" });
+  await running;
+  // Then
+  expect(h.account.delete).toHaveBeenCalledTimes(1);
+  expect(h.eraser.erase).not.toHaveBeenCalled();
+});
 
-      // When
-      await deleteAccount.submit(input, viewOf(checkedFlow));
+it("削除応答待ちにSIGNED_OUTを受けても成功後だけ遷移元なしで終了する", async () => {
+  // Given
+  const h = setup();
+  const stop = h.session.watch();
+  const response = Promise.withResolvers<AccountDeletionResult>();
+  h.account.delete.mockReturnValue(response.promise);
+  const running = h.deleteAccount.submit(h.view);
+  await vi.waitFor(() => expect(h.account.delete).toHaveBeenCalledOnce());
+  // When
+  h.emit({ kind: "signed-out" });
+  const before = h.page.replace.mock.calls.length;
+  response.resolve({ kind: "deleted" });
+  await running;
+  stop();
+  // Then
+  expect(before).toBe(0);
+  expect(h.page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+});
 
-      // Then
-      expect(authenticator.reauthenticate).toHaveBeenCalledExactlyOnceWith({
-        password: "password-current1",
-        captchaToken: "token-1",
-      });
-      expect(eraser.erase).toHaveBeenCalledExactlyOnceWith("user-1");
-      expect(authenticator.signOutHere).toHaveBeenCalledOnce();
-      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
-    });
+it("削除応答待ちに離脱しても成功確認後の消去と終了は進める", async () => {
+  // Given
+  const h = setup();
+  const response = Promise.withResolvers<AccountDeletionResult>();
+  h.account.delete.mockReturnValue(response.promise);
+  const running = h.deleteAccount.submit(h.view);
+  await vi.waitFor(() => expect(h.account.delete).toHaveBeenCalledOnce());
+  h.screen.mounted = false;
+  // When
+  response.resolve({ kind: "deleted" });
+  await running;
+  // Then
+  expect(h.events).toEqual([]);
+  expect(h.eraser.erase).toHaveBeenCalledExactlyOnceWith("user-1");
+  expect(h.page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+});
 
-    it("成功では、失敗を示さず、チェックのやり直しも頼まない(遷移まで処理中のまま)", async () => {
-      // Given
-      const { deleteAccount, events, resetCheck, viewOf } = setup();
-      const view = viewOf(checkedFlow);
+it("再送待機の計時は1秒後に残り秒数を進める出来事を送る", () => {
+  // Given
+  const h = setup();
+  const dispatch = vi.fn();
+  // When
+  h.deleteAccount.tickCooldown(dispatch);
+  h.clock.advance(1000);
+  // Then
+  expect(dispatch).toHaveBeenCalledExactlyOnceWith({ type: "cooldownTicked" });
+});
 
-      // When
-      await deleteAccount.submit(input, view);
-
-      // Then
-      expect(events).toEqual([]);
-      expect(resetCheck).not.toHaveBeenCalled();
-      expect(view.observedState.submitting).toBe(true);
-    });
-
-    it("端末の記録の消去が失敗しても、握りつぶされ、サインインの終了と遷移が行われる", async () => {
-      // Given
-      const { deleteAccount, eraser, authenticator, page, viewOf } = setup();
-      eraser.erase.mockRejectedValue(new Error("storage"));
-
-      // When
-      await deleteAccount.submit(input, viewOf(checkedFlow));
-
-      // Then
-      expect(authenticator.signOutHere).toHaveBeenCalledOnce();
-      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
-    });
-
-    it("削除の応答を待つ間にサインインの喪失を検知しても、遷移元つきで移らず、削除の完了の遷移(遷移元なし)になる", async () => {
-      // Given
-      const { deleteAccount, session, account, page, emit, viewOf } = setup();
-      session.watch();
-      const response = Promise.withResolvers<AccountDeletionResult>();
-      account.delete.mockReturnValue(response.promise);
-      const running = deleteAccount.submit(input, viewOf(checkedFlow));
-      await flush();
-
-      // When
-      emit(signedOut);
-      const duringWait = page.replace.mock.calls.length;
-      response.resolve({ kind: "deleted" });
-      await running;
-
-      // Then
-      expect(duringWait).toBe(0);
-      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+describe("対象の確認と排他の失敗", () => {
+  it("サインアウトが進行中で保持を取れないときは削除を開始せず通信エラーを示す", async () => {
+    // Given
+    const h = setup();
+    vi.spyOn(h.session, "holdEnd").mockReturnValue(null);
+    // When
+    await h.deleteAccount.submit(h.view);
+    // Then
+    expect(h.account.delete).not.toHaveBeenCalled();
+    expect(h.view.observedState).toMatchObject({
+      submitting: false,
+      error: "unreachable",
     });
   });
-
-  describe("削除が行われなかったことが確実な失敗", () => {
-    it.each<[string, AuthFailureKind]>([
-      ["パスワードの誤り", "current_password_invalid"],
-      ["制限", "rate_limited"],
-      ["チェックの失敗", "captcha_failed"],
-      ["通信の失敗(応答なし)", "unreachable"],
-    ])(
-      "再認証が%sなら、削除も消去もせず、保持を解いて理由を示し、サインインを維持する",
-      async (_name, kind) => {
-        // Given
-        const {
-          deleteAccount,
-          authenticator,
-          account,
-          eraser,
-          page,
-          session,
-          resetCheck,
-          viewOf,
-        } = setup();
-        authenticator.reauthenticate.mockResolvedValue(failed(kind));
-        const view = viewOf(checkedFlow);
-
-        // When
-        await deleteAccount.submit(input, view);
-
-        // Then
-        expect(account.delete).not.toHaveBeenCalled();
-        expect(eraser.erase).not.toHaveBeenCalled();
-        expect(view.observedState).toMatchObject({
-          error: kind,
-          submitting: false,
-        });
-        expect(resetCheck).toHaveBeenCalledOnce();
-        expect(page.replace).not.toHaveBeenCalled();
-        expect(session.holdEnd()).not.toBeNull();
-      },
-    );
-
-    it.each<[string, AuthFailureKind]>([
-      ["DBの拒否(PT403を含むコード付き)", "other"],
-    ])(
-      "削除が%sなら、消去せず、保持を解いて理由を示し、サインインを維持する",
-      async (_name, kind) => {
-        // Given
-        const { deleteAccount, account, eraser, page, session, viewOf } =
-          setup();
-        account.delete.mockResolvedValue(failed(kind));
-        const view = viewOf(checkedFlow);
-
-        // When
-        await deleteAccount.submit(input, view);
-
-        // Then
-        expect(eraser.erase).not.toHaveBeenCalled();
-        expect(view.observedState).toMatchObject({
-          error: kind,
-          submitting: false,
-        });
-        expect(page.replace).not.toHaveBeenCalled();
-        expect(session.holdEnd()).not.toBeNull();
-      },
-    );
-
-    it("削除の応答が無い・コードの無い応答(結果不明)なら、通信エラーを示し、端末の記録は消さない", async () => {
+  it("意思確認で現在の利用者の取得に失敗したときは削除を開始せずその失敗を示す", async () => {
+    // Given
+    const h = setup();
+    h.authenticator.readCurrentAccount.mockResolvedValue({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+    // When
+    await h.deleteAccount.submit(h.view);
+    // Then
+    expect(h.account.delete).not.toHaveBeenCalled();
+    expect(h.eraser.erase).not.toHaveBeenCalled();
+    expect(h.view.observedState).toMatchObject({
+      submitting: false,
+      error: "unreachable",
+    });
+  });
+  it("意思確認で認証の喪失が分かったときは削除を開始せずセッションの読み直しへ委ねる", async () => {
+    // Given
+    const h = setup();
+    h.authenticator.readCurrentAccount.mockResolvedValue({ kind: "lost" });
+    // When
+    await h.deleteAccount.submit(h.view);
+    // Then
+    expect(h.account.delete).not.toHaveBeenCalled();
+    expect(h.authenticator.readSession).toHaveBeenCalledWith({ refresh: true });
+    expect(h.view.observedState.submitting).toBe(false);
+  });
+  it.each(["send", "verify"] as const)(
+    "%s前の現在の利用者の取得に失敗したときは要求を出さずその失敗を示す",
+    async (operation) => {
       // Given
-      const { deleteAccount, account, eraser, viewOf } = setup();
-      account.delete.mockResolvedValue({
+      const h = setup();
+      if (operation === "send") await requireOtp(h);
+      else await sendOtp(h);
+      h.authenticator.readCurrentAccount.mockResolvedValue({
         kind: "failed",
-        failure: UNREACHABLE,
+        failure: { kind: "unreachable" },
       });
-      const view = viewOf(checkedFlow);
-
       // When
-      await deleteAccount.submit(input, view);
-
+      if (operation === "send") await h.deleteAccount.sendCode(h.view);
+      else await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
       // Then
-      expect(view.observedState.error).toBe("unreachable");
-      expect(eraser.erase).not.toHaveBeenCalled();
-    });
-
-    it("再認証が成功した後に削除が失敗しても、トークンを消費してチェックをやり直させ、次は再認証からやり直す", async () => {
-      // Given
-      const { deleteAccount, authenticator, account, resetCheck, viewOf } =
-        setup();
-      account.delete.mockResolvedValueOnce(failed("other"));
-      const view = viewOf(checkedFlow);
-      await deleteAccount.submit(input, view);
-      const afterFailure = view.observedState;
-
-      // When
-      view.dispatch({ type: "captchaChecked", token: "token-2" });
-      await deleteAccount.submit(input, view);
-
-      // Then
-      expect(afterFailure.captchaToken).toBeNull();
-      expect(resetCheck).toHaveBeenCalled();
-      expect(authenticator.reauthenticate).toHaveBeenCalledTimes(2);
-      expect(authenticator.reauthenticate).toHaveBeenLastCalledWith({
-        password: "password-current1",
-        captchaToken: "token-2",
-      });
-    });
-  });
-
-  describe("サインインの喪失", () => {
-    it("再認証の前の確認が認証サービスに拒否されたとき、更新を強制した読み取りで喪失を確定して、遷移元つきのサインインへ移り、削除は呼ばない", async () => {
-      // Given
-      const { deleteAccount, authenticator, account, state, page, viewOf } =
-        setup({
-          here: "/rounds#settings/account/delete-account",
-        });
-      authenticator.reauthenticate.mockImplementation(async () => {
-        state.status = "unauthenticated";
-        return { kind: "lost" };
-      });
-      const view = viewOf(checkedFlow);
-
-      // When
-      await deleteAccount.submit(input, view);
-
-      // Then
-      expect(authenticator.readSession).toHaveBeenCalledWith({
-        refresh: true,
-      });
-      expect(account.delete).not.toHaveBeenCalled();
-      expect(page.replace).toHaveBeenCalledExactlyOnceWith(
-        "/signin?returnTo=%2Frounds%23settings%2Faccount%2Fdelete-account",
+      expect(h.authenticator.sendCode).toHaveBeenCalledTimes(
+        operation === "send" ? 0 : 1,
       );
-      expect(view.observedState.error).toBe("unreachable");
-    });
-  });
-
-  describe("保持の上限と世代", () => {
-    it("再認証から削除の応答までが90秒に達すると、通信エラーを示して入力へ戻る。89秒では打ち切らない", async () => {
-      // Given
-      const { deleteAccount, authenticator, clock, viewOf } = setup();
-      authenticator.reauthenticate.mockReturnValue(new Promise(() => {}));
-      const view = viewOf(checkedFlow);
-      void deleteAccount.submit(input, view);
-      await flush();
-
-      // When
-      await clock.advanceAsync(HOLD_TIMEOUT_MS - 1_000);
-      const before = view.observedState;
-      await clock.advanceAsync(2_000);
-
-      // Then
-      expect(before).toMatchObject({ submitting: true, error: null });
-      expect(view.observedState).toMatchObject({
-        submitting: false,
-        error: "unreachable",
+      expect(h.authenticator.verifyCode).not.toHaveBeenCalled();
+      expect(h.account.delete).toHaveBeenCalledTimes(1);
+      expect(h.view.observedState.error).toBe("unreachable");
+    },
+  );
+  it("確認応答の後の現在の利用者の取得に失敗したときは削除を開始せずその失敗を示す", async () => {
+    // Given
+    const h = setup();
+    await sendOtp(h);
+    const current = await h.authenticator.readCurrentAccount();
+    h.authenticator.readCurrentAccount
+      .mockResolvedValueOnce(current)
+      .mockResolvedValueOnce({
+        kind: "failed",
+        failure: { kind: "unreachable" },
       });
+    // When
+    await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
+    // Then
+    expect(h.authenticator.verifyCode).toHaveBeenCalledOnce();
+    expect(h.account.delete).toHaveBeenCalledTimes(1);
+    expect(h.eraser.erase).not.toHaveBeenCalled();
+    expect(h.view.observedState.error).toBe("unreachable");
+  });
+  it("完了のサインアウトが失敗したときは通信エラーを示して操作を戻す", async () => {
+    // Given
+    const h = setup();
+    h.authenticator.signOutHere.mockResolvedValue({
+      kind: "failed",
+      failure: { kind: "unreachable" },
     });
-
-    it.each<[string, AccountDeletionResult]>([
-      ["成功", { kind: "deleted" }],
-      ["失敗", failed("other")],
-    ])(
-      "打ち切りの後に遅れて届いた削除の%sは、端末の記録を消さず、遷移も表示の書き換えもしない",
-      async (_name, late) => {
-        // Given
-        const {
-          deleteAccount,
-          account,
-          eraser,
-          page,
-          clock,
-          authenticator,
-          viewOf,
-        } = setup();
-        const response = Promise.withResolvers<AccountDeletionResult>();
-        account.delete.mockReturnValue(response.promise);
-        const view = viewOf(checkedFlow);
-        const running = deleteAccount.submit(input, view);
-        await clock.advanceAsync(HOLD_TIMEOUT_MS);
-        await running;
-        const afterExpiry = view.observedState;
-
-        // When
-        response.resolve(late);
-        await flush();
-
-        // Then
-        expect(view.observedState).toEqual(afterExpiry);
-        expect(afterExpiry.error).toBe("unreachable");
-        expect(eraser.erase).not.toHaveBeenCalled();
-        expect(authenticator.signOutHere).not.toHaveBeenCalled();
-        expect(page.replace).not.toHaveBeenCalled();
-      },
-    );
-
-    it("削除の応答を受けた時点で上限の計時を止め、その後のサインインの終了が長引いても、保持の上限では打ち切らない", async () => {
-      // Given
-      const { deleteAccount, account, authenticator, clock, viewOf } = setup();
-      const response = Promise.withResolvers<AccountDeletionResult>();
-      account.delete.mockReturnValue(response.promise);
-      authenticator.signOutHere.mockReturnValue(new Promise(() => {}));
-      const view = viewOf(checkedFlow);
-      void deleteAccount.submit(input, view);
-      await clock.advanceAsync(85_000);
-      response.resolve({ kind: "deleted" });
-      await flush();
-
-      // When
-      await clock.advanceAsync(7_000);
-      const afterHoldLimit = view.observedState;
-      await clock.advanceAsync(3_000);
-
-      // Then
-      expect(afterHoldLimit).toMatchObject({ submitting: true, error: null });
-      expect(view.observedState.error).toBe("unreachable");
+    // When
+    await h.deleteAccount.submit(h.view);
+    // Then
+    expect(h.eraser.erase).toHaveBeenCalledExactlyOnceWith("user-1");
+    expect(h.page.replace).not.toHaveBeenCalled();
+    expect(h.view.observedState).toMatchObject({
+      submitting: false,
+      error: "unreachable",
     });
   });
+});
 
-  describe("サインインの終了を確かめられない", () => {
-    it("削除と消去は済んだまま、保持を解き、通信エラーを示して入力へ戻り、サインアウトも実行できる", async () => {
-      // Given
-      const {
-        deleteAccount,
-        session,
-        authenticator,
-        eraser,
-        page,
-        state,
-        viewOf,
-      } = setup();
-      authenticator.signOutHere.mockImplementation(async () => ({
-        kind: "accepted",
-      }));
-      state.status = "authenticated";
-      const view = viewOf(checkedFlow);
-
-      // When
-      await deleteAccount.submit(input, view);
-      const signOut = await session.signOut();
-
-      // Then
-      expect(eraser.erase).toHaveBeenCalledExactlyOnceWith("user-1");
-      expect(view.observedState).toMatchObject({
-        error: "unreachable",
-        submitting: false,
-      });
-      expect(authenticator.signOutHere).toHaveBeenCalledTimes(2);
-      expect(signOut.kind).toBe("failed");
-      expect(page.replace).not.toHaveBeenCalled();
+describe("コード送付と確認の失敗・排他・離脱", () => {
+  it("コード送付が拒否されたときは要求の段階に留まりその失敗を示す", async () => {
+    // Given
+    const h = setup();
+    await requireOtp(h);
+    h.authenticator.sendCode.mockResolvedValue({
+      kind: "failed",
+      failure: { kind: "rate_limited" },
     });
+    // When
+    await h.deleteAccount.sendCode(h.view);
+    // Then
+    expect(h.view.observedState).toMatchObject({
+      step: "request",
+      error: "rate_limited",
+    });
+    expect(h.account.delete).toHaveBeenCalledTimes(1);
   });
-
-  describe("オフラインと重複", () => {
-    it("オフラインでは、再認証も削除も行わず、オフラインの理由を示し、通信が戻ると再び実行できる", async () => {
+  it.each(["send", "verify"] as const)(
+    "オフラインでは%sの対象確認も要求も行わない",
+    async (operation) => {
       // Given
-      const { deleteAccount, authenticator, account, connectivity, viewOf } =
-        setup({ offline: true });
-      const view = viewOf(checkedFlow);
-      await deleteAccount.submit(input, view);
-      const whileOffline = {
-        state: view.observedState,
-        reauthentications: authenticator.reauthenticate.mock.calls.length,
-        deletions: account.delete.mock.calls.length,
+      const h = setup();
+      if (operation === "send") await requireOtp(h);
+      else await sendOtp(h);
+      h.authenticator.readCurrentAccount.mockClear();
+      h.connectivity.goOffline();
+      // When
+      if (operation === "send") await h.deleteAccount.sendCode(h.view);
+      else await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
+      // Then
+      expect(h.authenticator.readCurrentAccount).not.toHaveBeenCalled();
+      expect(h.authenticator.sendCode).toHaveBeenCalledTimes(
+        operation === "send" ? 0 : 1,
+      );
+      expect(h.authenticator.verifyCode).not.toHaveBeenCalled();
+    },
+  );
+  it("コード送付の対象確認を待つ間に画面を離れると送付を始めない", async () => {
+    // Given
+    const h = setup();
+    await requireOtp(h);
+    const response =
+      Promise.withResolvers<
+        Awaited<ReturnType<typeof h.authenticator.readCurrentAccount>>
+      >();
+    h.authenticator.readCurrentAccount.mockReturnValue(response.promise);
+    const running = h.deleteAccount.sendCode(h.view);
+    h.screen.mounted = false;
+    // When
+    response.resolve({
+      kind: "current",
+      userId: "user-1",
+      email: "archer@example.test",
+    });
+    await running;
+    // Then
+    expect(h.authenticator.sendCode).not.toHaveBeenCalled();
+  });
+  it("コード送付の応答を待つ間に画面を離れると遅い応答で段階を進めない", async () => {
+    // Given
+    const h = setup();
+    await requireOtp(h);
+    const response =
+      Promise.withResolvers<
+        Awaited<ReturnType<typeof h.authenticator.sendCode>>
+      >();
+    h.authenticator.sendCode.mockReturnValue(response.promise);
+    const running = h.deleteAccount.sendCode(h.view);
+    await vi.waitFor(() => expect(h.authenticator.sendCode).toHaveBeenCalled());
+    h.screen.mounted = false;
+    // When
+    response.resolve({ kind: "accepted" });
+    await running;
+    // Then
+    expect(h.view.observedState.step).toBe("request");
+    expect(h.events.map(({ type }) => type)).not.toContain("codeSent");
+  });
+  it("離脱後に削除が確定失敗しても遅い表示更新を行わない", async () => {
+    // Given
+    const h = setup();
+    const response = Promise.withResolvers<AccountDeletionResult>();
+    h.account.delete.mockReturnValue(response.promise);
+    const running = h.deleteAccount.submit(h.view);
+    await vi.waitFor(() => expect(h.account.delete).toHaveBeenCalled());
+    h.screen.mounted = false;
+    // When
+    response.resolve({ kind: "failed", failure: { kind: "other" } });
+    await running;
+    // Then
+    expect(h.events).toEqual([]);
+    expect(h.eraser.erase).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["意思確認", 0],
+    ["確認前", 1],
+    ["確認応答の後", 2],
+  ] as const)(
+    "%sの対象確認が90秒上限まで応答しないと遅い応答で確認も削除も始めない",
+    async (_point, resolvedBefore) => {
+      // Given
+      const h = setup();
+      if (resolvedBefore > 0) await sendOtp(h);
+      const current = await h.authenticator.readCurrentAccount();
+      const response = Promise.withResolvers<typeof current>();
+      if (resolvedBefore === 2)
+        h.authenticator.readCurrentAccount.mockResolvedValueOnce(current);
+      h.authenticator.readCurrentAccount.mockReturnValueOnce(response.promise);
+      const before = {
+        deletes: h.account.delete.mock.calls.length,
+        verifies: resolvedBefore === 2 ? 1 : 0,
       };
-
-      // When
-      connectivity.goOnline();
-      await deleteAccount.submit(input, view);
-
-      // Then
-      expect(whileOffline.state.error).toBe("offline");
-      expect(whileOffline.reauthentications).toBe(0);
-      expect(whileOffline.deletions).toBe(0);
-      expect(authenticator.reauthenticate).toHaveBeenCalledOnce();
-      expect(account.delete).toHaveBeenCalledOnce();
-    });
-
-    it("処理中の再度の送信は、再認証も削除も増やさない", async () => {
-      // Given
-      const { deleteAccount, authenticator, account, viewOf } = setup();
-      const response = Promise.withResolvers<ReauthenticationResult>();
-      authenticator.reauthenticate.mockReturnValue(response.promise);
-      const view = viewOf(checkedFlow);
-      const first = deleteAccount.submit(input, view);
-
-      // When
-      await deleteAccount.submit(input, view);
-      response.resolve({ kind: "verified", userId: "user-1" });
-      await first;
-
-      // Then
-      expect(authenticator.reauthenticate).toHaveBeenCalledOnce();
-      expect(account.delete).toHaveBeenCalledOnce();
-    });
-
-    it("サインアウトの実行中は、再認証を始めず、通信エラーを示して入力へ戻る", async () => {
-      // Given
-      const { deleteAccount, session, authenticator, viewOf } = setup();
-      authenticator.signOutHere.mockReturnValue(new Promise(() => {}));
-      void session.signOut();
-      const view = viewOf(checkedFlow);
-
-      // When
-      await deleteAccount.submit(input, view);
-
-      // Then
-      expect(authenticator.reauthenticate).not.toHaveBeenCalled();
-      expect(view.observedState).toMatchObject({
-        error: "unreachable",
-        submitting: false,
-      });
-    });
-
-    it("入力に不備があれば、保持も取らず、再認証を始めない", async () => {
-      // Given
-      const { deleteAccount, authenticator, session, viewOf } = setup();
-
-      // When
-      await deleteAccount.submit({ password: "" }, viewOf(checkedFlow));
-
-      // Then
-      expect(authenticator.reauthenticate).not.toHaveBeenCalled();
-      expect(session.holdEnd()).not.toBeNull();
-    });
-  });
-
-  describe("画面を離れた後", () => {
-    it("応答を待つ間に画面を離れても、成功なら端末の記録の消去とサインインの終了を進め、表示は変えない", async () => {
-      // Given
-      const {
-        deleteAccount,
-        account,
-        eraser,
-        authenticator,
-        page,
-        events,
-        screen,
-        viewOf,
-      } = setup();
-      const response = Promise.withResolvers<AccountDeletionResult>();
-      account.delete.mockReturnValue(response.promise);
-      const running = deleteAccount.submit(input, viewOf(checkedFlow));
-      await flush();
-
-      // When
-      screen.mounted = false;
-      response.resolve({ kind: "deleted" });
+      const running =
+        resolvedBefore === 0
+          ? h.deleteAccount.submit(h.view)
+          : h.deleteAccount.verifyCode({ code: "123456" }, h.view);
+      await h.clock.advanceAsync(90000);
       await running;
-
-      // Then
-      expect(eraser.erase).toHaveBeenCalledExactlyOnceWith("user-1");
-      expect(authenticator.signOutHere).toHaveBeenCalledOnce();
-      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      expect(events).toEqual([]);
-    });
-
-    it("応答を待つ間に画面を離れると、失敗でも表示を変えず、保持は解く", async () => {
-      // Given
-      const { deleteAccount, account, session, events, screen, viewOf } =
-        setup();
-      const response = Promise.withResolvers<AccountDeletionResult>();
-      account.delete.mockReturnValue(response.promise);
-      const running = deleteAccount.submit(input, viewOf(checkedFlow));
-      await flush();
-
       // When
-      screen.mounted = false;
-      response.resolve(failed("other"));
-      await running;
-
+      response.resolve(current);
+      await h.clock.advanceAsync(1);
       // Then
-      expect(events).toEqual([]);
-      expect(session.holdEnd()).not.toBeNull();
-    });
-  });
+      expect(h.account.delete).toHaveBeenCalledTimes(before.deletes);
+      expect(h.authenticator.verifyCode).toHaveBeenCalledTimes(before.verifies);
+      expect(h.eraser.erase).not.toHaveBeenCalled();
+      expect(h.view.observedState.error).toBe("unreachable");
+    },
+  );
 });

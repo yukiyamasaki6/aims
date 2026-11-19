@@ -271,6 +271,7 @@ function composeAccount(
       eraseHistoryViewMemory,
     ]),
     session,
+    clock: inputs.clock,
     connectivity: inputs.connectivity,
   });
 }

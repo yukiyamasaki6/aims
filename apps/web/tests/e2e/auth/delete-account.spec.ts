@@ -1,121 +1,260 @@
 import { randomUUID } from "node:crypto";
-import type { Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import { DELETE_ACCOUNT_HASH, ROUNDS_PATH } from "@/routes";
 import { expect, test } from "../fixtures";
-import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
-import { signInError } from "../helpers/auth-api";
-import { addRound, signInFreshUser } from "../helpers/round-fixtures";
 import {
-  comeBackOnline,
-  goOffline,
-  waitForServiceWorkerControl,
-} from "../helpers/service-worker";
-import { settingsPanel, waitForPanelHydration } from "../helpers/settings";
+  createConfirmedUser,
+  markOtpSent,
+  signInWithEmailOtp,
+  signUpAndSignIn,
+  waitForOtpSendWindow,
+} from "../helpers/auth";
+import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
+import { signInOnOtherDevice } from "../helpers/other-browser-device";
+import { addRound, signInFreshUser } from "../helpers/round-fixtures";
+import { settingsPanel } from "../helpers/settings";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
-// 削除は破壊的で、他のspecとデータを共有しないため、共有の認証状態は使わず、使い捨てのユーザーを作る。
-// 独立した使い捨てのスタックでだけ実行する(共有のスタックでは実行しない)。
+const t = translatorFor("auth");
+const settings = translatorFor("settings");
+const rounds = translatorFor("rounds");
+const navigation = translatorFor("navigation");
+// supabase/config.tomlのjwt_expiry（3600秒）を越える時間。
+const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 test.use({ storageState: { cookies: [], origins: [] } });
-
-const authText = translatorFor("auth");
-const settingsText = translatorFor("settings");
-const navigationText = translatorFor("navigation");
-const roundsText = translatorFor("rounds");
-
-function passwordInput(page: Page) {
-  return page.getByPlaceholder(authText("deleteAccountPasswordPlaceholder"));
-}
-
-function deleteButton(page: Page) {
-  return page.getByRole("button", { name: authText("deleteAccountSubmit") });
-}
-
-test("ラウンドを持つ利用者が、設定から現在のパスワードで削除すると、サインイン画面へ移り、削除したメールアドレスでは入れず、同じメールアドレスで新しく登録した利用者には旧ラウンドが表示されない", async ({
+test("直近OTPでログインした利用者が削除するとサインインへ移り再登録しても旧記録を表示しない", async ({
   page,
 }) => {
-  // ラウンドを持つ使い捨ての利用者でサインインし、設定パネルからアカウント削除の画面へ進む。
-  const credentials = await signInFreshUser(page, "e2e-delete-account");
-  const roundName = `削除前のラウンド-${randomUUID().slice(0, 8)}`;
-  await addRound(credentials, roundName, "2026-08-24", { completed: true });
+  // 記録のある利用者で削除画面へ進む。
+  const credentials = await signInFreshUser(page, "delete-otp");
+  const name = `削除前-${randomUUID()}`;
+  await addRound(credentials, name, "2026-08-24", { completed: true });
   await page.goto("/rounds/history");
-  await expect(page.getByText(roundName)).toBeVisible();
+  await expect(page.getByText(name)).toBeVisible();
   await page
-    .getByRole("link", {
-      name: navigationText("leftPanelSettings"),
-      exact: true,
-    })
+    .getByRole("link", { name: navigation("leftPanelSettings"), exact: true })
     .click();
   await settingsPanel(page)
-    .getByRole("link", { name: settingsText("deleteAccountItem") })
+    .getByRole("link", { name: settings("deleteAccountItem") })
     .click();
   await expect(
-    settingsPanel(page).getByRole("heading", {
-      name: authText("deleteAccountTitle"),
-    }),
+    settingsPanel(page).getByRole("heading", { name: t("deleteAccountTitle") }),
   ).toBeVisible();
-  await waitForHydration(page);
+  await expect(
+    settingsPanel(page).locator('[data-hydrated="true"]'),
+  ).toBeAttached();
 
-  // 現在のパスワードを入力して削除を実行し、遷移元の無いサインイン画面へ移る。
-  await passwordInput(page).fill(credentials.password);
-  await waitForTurnstileToken(page, 1);
-  await deleteButton(page).click();
+  // 削除を明示して遷移元なしのサインインへ進む。
+  await page.getByRole("button", { name: t("deleteAccountSubmit") }).click();
   await expect(page).toHaveURL(/\/signin$/);
 
-  // 削除したメールアドレスでは認証サービスにサインインを拒まれ、保護された画面はサインインへ移る。
-  expect(await signInError(credentials.email, credentials.password)).toBe(
-    "invalid_credentials",
-  );
-  await page.goto("/rounds");
-  await expect(page).toHaveURL(/\/signin\?returnTo=%2Frounds$/);
-
-  // 同じメールアドレスで新しく登録してサインインすると、履歴に旧ラウンドは表示されない。
+  // 同じメールで再登録し履歴に旧記録がないことを確認する。
   await signUpAndSignIn(page, credentials);
   await page.goto("/rounds/history");
-  await expect(page.getByText(roundsText("historyEmpty"))).toBeVisible();
-  await expect(page.getByText(roundName)).toHaveCount(0);
+  await expect(page.getByText(rounds("historyEmpty"))).toBeVisible();
+  await expect(page.getByText(name)).toHaveCount(0);
 });
 
-test("画面の枠を保存した後、オフラインでアカウント削除の画面を開いて削除を実行すると、オフラインの文言が表示され、アカウントは残り、通信が戻ると再び実行できる", async ({
+test("実AuthのOTPで署名されたJWTは本人の削除を許し改ざんJWTと別人IDを拒否する", async () => {
+  const email = `delete-api-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email, password: "old-password1" });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  const client = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  try {
+    const verified = await signInWithEmailOtp(client, email);
+    expect(verified.error === null && verified.data.session !== null).toBe(
+      true,
+    );
+    const token = verified.data.session?.access_token ?? "";
+    const userId = verified.data.user?.id ?? "";
+    const rpc = async (accessToken: string, expected: string) =>
+      fetch(`${url}/rest/v1/rpc/delete_account`, {
+        method: "POST",
+        headers: {
+          apikey: key,
+          authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ expected_user_id: expected }),
+      });
+    const parts = token.split(".");
+    const payload = JSON.parse(
+      Buffer.from(parts[1], "base64url").toString("utf8"),
+    );
+    payload.sub = randomUUID();
+    parts[1] = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    expect((await rpc(parts.join("."), userId)).status).toBe(401);
+    const wrong = await rpc(token, randomUUID());
+    expect(wrong.status).toBe(403);
+    expect((await wrong.json()).message).toBe("account_deletion_forbidden");
+    expect((await client.auth.getUser()).data.user?.id).toBe(userId);
+    expect((await rpc(token, userId)).status).toBe(204);
+  } finally {
+    await client.auth.stopAutoRefresh();
+  }
+});
+
+test("古いOTPの利用者は現在メールで再確認して削除を完了する", async ({
   page,
-  context,
 }) => {
-  // 使い捨ての利用者でサインインし、ラウンド一覧を開いて、Service Workerが枠を保存するのを待つ。
-  const credentials = await signInFreshUser(page, "e2e-delete-offline");
-  await page.goto(ROUNDS_PATH);
-  await waitForHydration(page);
-  await waitForServiceWorkerControl(page);
+  test.setTimeout(150000);
+  // OTPでログインして、削除画面へ進む。
+  const credentials = await signInFreshUser(page, "delete-old-otp");
+  const signedAt = Date.now();
+  await page.goto("/rounds#settings/account/delete-account");
+  await expect(
+    settingsPanel(page).getByRole("heading", { name: t("deleteAccountTitle") }),
+  ).toBeVisible();
+  await expect(
+    settingsPanel(page).locator('[data-hydrated="true"]'),
+  ).toBeAttached();
+
+  // サーバーの認可にはブラウザ時計を使えないため、実際の60秒経過後に意思表示する。
   await expect
-    .poll(() =>
-      page.evaluate(async () => {
-        const urls: string[] = [];
-        for (const name of await caches.keys()) {
-          if (!name.startsWith("serwist-precache")) continue;
-          for (const request of await (await caches.open(name)).keys()) {
-            urls.push(request.url);
-          }
-        }
-        return urls.some((url) => url.includes("/__shell/rounds?"));
-      }),
-    )
+    .poll(() => Date.now() - signedAt > 61000, {
+      timeout: 65000,
+      intervals: [1000],
+      message: "AuthのOTP証跡が60秒を超える",
+    })
     .toBe(true);
+  await page.getByRole("button", { name: t("deleteAccountSubmit") }).click();
+  await expect(
+    page.getByRole("button", { name: t("otpSendCode") }),
+  ).toBeVisible();
 
-  // オフラインにして削除の画面を開き、パスワードを入力して削除を実行すると、オフラインの文言が表示される。
-  // 同じ文書内の移動にならないよう、別の画面を開いてから、オフラインにする。
-  await page.goto("/rounds/new");
-  await goOffline(context);
-  const response = await page.goto(`${ROUNDS_PATH}${DELETE_ACCOUNT_HASH}`);
-  expect(response?.fromServiceWorker()).toBe(true);
-  await expect(settingsPanel(page)).toBeVisible();
-  await waitForPanelHydration(page);
-  await passwordInput(page).fill(credentials.password);
+  // 現在のメールへ送り、コード入力へ進む。
+  const previous = await mailIds(credentials.email);
   await waitForTurnstileToken(page, 1);
-  await deleteButton(page).click();
-  await expect(page.getByText(authText("failure.offline"))).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`${DELETE_ACCOUNT_HASH}$`));
+  await page.getByRole("button", { name: t("otpSendCode") }).click();
+  await expect(
+    page.getByRole("heading", { name: t("otpTitle") }),
+  ).toBeVisible();
 
-  // 通信が戻ると、アカウントは残っていて、削除を再び押せる。
-  await comeBackOnline(context, page);
-  expect(await signInError(credentials.email, credentials.password)).toBeNull();
-  await expect(deleteButton(page)).toHaveAttribute("aria-disabled", "false");
+  // 届いたコードを確認して削除し、遷移元なしのサインインへ進む。
+  await page
+    .getByPlaceholder(t("otpCodePlaceholder"))
+    .fill(await getOtpCodeFromMailpit(credentials.email, previous));
+  await page.getByRole("button", { name: t("deleteAccountVerify") }).click();
+  await expect(page).toHaveURL(/\/signin$/);
+});
+
+test("古いOTPのJWTは更新しても新しいコードの送付だけでも削除できず、再確認した新しいセッションだけが削除できる", async () => {
+  test.setTimeout(180000);
+  const email = `delete-stale-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  const options = { auth: { persistSession: false, autoRefreshToken: false } };
+  const stale = createClient(url, key, options);
+  const recent = createClient(url, key, options);
+  const rpc = async (accessToken: string, expected: string) => {
+    const response = await fetch(`${url}/rest/v1/rpc/delete_account`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ expected_user_id: expected }),
+    });
+    return {
+      status: response.status,
+      message: response.ok ? null : (await response.json()).message,
+    };
+  };
+  const otpRequired = { status: 403, message: "otp_confirmation_required" };
+  try {
+    const first = await signInWithEmailOtp(stale, email);
+    const verifiedAt = Date.now();
+    const userId = first.data.user?.id ?? "";
+    const firstToken = first.data.session?.access_token ?? "";
+    expect(first.error === null && firstToken !== "").toBe(true);
+    // サーバーの認可にはテスト側の時計を使えないため、実際の60秒経過を待つ。
+    await expect
+      .poll(() => Date.now() - verifiedAt > 61000, {
+        timeout: 65000,
+        intervals: [1000],
+        message: "AuthのOTP証跡が60秒を超える",
+      })
+      .toBe(true);
+    expect(await rpc(firstToken, userId)).toEqual(otpRequired);
+    const refreshed = await stale.auth.refreshSession();
+    const refreshedToken = refreshed.data.session?.access_token ?? "";
+    expect(refreshed.error === null && refreshedToken !== firstToken).toBe(
+      true,
+    );
+    expect(await rpc(refreshedToken, userId)).toEqual(otpRequired);
+
+    // 新しいコードは送付されただけでは、どのセッションの証跡も更新しない。
+    await waitForOtpSendWindow(email);
+    const previous = await mailIds(email);
+    const sent = await recent.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false, captchaToken: "test-captcha-token" },
+    });
+    expect(sent.error === null).toBe(true);
+    markOtpSent(email);
+    const token = await getOtpCodeFromMailpit(email, previous);
+    expect(await rpc(refreshedToken, userId)).toEqual(otpRequired);
+
+    // 再確認で得た新しいセッションだけが新しい証跡を持ち、古いJWTには引き継がれない。
+    const second = await recent.auth.verifyOtp({ email, token, type: "email" });
+    const secondToken = second.data.session?.access_token ?? "";
+    expect(second.error === null && secondToken !== "").toBe(true);
+    expect(await rpc(refreshedToken, userId)).toEqual(otpRequired);
+    expect(await rpc(secondToken, userId)).toEqual({
+      status: 204,
+      message: null,
+    });
+  } finally {
+    await Promise.all([
+      stale.auth.stopAutoRefresh(),
+      recent.auth.stopAutoRefresh(),
+    ]);
+  }
+});
+
+test("別の端末でもサインインしている利用者がこの端末で削除すると、別の端末はアクセストークンの期限後にセッションを更新できずサインイン画面へ移動する", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(180000);
+  // 別の端末でサインインして一覧を開く。
+  const credentials = {
+    email: `delete-other-device-${randomUUID()}@aims.test`,
+    password: "unused",
+  };
+  const other = await signInOnOtherDevice(browser, credentials);
+  try {
+    // この端末でサインインし、削除画面へ進む。
+    await signUpAndSignIn(page, credentials);
+    await page.goto("/rounds#settings/account/delete-account");
+    await expect(
+      settingsPanel(page).getByRole("heading", {
+        name: t("deleteAccountTitle"),
+      }),
+    ).toBeVisible();
+    await expect(
+      settingsPanel(page).locator('[data-hydrated="true"]'),
+    ).toBeAttached();
+
+    // 削除を明示して遷移元なしのサインインへ進む。
+    await page.getByRole("button", { name: t("deleteAccountSubmit") }).click();
+    await expect(page).toHaveURL(/\/signin$/);
+
+    // 別の端末は期限後の更新を拒否され、サインイン画面へ移る。
+    const refresh = other.page.waitForResponse(
+      (response) =>
+        response.url().includes("/auth/v1/token") &&
+        response.url().includes("grant_type=refresh_token"),
+    );
+    await other.page.clock.fastForward(PAST_JWT_EXPIRY_MS);
+    expect((await refresh).ok()).toBe(false);
+    await expect(other.page).toHaveURL(/\/signin/);
+  } finally {
+    await other.context.close();
+  }
 });

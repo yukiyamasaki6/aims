@@ -1,5 +1,5 @@
 -- アカウント削除(delete_account)の振る舞いを確認する。
---   - 認可: 認証済みで、JWTのamrにpasswordの認証が直近60秒以内にあること。満たさない呼び出しは何も変えずにPT403で拒否する
+--   - 認可: 認証済みで、JWTのamrにotpの認証が直近60秒以内にあること。満たさない呼び出しは何も変えずにPT403で拒否する
 --   - 削除: 他に編集者がいないラウンドは全ての状態で消え、利用者のプロフィール・参加・個人のプリセット・認証の行も消える
 --   - 匿名化: 他の編集者が残るラウンドの矢・履歴は残り、利用者を指す列だけが「削除済みの利用者」に置き換わる
 --   - 再登録と旧トークン、原子性、関数の属性
@@ -183,7 +183,7 @@ select pg_temp.mk_auth_rows('A');
 -- ---- 呼び出しと測定の補助 ----
 
 -- authenticatedまたはanonとして、JWTのクレームを設定して呼び、結果を 'ok' か 'error:<SQLSTATE>' で返す。
-create function pg_temp.call_as(p_uid uuid, p_claims jsonb default '{}', p_role text default 'authenticated') returns text
+create function pg_temp.call_as(p_uid uuid, p_claims jsonb default '{}', p_role text default 'authenticated', p_expected text default 'self') returns text
 language plpgsql
 as $$
 declare
@@ -192,7 +192,7 @@ begin
   perform set_config('request.jwt.claims', (jsonb_build_object('sub', p_uid, 'role', p_role) || p_claims)::text, true);
   execute format('set local role %I', p_role);
   begin
-    perform public.delete_account();
+    perform public.delete_account(case when p_expected = 'self' then p_uid else p_expected::uuid end);
     v_result := 'ok';
   exception when others then
     v_result := 'error:' || sqlstate;
@@ -204,12 +204,12 @@ $$;
 
 -- amrの要素。p_secondsは、現在から何秒前の認証か。
 create function pg_temp.amr(p_method text, p_seconds int) returns jsonb
-language sql stable
-as $$ select jsonb_build_object('method', p_method, 'timestamp', floor(extract(epoch from now()))::bigint - p_seconds) $$;
+language sql volatile
+as $$ select jsonb_build_object('method', p_method, 'timestamp', extract(epoch from clock_timestamp()) - p_seconds) $$;
 
 create function pg_temp.fresh() returns jsonb
-language sql stable
-as $$ select jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('password', 1))) $$;
+language sql volatile
+as $$ select jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('otp', 1))) $$;
 
 -- 関連する全てのテーブルの内容の指紋。何も変わらないことを、全件の内容で比べる。
 create function pg_temp.snapshot() returns jsonb
@@ -268,25 +268,46 @@ create temp table bef_users as select * from public.users;
 -- A1 認可: 満たさない呼び出しは、何も変えずに拒否される
 -- ============================================================
 
-create temp table da_reject (label text primary key, uid uuid, role text not null, claims jsonb not null, expected text not null);
+create temp table da_reject (label text primary key, uid uuid, role text not null, claims jsonb not null, expected text not null, expected_id text default 'self');
 insert into da_reject (label, uid, role, claims, expected) values
   ('認証されていない(auth.uid()が無い)', null, 'authenticated', pg_temp.fresh(), 'error:PT403'),
   ('anonロールにはEXECUTE権限が無い', null, 'anon', pg_temp.fresh(), 'error:42501'),
   ('amrが無い', pg_temp.uid('Q'), 'authenticated', '{}', 'error:PT403'),
   ('amrが空の配列', pg_temp.uid('Q'), 'authenticated', '{"amr":[]}', 'error:PT403'),
-  ('amrが配列でない', pg_temp.uid('Q'), 'authenticated', '{"amr":{"method":"password"}}', 'error:PT403'),
-  ('認証コード(otp)の認証だけを持つ', pg_temp.uid('Q'), 'authenticated',
-    jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('otp', 1))), 'error:PT403'),
-  ('パスワードの認証が61秒前だけ', pg_temp.uid('Q'), 'authenticated',
-    jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('password', 61))), 'error:PT403'),
-  ('パスワードの認証が61秒前で、認証コードが1秒前(認証コードはパスワードの鮮度の代わりにならない)', pg_temp.uid('Q'), 'authenticated',
-    jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('password', 61), pg_temp.amr('otp', 1))), 'error:PT403'),
+  ('amrが配列でない', pg_temp.uid('Q'), 'authenticated', '{"amr":{"method":"otp"}}', 'error:PT403'),
+  ('passwordだけでは認可しない', pg_temp.uid('Q'), 'authenticated',
+    jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('password', 1))), 'error:PT403'),
+  ('古いOTPは認可しない', pg_temp.uid('Q'), 'authenticated',
+    jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('otp', 61))), 'error:PT403'),
+  ('refreshだけでは認可しない', pg_temp.uid('Q'), 'authenticated',
+    jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('token_refresh', 1))), 'error:PT403'),
+  ('未来のOTPは認可しない', pg_temp.uid('Q'), 'authenticated',
+    jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('otp', -1))), 'error:PT403'),
+  ('文字列のtimestampは認可しない', pg_temp.uid('Q'), 'authenticated',
+    '{"amr":[{"method":"otp","timestamp":"123456"}]}', 'error:PT403'),
+  ('nullのtimestampは認可しない', pg_temp.uid('Q'), 'authenticated',
+    '{"amr":[{"method":"otp","timestamp":null}]}', 'error:PT403'),
+  ('欠落のtimestampは認可しない', pg_temp.uid('Q'), 'authenticated',
+    '{"amr":[{"method":"otp"}]}', 'error:PT403'),
+  ('amrがnull', pg_temp.uid('Q'), 'authenticated', '{"amr":null}', 'error:PT403'),
   ('削除済みの利用者のID(鮮度は満たす)', pg_temp.deleted_user(), 'authenticated', pg_temp.fresh(), 'error:PT403'),
   ('存在しない利用者のID(鮮度は満たす)', pg_temp.uid('nobody'), 'authenticated', pg_temp.fresh(), 'error:PT403');
 
+insert into da_reject(label, uid, role, claims, expected, expected_id) values
+ ('対象IDが別人', pg_temp.uid('Q'), 'authenticated', pg_temp.fresh(), 'error:PT403', pg_temp.uid('S')::text),
+ ('対象IDがnull', pg_temp.uid('Q'), 'authenticated', pg_temp.fresh(), 'error:PT403', null);
+insert into da_reject(label, uid, role, claims, expected) values
+ ('真偽値のtimestamp', pg_temp.uid('Q'), 'authenticated', '{"amr":[{"method":"otp","timestamp":true}]}', 'error:PT403'),
+ ('要素が数値', pg_temp.uid('Q'), 'authenticated', '{"amr":[1]}', 'error:PT403'),
+ ('古いOTPと新しいpassword', pg_temp.uid('Q'), 'authenticated', jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('otp',61),pg_temp.amr('password',1))), 'error:PT403'),
+ ('methodが異なる', pg_temp.uid('Q'), 'authenticated', '{"amr":[{"method":"email_change","timestamp":1}]}', 'error:PT403'),
+ ('数値の範囲外に相当する未来時刻', pg_temp.uid('Q'), 'authenticated', '{"amr":[{"method":"otp","timestamp":1e1000}]}', 'error:PT403'),
+ ('amrの要素がnull', pg_temp.uid('Q'), 'authenticated', '{"amr":[null]}', 'error:PT403'),
+ ('iatだけが新しい', pg_temp.uid('Q'), 'authenticated', jsonb_build_object('iat',extract(epoch from clock_timestamp())), 'error:PT403');
+
 create temp table da_before as select pg_temp.snapshot() as snap;
 create temp table da_reject_result as
-select label, pg_temp.call_as(uid, claims, role) as actual, expected from da_reject;
+select label, pg_temp.call_as(uid, claims, role, expected_id) as actual, expected from da_reject;
 
 select is_empty(
   $$select label, actual, expected from da_reject_result where actual is distinct from expected$$,
@@ -299,29 +320,29 @@ select is(
   '拒否された呼び出しの後、利用者・ラウンド・矢・履歴・参加・プリセット・認証の行が呼び出し前と同一である'
 );
 
--- 境界(61秒前は拒否、59秒前は成功)。60秒ちょうどは、整数秒のtimestampと小数秒のnow()の比較が実装の細部になるため検証しない。
+-- 実時計の近傍(61秒前・59秒前)。厳密な等号と小数秒の境界は別途固定時計での確認が必要。
 create temp table da_boundary_61 as
-select pg_temp.call_as(pg_temp.uid('T'), jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('password', 61)))) as r;
+select pg_temp.call_as(pg_temp.uid('T'), jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('otp', 61)))) as r;
 create temp table da_boundary_exists as select exists (select 1 from auth.users where id = pg_temp.uid('T')) as e;
 create temp table da_boundary_59 as
-select pg_temp.call_as(pg_temp.uid('T'), jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('password', 59)))) as r;
+select pg_temp.call_as(pg_temp.uid('T'), jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('otp', 59)))) as r;
 
 select is(
   (select r from da_boundary_61) || ' ' || (select e::text from da_boundary_exists) || ' ' || (select r from da_boundary_59)
     || ' ' || exists (select 1 from auth.users where id = pg_temp.uid('T'))::text,
   'error:PT403 true ok false',
-  'パスワードの認証が61秒前の呼び出しは拒否され、59秒前の呼び出しは成功して利用者が消える'
+  'OTPの認証が61秒前の呼び出しは拒否され、59秒前の呼び出しは成功して利用者が消える'
 );
 
--- amrの要素の並びに依らず、新しいパスワードの認証があれば成功する。
+-- amrの要素の並びに依らず、新しいOTPの認証があれば成功する。
 create temp table da_order as
-select pg_temp.call_as(pg_temp.uid('O1'), jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('password', 1), pg_temp.amr('otp', 3600)))) as password_first,
-       pg_temp.call_as(pg_temp.uid('O2'), jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('otp', 3600), pg_temp.amr('password', 1)))) as password_last;
+select pg_temp.call_as(pg_temp.uid('O1'), jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('otp', 1), pg_temp.amr('password', 3600)))) as otp_first,
+       pg_temp.call_as(pg_temp.uid('O2'), jsonb_build_object('amr', jsonb_build_array(pg_temp.amr('password', 3600), pg_temp.amr('otp', 1)))) as otp_last;
 
 select results_eq(
-  $$select password_first, password_last from da_order$$,
+  $$select otp_first, otp_last from da_order$$,
   $$values ('ok'::text, 'ok'::text)$$,
-  '古い認証コードの要素があっても、パスワードの認証が新しければ、並びに依らず成功する'
+  '古い認証コードの要素があっても、OTPの認証が新しければ、並びに依らず成功する'
 );
 
 -- 冪等性: 成功の後の再呼び出し(削除済みのアカウントの旧トークン)は、鮮度が満たされていても拒否される。

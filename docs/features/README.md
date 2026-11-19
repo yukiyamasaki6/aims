@@ -58,11 +58,9 @@
 
 | 対象 | 機能 | ユーザーの目的 | roadmap.mdの機能 |
 | :--- | :--- | :--- | :--- |
-| auth | signup | アカウントを作る | Email/PW認証 |
-| auth | signin | サインインする | Email/PW認証 |
-| auth | password-reset | パスワードを再設定する | PW再設定 |
-| auth | signout | サインアウトする | Email/PW認証 |
-| auth | change-password | サインイン後にパスワードを変更する | パスワード変更 |
+| auth | signup | アカウントを作る | メールOTP認証 |
+| auth | signin | サインインする | メールOTP認証 |
+| auth | signout | サインアウトする | メールOTP認証 |
 | auth | change-email | サインイン後にメールアドレスを変更する | メール変更 |
 | auth | delete-account | サインイン後にアカウントと記録を削除する | アカウント削除 |
 | rounds | start | ラウンドを始める | ラウンド・種目管理 |
@@ -94,7 +92,6 @@ flowchart TD
     subgraph auth ["(auth)"]
         SignIn["/signin<br/>サインイン画面"]
         SignUp["/signup<br/>サインアップ画面"]
-        ResetPass["/reset-password<br/>パスワード再設定画面"]
     end
 
     subgraph main ["(main)"]
@@ -111,7 +108,6 @@ flowchart TD
     %% 認証状態による自動リダイレクト
     SignIn -.->|認証済み| Rounds
     SignUp -.->|認証済み| Rounds
-    ResetPass -.->|認証済み| Rounds
     main -.->|未認証・セッション喪失| SignIn
 
     %% ユーザー操作による遷移
@@ -119,13 +115,10 @@ flowchart TD
     Landing -->|「記録を始める」・ヘッダーのサインアップ（未認証）| SignUp
     Landing -->|ヘッダーのサインイン（未認証）| SignIn
     Landing -->|「記録を始める」・ヘッダーのサインイン・サインアップ（認証済み）| Rounds
-    SignIn -->|「パスワードをお忘れですか」| ResetPass
     SignIn -->|ヘッダーのサインアップ| SignUp
     SignIn -->|サインイン成功| Rounds
     SignUp -->|ヘッダーのサインイン| SignIn
     SignUp -->|登録成功| Rounds
-    ResetPass -->|ヘッダーのサインイン| SignIn
-    ResetPass -->|パスワード変更成功（サインアウト）| SignIn
     Rounds -->|ラウンドの開始ボタン（右下）| RoundsNew
     Rounds -->|入力中のカードクリック| RoundDetail
     History -->|ラウンドカードクリック（from=history）| RoundDetail

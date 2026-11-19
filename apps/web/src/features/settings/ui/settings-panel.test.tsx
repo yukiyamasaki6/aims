@@ -81,12 +81,7 @@ function backdrop() {
   return backdrops[backdrops.length - 1];
 }
 
-const ALL_VIEWS: SettingsView[] = [
-  "account",
-  "email",
-  "password",
-  "delete-account",
-];
+const ALL_VIEWS: SettingsView[] = ["account", "email", "delete-account"];
 
 describe("SettingsPanel", () => {
   describe("表示", () => {
@@ -157,10 +152,10 @@ describe("SettingsPanel", () => {
     it("項目の表示では、描画の関数に表示を渡して項目の画面を描き、分類の本文は描かない", () => {
       // Given
       // When
-      setup({ view: "password" });
+      setup({ view: "delete-account" });
 
       // Then
-      expect(screen.getByText("項目の画面:password")).toBeInTheDocument();
+      expect(screen.getByText("項目の画面:delete-account")).toBeInTheDocument();
       expect(screen.queryByText("サインアウトの行")).toBeNull();
     });
 
@@ -173,7 +168,7 @@ describe("SettingsPanel", () => {
       // When
       rerender(
         <SettingsPanel
-          view="password"
+          view="delete-account"
           onMove={onMove}
           onClose={onClose}
           signOut={null}
@@ -182,7 +177,7 @@ describe("SettingsPanel", () => {
       );
 
       // Then
-      expect(screen.getByText("項目の画面:password")).toBeInTheDocument();
+      expect(screen.getByText("項目の画面:delete-account")).toBeInTheDocument();
       expect(screen.getByLabelText("入力")).toHaveValue("");
     });
   });
@@ -276,7 +271,7 @@ describe("SettingsPanel", () => {
   });
 
   describe("処理中", () => {
-    async function startBusy(view: SettingsView = "password") {
+    async function startBusy(view: SettingsView = "delete-account") {
       const user = userEvent.setup();
       const handlers = setup({ view });
       await user.click(screen.getByRole("button", { name: "処理を始める" }));
@@ -307,7 +302,9 @@ describe("SettingsPanel", () => {
         // Then
         expect(onClose).not.toHaveBeenCalled();
         expect(onMove).not.toHaveBeenCalled();
-        expect(screen.getByText("項目の画面:password")).toBeInTheDocument();
+        expect(
+          screen.getByText("項目の画面:delete-account"),
+        ).toBeInTheDocument();
         expect(categoryLink()).toHaveAttribute("aria-disabled", "true");
         expect(categoryLink()).toHaveAttribute("aria-current", "page");
         expect(categoryLink()).toHaveAccessibleName(
@@ -422,7 +419,7 @@ describe("SettingsPanel", () => {
     it("Tabで閉じる操作、分類、本文の順にフォーカスが届く", async () => {
       // Given
       const user = userEvent.setup();
-      setup({ view: "password" });
+      setup({ view: "delete-account" });
       // 開いた直後のフォーカスは、パネルの先頭の閉じる操作にある(初期フォーカスは描画の後に移る)。
       await waitFor(() => expect(closeButton()).toHaveFocus());
 

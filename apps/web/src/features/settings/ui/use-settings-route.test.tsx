@@ -3,7 +3,7 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CHANGE_EMAIL_HASH,
-  CHANGE_PASSWORD_HASH,
+  DELETE_ACCOUNT_HASH,
   SETTINGS_ACCOUNT_HASH,
   SETTINGS_HASH,
 } from "@/routes";
@@ -105,11 +105,11 @@ describe("useSettingsRoute", () => {
       act(() => result.current.open());
 
       // When
-      act(() => result.current.move("password"));
+      act(() => result.current.move("delete-account"));
 
       // Then
-      expect(result.current.view).toBe("password");
-      expect(window.location.hash).toBe(CHANGE_PASSWORD_HASH);
+      expect(result.current.view).toBe("delete-account");
+      expect(window.location.hash).toBe(DELETE_ACCOUNT_HASH);
       expect(window.history.state).toMatchObject({ settingsDepth: 2 });
     });
 
@@ -178,7 +178,7 @@ describe("useSettingsRoute", () => {
   describe("閉じる", () => {
     it.each([
       [1, []],
-      [3, ["email", "password"]],
+      [3, ["email", "delete-account"]],
     ] as const)(
       "開く前の画面から開いて、段数%sで閉じると、段数だけ戻って開く前の画面へ戻る",
       async (_depth, moves) => {
@@ -219,7 +219,7 @@ describe("useSettingsRoute", () => {
       await openedAtLoad(SETTINGS_ACCOUNT_HASH);
       const { result } = setup();
       act(() => result.current.move("email"));
-      act(() => result.current.move("password"));
+      act(() => result.current.move("delete-account"));
 
       // When
       act(() => result.current.close());
@@ -299,20 +299,20 @@ describe("useSettingsRoute", () => {
 
       // When
       act(() => {
-        window.location.hash = CHANGE_PASSWORD_HASH;
+        window.location.hash = DELETE_ACCOUNT_HASH;
       });
 
       // Then
-      await waitFor(() => expect(result.current.view).toBe("password"));
+      await waitFor(() => expect(result.current.view).toBe("delete-account"));
     });
 
     it("ハッシュを外すと、閉じる", async () => {
       // Given
       const { result } = setup();
       act(() => {
-        window.location.hash = CHANGE_PASSWORD_HASH;
+        window.location.hash = DELETE_ACCOUNT_HASH;
       });
-      await waitFor(() => expect(result.current.view).toBe("password"));
+      await waitFor(() => expect(result.current.view).toBe("delete-account"));
 
       // When
       act(() => {
@@ -384,11 +384,13 @@ describe("useSettingsRoute", () => {
 
       // When
       act(() => {
-        window.location.hash = CHANGE_PASSWORD_HASH;
+        window.location.hash = DELETE_ACCOUNT_HASH;
       });
 
       // Then
-      await waitFor(() => expect(second.result.current.view).toBe("password"));
+      await waitFor(() =>
+        expect(second.result.current.view).toBe("delete-account"),
+      );
     });
 
     it("積んだ項目のハッシュが存在しない項目に書き換わると、段数を保ったまま分類「アカウント」へ置き換える", async () => {

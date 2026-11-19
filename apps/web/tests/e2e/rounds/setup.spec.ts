@@ -1,5 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { test } from "../fixtures";
 import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,

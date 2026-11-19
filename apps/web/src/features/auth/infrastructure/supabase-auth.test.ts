@@ -3,7 +3,6 @@ import {
   type AuthError,
   AuthRefreshDiscardedError,
   AuthRetryableFetchError,
-  AuthSessionMissingError,
   type Session,
   type SupabaseClient,
 } from "@supabase/supabase-js";
@@ -11,13 +10,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { SignInChange } from "../application/auth-changes";
 import { createSupabaseAuth } from "./supabase-auth";
 
-const expired = new AuthApiError("Token has expired", 403, "otp_expired");
 const rateLimited = new AuthApiError(
   "rate limit",
   429,
   "over_email_send_rate_limit",
 );
-const weakPassword = new AuthApiError("weak", 422, "weak_password");
 const connectionLost = new AuthRetryableFetchError("Failed to fetch", 0);
 
 type Listener = (
@@ -30,9 +27,7 @@ function setup() {
   const listeners: Listener[] = [];
   const unsubscribe = vi.fn();
   const auth = {
-    signInWithPassword: vi.fn(),
     signInWithOtp: vi.fn(),
-    resetPasswordForEmail: vi.fn(),
     verifyOtp: vi.fn(),
     resend: vi.fn(),
     updateUser: vi.fn(),
@@ -69,786 +64,6 @@ function unavailableService() {
     throw new Error("Missing Supabase environment variables in client.");
   });
 }
-
-const credentials = {
-  email: "user@example.com",
-  password: "password1",
-  captchaToken: "captcha-token",
-};
-
-describe("頼みごとの結果", () => {
-  it("応答があって成功なら、受け付けられた", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.updateUser.mockResolvedValue({ error: null });
-
-    // When
-    const result = await service.setPassword("password1");
-
-    // Then
-    expect(result).toEqual({ kind: "accepted" });
-  });
-
-  it("エラーが値で返れば、拒否された(通信の断を値で返す場合は、届かなかった種類の拒否)", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.updateUser.mockResolvedValue({ error: weakPassword });
-    auth.verifyOtp.mockResolvedValue({ error: connectionLost });
-
-    // When
-    const weak = await service.setPassword("password1");
-    const lost = await service.verifyCode({
-      purpose: "sign-up",
-      email: "user@example.com",
-      code: "123456",
-    });
-
-    // Then
-    expect(weak).toEqual({
-      kind: "failed",
-      failure: { kind: "weak_password" },
-    });
-    expect(lost).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-
-  it("呼び出しが投げたときと、接続を得られないときは、届かなかった", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.updateUser.mockRejectedValue(new Error("network down"));
-
-    // When
-    const thrown = await service.setPassword("password1");
-    const unavailable = await unavailableService().signIn(credentials);
-
-    // Then
-    expect(thrown).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-    expect(unavailable).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-
-  it("接続を得られないときの読み取りは、不明にする", async () => {
-    // Given
-    const service = unavailableService();
-
-    // When
-    const reading = await service.readSession();
-
-    // Then
-    expect(reading).toEqual({ status: "unknown" });
-  });
-
-  it("接続は、作った時点では取得せず、頼みごとのたびに取得する", async () => {
-    // Given
-    const { service, auth, getClient } = setup();
-    auth.verifyOtp.mockResolvedValue({ error: null });
-    auth.updateUser.mockResolvedValue({ error: null });
-    auth.signOut.mockResolvedValue({ error: null });
-    expect(getClient).not.toHaveBeenCalled();
-
-    // When
-    await service.verifyCode({
-      purpose: "sign-up",
-      email: "a@example.com",
-      code: "123456",
-    });
-    await service.setPassword("password1");
-    await service.signOutHere();
-
-    // Then
-    expect(getClient).toHaveBeenCalledTimes(3);
-  });
-});
-
-describe("認証サービスのエラーの失敗の種類への変換", () => {
-  const refusedWith = async (error: unknown) => {
-    const { service, auth } = setup();
-    auth.updateUser.mockResolvedValue({ error });
-    return service.setPassword("password1");
-  };
-
-  it.each([
-    ["invalid_credentials", "invalid_credentials"],
-    ["otp_expired", "code_expired"],
-    ["over_email_send_rate_limit", "rate_limited"],
-    ["over_request_rate_limit", "rate_limited"],
-    ["captcha_failed", "captcha_failed"],
-    ["weak_password", "weak_password"],
-  ])("コード%sを失敗の種類%sにする", async (code, kind) => {
-    // Given
-    const error = new AuthApiError("元の文言", 400, code);
-
-    // When
-    const result = await refusedWith(error);
-
-    // Then
-    expect(result).toEqual({ kind: "failed", failure: { kind } });
-  });
-
-  it("名前がAuthRetryableFetchErrorなら、コードがあっても届かなかった失敗にする", async () => {
-    // Given
-    const error = new AuthRetryableFetchError("fetch failed", 0);
-    Object.assign(error, { code: "invalid_credentials" });
-
-    // When
-    const result = await refusedWith(error);
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-
-  it("コードが無い通信の断も届かなかった失敗にする", async () => {
-    // Given
-    const error = { name: "AuthRetryableFetchError", message: "fetch failed" };
-
-    // When
-    const result = await refusedWith(error);
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-
-  it.each([
-    ["未知のコード", "unknown_code", "Unknown failure from service"],
-    ["コードが無い場合", undefined, "Service error without code"],
-    ["継承されたプロパティ名のコード", "toString", "Inherited name code"],
-    ["継承されたconstructorのコード", "constructor", "Constructor code"],
-  ])(
-    "%sは、認証サービスの文言を残さず、その他の失敗にする",
-    async (_name, code, message) => {
-      // Given
-      const error = new AuthApiError(message, 400, code);
-
-      // When
-      const result = await refusedWith(error);
-
-      // Then
-      expect(result).toStrictEqual({
-        kind: "failed",
-        failure: { kind: "other" },
-      });
-      expect(JSON.stringify(result)).not.toContain(message);
-    },
-  );
-});
-
-describe("サインイン(signIn)", () => {
-  it("資格情報とトークンを認証サービスへ渡し、成功を受け付けられたで返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signInWithPassword.mockResolvedValue({ error: null });
-
-    // When
-    const result = await service.signIn(credentials);
-
-    // Then
-    expect(auth.signInWithPassword).toHaveBeenCalledExactlyOnceWith({
-      email: credentials.email,
-      password: credentials.password,
-      options: { captchaToken: credentials.captchaToken },
-    });
-    expect(result).toEqual({ kind: "accepted" });
-  });
-
-  it("接続を作る関数は、認証の実装を作った時点では呼ばれない", () => {
-    // Given
-
-    // When
-    const { getClient } = setup();
-
-    // Then
-    expect(getClient).not.toHaveBeenCalled();
-  });
-
-  it("接続を作る関数は、照合ごとに呼ばれる", async () => {
-    // Given
-    const { service, auth, getClient } = setup();
-    auth.signInWithPassword.mockResolvedValue({ error: null });
-
-    // When
-    await service.signIn(credentials);
-    await service.signIn(credentials);
-
-    // Then
-    expect(getClient).toHaveBeenCalledTimes(2);
-  });
-
-  it("拒否された認証エラーを失敗の種類にする", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signInWithPassword.mockResolvedValue({
-      error: {
-        name: "AuthApiError",
-        code: "invalid_credentials",
-        message: "raw",
-      },
-    });
-
-    // When
-    const result = await service.signIn(credentials);
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "invalid_credentials" },
-    });
-  });
-
-  it("再試行可能な通信エラーを通信断にする", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signInWithPassword.mockResolvedValue({
-      error: { name: "AuthRetryableFetchError", message: "fetch failed" },
-    });
-
-    // When
-    const result = await service.signIn(credentials);
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-
-  it("例外を通信断にする", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signInWithPassword.mockRejectedValue(new Error("network down"));
-
-    // When
-    const result = await service.signIn(credentials);
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-
-  it("接続を作る関数が投げると、通信断にする", async () => {
-    // Given
-    const { service, auth, getClient } = setup();
-    getClient.mockImplementation(() => {
-      throw new Error("Missing Supabase environment variables.");
-    });
-
-    // When
-    const result = await service.signIn(credentials);
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-    expect(auth.signInWithPassword).not.toHaveBeenCalled();
-  });
-});
-
-describe("目的の違い", () => {
-  it("コードの送信と確認は、目的で認証サービスの呼び出しを選ぶ", async () => {
-    // Given
-    const { service, auth } = setup();
-    for (const mock of [
-      auth.signInWithOtp,
-      auth.resetPasswordForEmail,
-      auth.verifyOtp,
-    ]) {
-      mock.mockResolvedValue({ error: null });
-    }
-
-    // When
-    await service.sendCode({
-      purpose: "sign-up",
-      email: "a@b.co",
-      captchaToken: "t",
-    });
-    await service.sendCode({
-      purpose: "password-reset",
-      email: "a@b.co",
-      captchaToken: "t",
-    });
-    await service.verifyCode({
-      purpose: "sign-up",
-      email: "a@b.co",
-      code: "1",
-    });
-    const signUpVerify = auth.verifyOtp.mock.lastCall;
-    await service.verifyCode({
-      purpose: "password-reset",
-      email: "a@b.co",
-      code: "1",
-    });
-    const resetVerify = auth.verifyOtp.mock.lastCall;
-
-    // Then
-    expect(auth.signInWithOtp).toHaveBeenCalledExactlyOnceWith({
-      email: "a@b.co",
-      options: { captchaToken: "t" },
-    });
-    expect(auth.resetPasswordForEmail).toHaveBeenCalledExactlyOnceWith(
-      "a@b.co",
-      { captchaToken: "t" },
-    );
-    expect(signUpVerify).toEqual([
-      { email: "a@b.co", token: "1", type: "email" },
-    ]);
-    expect(resetVerify).toEqual([
-      { email: "a@b.co", token: "1", type: "recovery" },
-    ]);
-  });
-});
-
-describe("コードの送信(sendCode)", () => {
-  const signUp = {
-    purpose: "sign-up",
-    email: "user@example.com",
-    captchaToken: "captcha-token",
-  } as const;
-  const reset = { ...signUp, purpose: "password-reset" } as const;
-
-  it("メールアドレスとトークンを渡し、成功を受け付けられたで返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signInWithOtp.mockResolvedValue({ error: null });
-    auth.resetPasswordForEmail.mockResolvedValue({ error: null });
-
-    // When
-    const signUpResult = await service.sendCode(signUp);
-    const resetResult = await service.sendCode(reset);
-
-    // Then
-    expect(signUpResult).toEqual({ kind: "accepted" });
-    expect(resetResult).toEqual({ kind: "accepted" });
-  });
-
-  it.each([
-    [
-      "送信の間隔の制限",
-      rateLimited,
-      { kind: "failed", failure: { kind: "rate_limited" } },
-    ],
-    [
-      "通信の断",
-      connectionLost,
-      { kind: "failed", failure: { kind: "unreachable" } },
-    ],
-  ])(
-    "%sを値で返したら、応答があったとして拒否で返す",
-    async (_name, error, expected) => {
-      // Given
-      const { service, auth } = setup();
-      auth.signInWithOtp.mockResolvedValue({ error });
-      auth.resetPasswordForEmail.mockResolvedValue({ error });
-
-      // When
-      const signUpResult = await service.sendCode(signUp);
-      const resetResult = await service.sendCode(reset);
-
-      // Then
-      expect(signUpResult).toEqual(expected);
-      expect(resetResult).toEqual(expected);
-    },
-  );
-
-  it("呼び出しが投げたら、届かなかったとして返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signInWithOtp.mockRejectedValue(new Error("network down"));
-    auth.resetPasswordForEmail.mockRejectedValue(new Error("network down"));
-
-    // When
-    const signUpResult = await service.sendCode(signUp);
-    const resetResult = await service.sendCode(reset);
-
-    // Then
-    expect(signUpResult).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-    expect(resetResult).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-
-  it("接続を作れなければ、届かなかったとして返す", async () => {
-    // Given
-    const service = unavailableService();
-
-    // When
-    const signUpResult = await service.sendCode(signUp);
-    const resetResult = await service.sendCode(reset);
-
-    // Then
-    expect(signUpResult).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-    expect(resetResult).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-});
-
-describe("コードの確認(verifyCode)", () => {
-  const request = { email: "user@example.com", code: "123456" };
-
-  it.each(["sign-up", "password-reset"] as const)(
-    "目的%sで、メールアドレスとコードを渡し、成功を受け付けられたで返す",
-    async (purpose) => {
-      // Given
-      const { service, auth } = setup();
-      auth.verifyOtp.mockResolvedValue({ error: null });
-
-      // When
-      const result = await service.verifyCode({ purpose, ...request });
-
-      // Then
-      expect(auth.verifyOtp).toHaveBeenCalledExactlyOnceWith({
-        email: request.email,
-        token: request.code,
-        type: purpose === "sign-up" ? "email" : "recovery",
-      });
-      expect(result).toEqual({ kind: "accepted" });
-    },
-  );
-
-  it("期限切れのエラーを値で返したら、コードの失敗に写して返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.verifyOtp.mockResolvedValue({ error: expired });
-
-    // When
-    const result = await service.verifyCode({ purpose: "sign-up", ...request });
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "code_expired" },
-    });
-  });
-
-  it("呼び出しが投げたら、届かなかった失敗として返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.verifyOtp.mockRejectedValue(new Error("network down"));
-
-    // When
-    const result = await service.verifyCode({
-      purpose: "password-reset",
-      ...request,
-    });
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-
-  it("接続を作れなければ、届かなかった失敗として返す", async () => {
-    // Given
-    const service = unavailableService();
-
-    // When
-    const result = await service.verifyCode({ purpose: "sign-up", ...request });
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-});
-
-describe("パスワードの設定(setPassword)", () => {
-  it("パスワードを渡し、成功を受け付けられたで返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.updateUser.mockResolvedValue({ error: null });
-
-    // When
-    const result = await service.setPassword("password1");
-
-    // Then
-    expect(auth.updateUser).toHaveBeenCalledExactlyOnceWith({
-      password: "password1",
-    });
-    expect(result).toEqual({ kind: "accepted" });
-  });
-
-  it("弱いパスワードのエラーを値で返したら、その失敗に写して返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.updateUser.mockResolvedValue({ error: weakPassword });
-
-    // When
-    const result = await service.setPassword("password1");
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "weak_password" },
-    });
-  });
-
-  it("認証サービスがvalidation_failed(72バイトを超えるなど)で拒否したら、弱いパスワードの失敗に写して返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.updateUser.mockResolvedValue({
-      error: new AuthApiError("too long", 422, "validation_failed"),
-    });
-
-    // When
-    const result = await service.setPassword("a1".repeat(37));
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "weak_password" },
-    });
-  });
-
-  it("パスワード以外の操作のvalidation_failed(メールアドレスの形式の誤りなど)は、規則の文面にならず、その他の失敗のままにする", async () => {
-    // Given
-    const { service, auth } = setup();
-    const validationFailed = new AuthApiError(
-      "invalid email",
-      422,
-      "validation_failed",
-    );
-    auth.signInWithPassword.mockResolvedValue({ error: validationFailed });
-    auth.signInWithOtp.mockResolvedValue({ error: validationFailed });
-
-    // When
-    const signedIn = await service.signIn(credentials);
-    const sent = await service.sendCode({
-      purpose: "sign-up",
-      email: "user@example.com",
-      captchaToken: "token",
-    });
-
-    // Then
-    const other = { kind: "failed", failure: { kind: "other" } };
-    expect(signedIn).toEqual(other);
-    expect(sent).toEqual(other);
-  });
-
-  it("呼び出しが投げたら、届かなかった失敗として返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.updateUser.mockRejectedValue(new Error("network down"));
-
-    // When
-    const result = await service.setPassword("password1");
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-
-  it("接続を作れなければ、届かなかった失敗として返す", async () => {
-    // Given
-    const service = unavailableService();
-
-    // When
-    const result = await service.setPassword("password1");
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-});
-
-describe("パスワードの設定の同じパスワードの拒否", () => {
-  it("設定の目的によらず、422 same_passwordを同じパスワードの失敗に写して返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.updateUser.mockResolvedValue({
-      error: new AuthApiError("same", 422, "same_password"),
-    });
-
-    // When
-    const result = await service.setPassword("password1");
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "same_password" },
-    });
-  });
-
-  it("サインインでは、same_passwordとcurrent_password_invalidのコードを専用の種類に写さず、その他の失敗にする", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signInWithPassword
-      .mockResolvedValueOnce({
-        error: new AuthApiError("same", 422, "same_password"),
-      })
-      .mockResolvedValueOnce({
-        error: new AuthApiError("wrong", 400, "current_password_invalid"),
-      });
-
-    // When
-    const same = await service.signIn(credentials);
-    const invalid = await service.signIn(credentials);
-
-    // Then
-    const other = { kind: "failed", failure: { kind: "other" } };
-    expect(same).toEqual(other);
-    expect(invalid).toEqual(other);
-  });
-});
-
-describe("パスワードの変更(updatePassword)", () => {
-  const input = {
-    currentPassword: "password-original1",
-    newPassword: "password-changed1",
-  };
-
-  it("現在のパスワードと新しいパスワードを認証サービスへ1回渡し、成功を受け付けられたで返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.updateUser.mockResolvedValue({ error: null });
-
-    // When
-    const result = await service.updatePassword(input);
-
-    // Then
-    expect(auth.updateUser).toHaveBeenCalledExactlyOnceWith({
-      password: "password-changed1",
-      current_password: "password-original1",
-    });
-    expect(result).toEqual({ kind: "accepted" });
-  });
-
-  it.each([
-    ["400 current_password_invalid", 400, "current_password_invalid"],
-    ["422 same_password", 422, "same_password"],
-    ["422 weak_password", 422, "weak_password"],
-    [
-      "400 validation_failed(73バイトの新しいパスワード)",
-      400,
-      "validation_failed",
-      "weak_password",
-    ],
-    ["over_request_rate_limit", 429, "over_request_rate_limit", "rate_limited"],
-    [
-      "400 current_password_required",
-      400,
-      "current_password_required",
-      "other",
-    ],
-    ["未知のコード", 400, "some_unknown_code", "other"],
-    [
-      "サインインのinvalid_credentials(この操作では写さないコード)",
-      400,
-      "invalid_credentials",
-      "other",
-    ],
-    [
-      "コードの確認のotp_expired(この操作では写さないコード)",
-      403,
-      "otp_expired",
-      "other",
-    ],
-  ] as [string, number, string, string?][])(
-    "応答%sを、対応する失敗の種類にする",
-    async (_name, status, code, mapped) => {
-      // Given
-      const { service, auth } = setup();
-      auth.updateUser.mockResolvedValue({
-        error: new AuthApiError("元の文言", status, code),
-      });
-
-      // When
-      const result = await service.updatePassword(input);
-
-      // Then
-      expect(result).toEqual({
-        kind: "failed",
-        failure: { kind: mapped ?? code },
-      });
-    },
-  );
-
-  it("通信の断を値で返しても、呼び出しが投げても、届かなかった失敗にする", async () => {
-    // Given
-    const lost = setup();
-    lost.auth.updateUser.mockResolvedValue({ error: connectionLost });
-    const thrown = setup();
-    thrown.auth.updateUser.mockRejectedValue(new Error("network down"));
-
-    // When
-    const lostResult = await lost.service.updatePassword(input);
-    const thrownResult = await thrown.service.updatePassword(input);
-
-    // Then
-    const unreachable = { kind: "failed", failure: { kind: "unreachable" } };
-    expect(lostResult).toEqual(unreachable);
-    expect(thrownResult).toEqual(unreachable);
-  });
-
-  it("current_password_requiredとcurrent_password_invalidは、メッセージが同文でも、コードで区別する", async () => {
-    // Given
-    const message = "Current password required when setting new password.";
-    const required = setup();
-    required.auth.updateUser.mockResolvedValue({
-      error: new AuthApiError(message, 400, "current_password_required"),
-    });
-    const invalid = setup();
-    invalid.auth.updateUser.mockResolvedValue({
-      error: new AuthApiError(message, 400, "current_password_invalid"),
-    });
-
-    // When
-    const requiredResult = await required.service.updatePassword(input);
-    const invalidResult = await invalid.service.updatePassword(input);
-
-    // Then
-    expect(requiredResult).toEqual({
-      kind: "failed",
-      failure: { kind: "other" },
-    });
-    expect(invalidResult).toEqual({
-      kind: "failed",
-      failure: { kind: "current_password_invalid" },
-    });
-  });
-
-  it("接続を得られないときも、届かなかった失敗にする", async () => {
-    // Given
-    const service = unavailableService();
-
-    // When
-    const result = await service.updatePassword(input);
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-});
 
 describe("メールアドレスの変更(readCurrentEmail、requestEmailChange、confirmEmailChange、resendEmailChangeCode)", () => {
   const newEmail = "new@example.com";
@@ -1140,199 +355,6 @@ describe("メールアドレスの変更(readCurrentEmail、requestEmailChange�
       for (const result of results) expect(result).toEqual(unreachable);
       expect(reading).toBeNull();
     });
-  });
-});
-
-describe("アカウント削除の再認証(reauthenticate)", () => {
-  const request = {
-    password: "password-current1",
-    captchaToken: "captcha-token",
-  };
-  const currentEmail = "current@example.com";
-
-  function withCurrentUser() {
-    const fixture = setup();
-    fixture.auth.getUser.mockResolvedValue({
-      data: { user: { id: "user-1", email: currentEmail } },
-      error: null,
-    });
-    return fixture;
-  }
-
-  it("現在のメールアドレスを読み、そのメールアドレスと入力されたパスワードとチェックのトークンで認証し、成功なら利用者のIDを返す", async () => {
-    // Given
-    const { service, auth } = withCurrentUser();
-    auth.signInWithPassword.mockResolvedValue({
-      data: { user: { id: "user-1" } },
-      error: null,
-    });
-
-    // When
-    const result = await service.reauthenticate(request);
-
-    // Then
-    expect(result).toEqual({ kind: "verified", userId: "user-1" });
-    expect(auth.signInWithPassword).toHaveBeenCalledExactlyOnceWith({
-      email: currentEmail,
-      password: request.password,
-      options: { captchaToken: request.captchaToken },
-    });
-  });
-
-  it.each([
-    [
-      "パスワードの誤り",
-      new AuthApiError("invalid", 400, "invalid_credentials"),
-      "current_password_invalid",
-    ],
-    [
-      "リクエストの制限",
-      new AuthApiError("limit", 429, "over_request_rate_limit"),
-      "rate_limited",
-    ],
-    [
-      "チェックの拒否",
-      new AuthApiError("captcha", 400, "captcha_failed"),
-      "captcha_failed",
-    ],
-    ["通信の断", connectionLost, "unreachable"],
-    ["未知のコード", new AuthApiError("x", 500, "unexpected_failure"), "other"],
-  ])(
-    "認証が%sで拒否されると、失敗の種類%sに写す",
-    async (_name, error, kind) => {
-      // Given
-      const { service, auth } = withCurrentUser();
-      auth.signInWithPassword.mockResolvedValue({
-        data: { user: null },
-        error,
-      });
-
-      // When
-      const result = await service.reauthenticate(request);
-
-      // Then
-      expect(result).toEqual({ kind: "failed", failure: { kind } });
-    },
-  );
-
-  it.each([
-    ["401", new AuthApiError("jwt", 401, "bad_jwt")],
-    ["403", new AuthApiError("gone", 403, "user_not_found")],
-  ])(
-    "現在の利用者の確認が%sで拒否されると、サインインの喪失として返し、認証は呼ばない",
-    async (_name, error) => {
-      // Given
-      const { service, auth } = setup();
-      auth.getUser.mockResolvedValue({ data: { user: null }, error });
-
-      // When
-      const result = await service.reauthenticate(request);
-
-      // Then
-      expect(result).toEqual({ kind: "lost" });
-      expect(auth.signInWithPassword).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([
-    ["通信の断", connectionLost, "unreachable"],
-    ["セッションが無い", new AuthSessionMissingError(), "other"],
-  ])(
-    "現在の利用者の確認が%sで失敗しても、サインインの喪失にせず、失敗の種類%sにして、認証は呼ばない",
-    async (_name, error, kind) => {
-      // Given
-      const { service, auth } = setup();
-      auth.getUser.mockResolvedValue({ data: { user: null }, error });
-
-      // When
-      const result = await service.reauthenticate(request);
-
-      // Then
-      expect(result).toEqual({ kind: "failed", failure: { kind } });
-      expect(auth.signInWithPassword).not.toHaveBeenCalled();
-    },
-  );
-
-  it("現在の利用者がメールアドレスを持たなければ、その他の失敗にして、認証は呼ばない", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.getUser.mockResolvedValue({
-      data: { user: { id: "user-1" } },
-      error: null,
-    });
-
-    // When
-    const result = await service.reauthenticate(request);
-
-    // Then
-    expect(result).toEqual({ kind: "failed", failure: { kind: "other" } });
-    expect(auth.signInWithPassword).not.toHaveBeenCalled();
-  });
-
-  it("呼び出しが投げたとき、接続を得られないときは、届かなかった失敗にする", async () => {
-    // Given
-    const thrown = withCurrentUser();
-    thrown.auth.signInWithPassword.mockRejectedValue(new Error("network down"));
-    const service = unavailableService();
-
-    // When
-    const results = [
-      await thrown.service.reauthenticate(request),
-      await service.reauthenticate(request),
-    ];
-
-    // Then
-    for (const result of results) {
-      expect(result).toEqual({
-        kind: "failed",
-        failure: { kind: "unreachable" },
-      });
-    }
-  });
-});
-
-describe("他の端末のサインアウト(signOutOthers)", () => {
-  it("scopeにothersを指定して1回頼み、問題が無ければ受け付けられたを返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signOut.mockResolvedValue({ error: null });
-
-    // When
-    const result = await service.signOutOthers();
-
-    // Then
-    expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "others" });
-    expect(result).toEqual({ kind: "accepted" });
-  });
-
-  it("エラーが値で返ったときは、拒否された失敗の種類にして返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signOut.mockResolvedValue({ error: rateLimited });
-
-    // When
-    const result = await service.signOutOthers();
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "rate_limited" },
-    });
-  });
-
-  it("呼び出しが投げたときと、接続を得られないときは、投げずに届かなかった失敗にする", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signOut.mockRejectedValue(new TypeError("Failed to fetch"));
-
-    // When
-    const thrown = await service.signOutOthers();
-    const unavailable = await unavailableService().signOutOthers();
-
-    // Then
-    const unreachable = { kind: "failed", failure: { kind: "unreachable" } };
-    expect(thrown).toEqual(unreachable);
-    expect(unavailable).toEqual(unreachable);
   });
 });
 
@@ -1925,4 +947,155 @@ describe("サインインの状態の読み取り(readSession)", () => {
       });
     });
   });
+});
+
+describe("標準メールOTPのアダプター", () => {
+  it.each([true, false])(
+    "登録可否%sとCAPTCHAをSDKへ渡す",
+    async (shouldCreateUser) => {
+      // Given
+      const { service, auth } = setup();
+      auth.signInWithOtp.mockResolvedValue({ error: null });
+      // When
+      const result = await service.sendCode({
+        email: "archer@example.test",
+        captchaToken: "check",
+        shouldCreateUser,
+      });
+      // Then
+      expect(result).toEqual({ kind: "accepted" });
+      expect(auth.signInWithOtp).toHaveBeenCalledExactlyOnceWith({
+        email: "archer@example.test",
+        options: { captchaToken: "check", shouldCreateUser },
+      });
+    },
+  );
+  it("未登録拒否だけを送付受理へ写す", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.signInWithOtp.mockResolvedValue({
+      error: new AuthApiError("disabled", 400, "otp_disabled"),
+    });
+    // When
+    const result = await service.sendCode({
+      email: "archer@example.test",
+      captchaToken: "check",
+      shouldCreateUser: false,
+    });
+    // Then
+    expect(result).toEqual({ kind: "accepted" });
+  });
+  it.each([
+    [new AuthApiError("expired", 403, "otp_expired"), "code_expired"],
+    [rateLimited, "rate_limited"],
+    [new AuthApiError("captcha", 400, "captcha_failed"), "captcha_failed"],
+    [connectionLost, "unreachable"],
+    [new AuthApiError("unknown", 400, "unknown"), "other"],
+  ] as const)("送付失敗を内側の%sへ変換する", async (error, kind) => {
+    // Given
+    const { service, auth } = setup();
+    auth.signInWithOtp.mockResolvedValue({ error });
+    // When
+    const result = await service.sendCode({
+      email: "archer@example.test",
+      captchaToken: "check",
+      shouldCreateUser: false,
+    });
+    // Then
+    expect(result).toEqual({ kind: "failed", failure: { kind } });
+  });
+  it("確認成功のセッションと利用者を検査しIDを返す", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.verifyOtp.mockResolvedValue({
+      data: { session: {}, user: { id: "user-1" } },
+      error: null,
+    });
+    // When
+    const result = await service.verifyCode({
+      email: "archer@example.test",
+      code: "123456",
+    });
+    // Then
+    expect(result).toEqual({ kind: "verified", userId: "user-1" });
+    expect(auth.verifyOtp).toHaveBeenCalledExactlyOnceWith({
+      email: "archer@example.test",
+      token: "123456",
+      type: "email",
+    });
+  });
+  it.each([
+    { session: null, user: { id: "user-1" } },
+    { session: {}, user: null },
+  ])("確認成功でもセッションと利用者が揃わなければ失敗する", async (data) => {
+    // Given
+    const { service, auth } = setup();
+    auth.verifyOtp.mockResolvedValue({ data, error: null });
+    // When
+    const result = await service.verifyCode({
+      email: "archer@example.test",
+      code: "123456",
+    });
+    // Then
+    expect(result).toEqual({ kind: "failed", failure: { kind: "other" } });
+  });
+  it("削除対象はgetUserで検証したIDとメールを返す", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-1", email: "archer@example.test" } },
+      error: null,
+    });
+    // When
+    const result = await service.readCurrentAccount();
+    // Then
+    expect(result).toEqual({
+      kind: "current",
+      userId: "user-1",
+      email: "archer@example.test",
+    });
+  });
+  it("確認の接続取得失敗をunreachableへ写す", async () => {
+    // Given
+    const service = unavailableService();
+    // When
+    const result = await service.verifyCode({
+      email: "archer@example.test",
+      code: "123456",
+    });
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+  });
+});
+
+it("登録可の送信に対するotp_disabledを成功へ変換しない", async () => {
+  // Given
+  const { service, auth } = setup();
+  auth.signInWithOtp.mockResolvedValue({
+    error: new AuthApiError("disabled", 400, "otp_disabled"),
+  });
+  // When
+  const result = await service.sendCode({
+    email: "archer@example.test",
+    captchaToken: "check",
+    shouldCreateUser: true,
+  });
+  // Then
+  expect(result).toEqual({ kind: "failed", failure: { kind: "other" } });
+});
+
+it.each([401, 403])("現在利用者の%sは認証喪失として返す", async (status) => {
+  // Given
+  const { service, auth } = setup();
+  auth.getUser.mockResolvedValue({
+    data: { user: null },
+    error: new AuthApiError("rejected", status, "bad_jwt"),
+  });
+  // When
+  const result = await service.readCurrentAccount();
+  // Then
+  expect(result).toEqual({ kind: "lost" });
 });

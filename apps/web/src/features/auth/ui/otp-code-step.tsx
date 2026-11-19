@@ -23,7 +23,8 @@ type OtpCodeStepProps = {
   // 実行中の確認か再送。どちらかが実行中の間は、3つのボタンを無効にする。
   pending: Pending;
   error: string | null;
-  onBack: () => void;
+  onBack?: () => void;
+  destructive?: boolean;
   onVerify: (e: FormEvent<HTMLFormElement>) => void;
   onResend: () => void;
   siteKey: string;
@@ -52,6 +53,7 @@ export function OtpCodeStep({
   onFailed,
   waiting,
   resendCooldown,
+  destructive,
 }: OtpCodeStepProps) {
   const t = useTranslations("auth");
   return (
@@ -69,6 +71,7 @@ export function OtpCodeStep({
         pending={pending}
         errorId={`${idPrefix}-code-error`}
         onSubmit={onVerify}
+        destructive={destructive}
       />
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
       <p className="text-center text-muted-foreground text-sm">
@@ -98,6 +101,7 @@ function CodeEntryForm({
   pending,
   errorId,
   onSubmit,
+  destructive,
 }: {
   code: string;
   onCodeChange: (value: string) => void;
@@ -105,6 +109,7 @@ function CodeEntryForm({
   pending: Pending;
   errorId: string;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
+  destructive?: boolean;
 }) {
   const t = useTranslations("auth");
   return (
@@ -127,10 +132,11 @@ function CodeEntryForm({
       </AuthField>
       <BusyButton
         type="submit"
+        variant={destructive ? "destructive" : "default"}
         busy={pending !== null}
         spinner={pending === "verify"}
       >
-        {t("otpVerify")}
+        {destructive ? t("deleteAccountVerify") : t("otpVerify")}
       </BusyButton>
     </form>
   );

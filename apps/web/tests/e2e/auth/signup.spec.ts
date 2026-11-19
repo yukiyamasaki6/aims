@@ -1,272 +1,95 @@
-import type { Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
-  SHARED_AUTH_STATE_PATH,
+  signInWithEmailOtp,
   waitForHydration,
+  waitForOtpSendWindow,
 } from "../helpers/auth";
 import {
-  getUserStatus,
-  refreshStatus,
-  signInError,
-  updatePasswordDirect,
-} from "../helpers/auth-api";
-import { fastForwardResendCooldown } from "../helpers/clock";
-import { getEmailFromMailpit, getOtpCodeFromMailpit } from "../helpers/mailpit";
-import { waitForPanelHydration } from "../helpers/settings";
-import { authMethodOf, readStoredTokens } from "../helpers/stored-session";
+  getEmailFromMailpit,
+  getOtpCodeFromMailpit,
+  mailIds,
+} from "../helpers/mailpit";
+import { createRoundWithClient } from "../helpers/rounds";
+import { readStoredTokens } from "../helpers/stored-session";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
-const authText = translatorFor("auth");
-const navigationText = translatorFor("navigation");
-const settingsText = translatorFor("settings");
-
-const EMAIL_PLACEHOLDER = "you@example.com";
-const CODE_PLACEHOLDER = "123456";
-const PASSWORD_PLACEHOLDER = authText("passwordFieldPlaceholder", {
-  label: "パスワード",
-  min: "8",
-});
-
-function uniqueEmail(prefix: string): string {
-  return `${prefix}-${Date.now()}@aims.test`;
-}
-
-function sendCodeButton(page: Page) {
-  return page.getByRole("button", { name: authText("otpSendCode") });
-}
-
-function resendButton(page: Page) {
-  return page.getByRole("button", {
-    name: new RegExp(`^${authText("otpResend")}`),
-  });
-}
-
-async function openSignUp(page: Page): Promise<void> {
+const t = translatorFor("auth");
+test.use({ storageState: { cookies: [], origins: [] } });
+test("新規メールへ届いたコードを確認するとパスワードなしで登録して一覧へ進む", async ({
+  page,
+}) => {
+  // 新規メールを送付してコード入力へ進む。
+  const email = `signup-${randomUUID()}@aims.test`;
+  const previous = await mailIds(email);
   await page.goto("/signup");
   await waitForHydration(page);
-}
-
-test("メールで本人確認してパスワードを設定すると、登録してラウンド一覧へ進める", async ({
-  page,
-}) => {
-  // メールを送って認証コードの入力画面へ進む。
-  const email = uniqueEmail("signup");
-  await openSignUp(page);
-  await page.getByPlaceholder(EMAIL_PLACEHOLDER).fill(email);
+  await page.getByPlaceholder(t("emailPlaceholder")).fill(email);
   await waitForTurnstileToken(page, 1);
-  await sendCodeButton(page).click();
+  await page.getByRole("button", { name: t("otpSendCode") }).click();
   await expect(
-    page.getByRole("heading", { name: authText("otpTitle") }),
-  ).toBeVisible();
-  await expect(page.getByText(/再送（\d+秒）/)).toBeVisible();
-  await expect(page.getByText(authText("otpSpamNote"))).toBeVisible();
-
-  // メールに届いたコードを入力して、パスワードの設定画面へ進む。
-  const code = await getOtpCodeFromMailpit(email);
-  await page.getByPlaceholder(CODE_PLACEHOLDER).fill(code);
-  await page.getByRole("button", { name: authText("otpVerify") }).click();
-  await expect(
-    page.getByRole("heading", { name: authText("signUpPasswordTitle") }),
+    page.getByRole("heading", { name: t("otpTitle") }),
   ).toBeVisible();
 
-  // パスワードを設定して登録し、ラウンド一覧へ進む。
-  await page.getByPlaceholder(PASSWORD_PLACEHOLDER).fill("password1");
-  // この段階のウィジェットが、サインインに使うトークンを取得するまで待つ(メール入力、コード入力の段階の分が先に数えられる)。
-  await waitForTurnstileToken(page, 3);
-  await page
-    .getByRole("button", { name: authText("signUpPasswordSubmit") })
-    .click();
-  await expect(page).toHaveURL(/\/rounds/);
-  await expect(
-    page.getByRole("link", { name: navigationText("leftPanelSettings") }),
-  ).toBeVisible();
+  // 認証リンクのないメールのコードを確認して登録を完了する。
+  const message = await getEmailFromMailpit(email, undefined, previous);
+  expect(message.html).toContain("15");
+  expect(message.html).not.toMatch(/href\s*=|ConfirmationURL|パスワード/i);
+  const code = await getOtpCodeFromMailpit(email, previous);
+  await page.getByPlaceholder(t("otpCodePlaceholder")).fill(code);
+  await page.getByRole("button", { name: t("otpVerify"), exact: true }).click();
+  await expect(page).toHaveURL(/\/rounds$/);
 });
 
-// メールを送り、届いたコードを確認して、パスワード設定の段階へ進んだことの確認で終わる。
-async function advanceToPasswordStep(page: Page, email: string) {
-  await openSignUp(page);
-  await page.getByPlaceholder(EMAIL_PLACEHOLDER).fill(email);
-  await waitForTurnstileToken(page, 1);
-  await sendCodeButton(page).click();
-  await expect(
-    page.getByRole("heading", { name: authText("otpTitle") }),
-  ).toBeVisible();
-  const code = await getOtpCodeFromMailpit(email);
-  await page.getByPlaceholder(CODE_PLACEHOLDER).fill(code);
-  await page.getByRole("button", { name: authText("otpVerify") }).click();
-  await expect(
-    page.getByRole("heading", { name: authText("signUpPasswordTitle") }),
-  ).toBeVisible();
-}
-
-const SIGNUP_PASSWORD = "password-original1";
-const NEW_PASSWORD = "password-changed1";
-const WRONG_PASSWORD = "password-wrong1";
-
-test("登録を完了した直後にパスワードを変更しようとすると、誤った現在のパスワードは拒否され、認証コードで得たセッションは使えなくなる", async ({
+test("登録済みメールのOTP登録でも同じIDと元の記録と他のセッションを維持する", async ({
   page,
 }) => {
-  // メールで本人確認して、パスワード設定の段階へ進む。
-  const email = uniqueEmail("signup-replace");
-  await advanceToPasswordStep(page, email);
-  // 認証コードで得たセッションを控える。パスワードで得たセッションへ置き換わると使えなくなる。
-  const codeSession = await readStoredTokens(page.context());
-  expect(authMethodOf(codeSession.accessToken)).toBe("otp");
-
-  // パスワードを設定して登録し、ラウンド一覧へ進む。
-  await page.getByPlaceholder(PASSWORD_PLACEHOLDER).fill(SIGNUP_PASSWORD);
-  await waitForTurnstileToken(page, 3);
-  await page
-    .getByRole("button", { name: authText("signUpPasswordSubmit") })
-    .click();
-  await expect(page).toHaveURL(/\/rounds/);
-
-  // 設定パネルのパスワード変更の画面で、誤った現在のパスワードを送ると、誤りが表示される。
-  await waitForHydration(page);
-  await page
-    .getByRole("link", {
-      name: navigationText("leftPanelSettings"),
-      exact: true,
-    })
-    .click();
-  await page
-    .getByRole("link", { name: settingsText("changePasswordItem") })
-    .click();
-  await waitForPanelHydration(page);
-  await page
-    .getByPlaceholder(authText("changePasswordCurrentPlaceholder"))
-    .fill(WRONG_PASSWORD);
-  await page
-    .getByPlaceholder(authText("changePasswordNewPlaceholder"), { exact: true })
-    .fill(NEW_PASSWORD);
-  await page
-    .getByRole("button", { name: authText("changePasswordSubmit") })
-    .click();
-  await expect(
-    page.getByText(authText("failure.current_password_invalid")),
-  ).toBeVisible();
-  expect(await signInError(email, SIGNUP_PASSWORD)).toBeNull();
-  const { accessToken } = await readStoredTokens(page.context());
-  expect(authMethodOf(accessToken)).toBe("password");
-  expect(
-    await updatePasswordDirect(accessToken, { password: NEW_PASSWORD }),
-  ).toEqual({ status: 400, errorCode: "current_password_required" });
-  expect((await getUserStatus(codeSession.accessToken)).status).toBe(403);
-  expect((await refreshStatus(codeSession.refreshToken)).status).toBe(400);
-});
-
-test("登録のサインインが失敗して再試行すると、パスワードを設定済みでも登録が完了し、ラウンド一覧へ進める", async ({
-  page,
-}) => {
-  // 取り直したチェックのトークンで再送信できるようにし、パスワードでのサインインを最初の1回だけ失敗させる。
-  await page.addInitScript(() => {
-    (
-      window as unknown as { e2eTurnstileReissueOnReset: boolean }
-    ).e2eTurnstileReissueOnReset = true;
-  });
-  let failed = false;
-  await page.context().route(
-    (url) =>
-      url.pathname.endsWith("/auth/v1/token") &&
-      url.searchParams.get("grant_type") === "password",
-    async (route) => {
-      if (failed) return route.continue();
-      failed = true;
-      return route.abort();
-    },
+  test.setTimeout(150000);
+  // 実OTPで元の利用者と記録を準備する。
+  const email = `existing-signup-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email });
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    { auth: { persistSession: false, autoRefreshToken: false } },
   );
-
-  // メールで本人確認して、パスワード設定の段階へ進む。
-  const email = uniqueEmail("signup-retry");
-  await advanceToPasswordStep(page, email);
-
-  // パスワードを設定して登録すると、サインインが失敗して理由が表示され、この段階に留まる。
-  await page.getByPlaceholder(PASSWORD_PLACEHOLDER).fill(SIGNUP_PASSWORD);
-  await waitForTurnstileToken(page, 3);
-  await page
-    .getByRole("button", { name: authText("signUpPasswordSubmit") })
-    .click();
-  await expect(page.getByText(authText("failure.unreachable"))).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: authText("signUpPasswordTitle") }),
-  ).toBeVisible();
-
-  // チェックを取り直して再送信すると、登録が完了してラウンド一覧へ進む。
-  await waitForTurnstileToken(page, 4);
-  await page
-    .getByRole("button", { name: authText("signUpPasswordSubmit") })
-    .click();
-  await expect(page).toHaveURL(/\/rounds/);
-  const { accessToken } = await readStoredTokens(page.context());
-  expect(authMethodOf(accessToken)).toBe("password");
-});
-
-test("再送待機時間の終了後に再送すると、新しい認証コードが届く", async ({
-  page,
-}) => {
-  // メールを送って認証コードの入力画面へ進む。
-  const email = uniqueEmail("signup-resend");
-  await page.clock.install();
-  await openSignUp(page);
-  await page.getByPlaceholder(EMAIL_PLACEHOLDER).fill(email);
-  await waitForTurnstileToken(page, 1);
-  await sendCodeButton(page).click();
-  await expect(
-    page.getByRole("heading", { name: authText("otpTitle") }),
-  ).toBeVisible();
-  const firstCode = await getOtpCodeFromMailpit(email);
-
-  // 再送の待機時間を過ぎて、再送できる状態にする。
-  await waitForTurnstileToken(page, 2);
-  await fastForwardResendCooldown(page);
-  await expect(resendButton(page)).toHaveText(authText("otpResend"));
-
-  // 再送して、新しい認証コードを受け取る。
-  // サーバー側の送信間隔は実時間で判定されるため、ローカル・CIの設定値を超えるまで待つ。
-  await page.waitForTimeout(1_200);
-  await resendButton(page).click();
-  await expect(async () => {
-    expect(await getOtpCodeFromMailpit(email)).not.toBe(firstCode);
-  }).toPass();
-});
-
-test("登録済みのメールアドレスで送信すると、コード入力画面へ進み、コードを含まない案内のメールが届く", async ({
-  page,
-}) => {
-  // 登録済みのメールアドレスを送って、コード入力画面へ進む。
-  const email = uniqueEmail("signup-registered");
-  await createConfirmedUser({ email, password: "password1" });
-  await openSignUp(page);
-  await page.getByPlaceholder(EMAIL_PLACEHOLDER).fill(email);
-  await waitForTurnstileToken(page, 1);
-  await sendCodeButton(page).click();
-  await expect(
-    page.getByRole("heading", { name: authText("otpTitle") }),
-  ).toBeVisible();
-  await expect(
-    page.getByText(
-      "登録済みのメールアドレスには、コードの代わりに案内のメールが届きます。",
-    ),
-  ).not.toBeVisible();
-
-  // 認証コードの代わりに、登録済みを知らせる案内のメールが届く。
-  const notice = await getEmailFromMailpit(
-    email,
-    "【AIMS】登録済みのメールアドレス",
-  );
-  expect(notice.html).not.toMatch(/\d{6}/);
-});
-
-test.describe("認証済み", () => {
-  test.use({ storageState: SHARED_AUTH_STATE_PATH });
-
-  test("サインアップ画面を開くと、ラウンド一覧へリダイレクトされる", async ({
-    page,
-  }) => {
-    // 認証済みの状態は、storageStateで用意する。
+  try {
+    const first = await signInWithEmailOtp(client, email);
+    const originalId = first.data.user?.id;
+    expect(first.error === null && originalId !== undefined).toBe(true);
+    const name = `登録前の記録-${randomUUID()}`;
+    await createRoundWithClient(client, {
+      name,
+      roundDate: "2026-08-24",
+      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+    });
+    await waitForOtpSendWindow(email);
+    const previous = await mailIds(email);
     await page.goto("/signup");
-    await expect(page).toHaveURL(/\/rounds/);
-  });
+    await waitForHydration(page);
+    await page.getByPlaceholder(t("emailPlaceholder")).fill(email);
+    await waitForTurnstileToken(page, 1);
+    await page.getByRole("button", { name: t("otpSendCode") }).click();
+    await expect(
+      page.getByRole("heading", { name: t("otpTitle") }),
+    ).toBeVisible();
+
+    // 登録画面で確認しても元のIDのまま記録へ戻り、別セッションも維持する。
+    await page
+      .getByPlaceholder(t("otpCodePlaceholder"))
+      .fill(await getOtpCodeFromMailpit(email, previous));
+    await page
+      .getByRole("button", { name: t("otpVerify"), exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/rounds$/);
+    const restored = await readStoredTokens(page.context());
+    expect(restored.userId).toBe(originalId);
+    await expect(page.getByText(name)).toBeVisible();
+    expect((await client.auth.getUser()).data.user?.id).toBe(originalId);
+  } finally {
+    await client.auth.stopAutoRefresh();
+  }
 });

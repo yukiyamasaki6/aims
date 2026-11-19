@@ -16,6 +16,8 @@ type OtpEmailStepProps = {
   onEmailChange: (value: string) => void;
   emailError: string | undefined;
   submitting: boolean;
+  resendCooldown?: number;
+  resendError?: string;
   error: string | null;
   hydrated: boolean;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
@@ -33,6 +35,8 @@ export function OtpEmailStep({
   onEmailChange,
   emailError,
   submitting,
+  resendCooldown = 0,
+  resendError,
   error,
   hydrated,
   onSubmit,
@@ -58,8 +62,9 @@ export function OtpEmailStep({
             <Input
               type="email"
               name="email"
-              autoComplete="username"
+              autoComplete="email"
               placeholder={t("emailPlaceholder")}
+              readOnly={submitting}
               value={email}
               onChange={(e) => onEmailChange(e.target.value)}
               {...aria}
@@ -74,8 +79,13 @@ export function OtpEmailStep({
           waiting={waiting}
         />
         <BusyButton type="submit" busy={submitting}>
-          {t("otpSendCode")}
+          {resendCooldown > 0
+            ? t("otpResendWait", { seconds: String(resendCooldown) })
+            : t("otpSendCode")}
         </BusyButton>
+        {resendError && (
+          <p className="text-destructive text-sm">{resendError}</p>
+        )}
       </form>
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
     </>

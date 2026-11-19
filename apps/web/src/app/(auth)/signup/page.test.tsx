@@ -21,7 +21,6 @@ const auth = vi.hoisted(() => ({
   signInWithOtp: vi.fn(),
   verifyOtp: vi.fn(),
   updateUser: vi.fn(),
-  signInWithPassword: vi.fn(),
   signOut: vi.fn(),
 }));
 const connection = vi.hoisted(() => ({

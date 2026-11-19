@@ -31,7 +31,6 @@ describe("SettingsAccount", () => {
     );
     expect(rows).toEqual([
       settingsText("changeEmailItem"),
-      settingsText("changePasswordItem"),
       settingsText("deleteAccountItem"),
       authText("signOut"),
     ]);
@@ -60,16 +59,14 @@ describe("SettingsAccount", () => {
     const links = screen.getAllByRole("link");
     expect(links.map((link) => link.textContent)).toEqual([
       settingsText("changeEmailItem"),
-      settingsText("changePasswordItem"),
       settingsText("deleteAccountItem"),
     ]);
-    expect(links[0].parentElement?.children).toHaveLength(3);
+    expect(links[0].parentElement?.children).toHaveLength(2);
     expect(screen.queryByRole("button")).toBeNull();
   });
 
   it.each([
     ["changeEmailItem", "email"],
-    ["changePasswordItem", "password"],
     ["deleteAccountItem", "delete-account"],
   ] as const)(
     "%sの行を押すと、既定の動作(ページの移動)を止めて、%sの表示で移る操作を呼ぶ",
@@ -96,8 +93,7 @@ describe("SettingsAccount", () => {
 
   it.each([
     ["changeEmailItem", "email", 1],
-    ["changePasswordItem", "password", 2],
-    ["deleteAccountItem", "delete-account", 3],
+    ["deleteAccountItem", "delete-account", 2],
   ] as const)(
     "%sの行へTabで到達してEnterを押すと、%sへ移る操作を通知する",
     async (textKey, view, tabCount) => {

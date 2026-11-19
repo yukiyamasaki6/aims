@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
+import { test } from "../fixtures";
 import {
   createConfirmedUser,
   getSharedEmail,

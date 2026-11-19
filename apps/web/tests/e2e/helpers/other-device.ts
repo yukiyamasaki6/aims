@@ -6,7 +6,7 @@ import { signInAsTestUser } from "./rounds";
 // 他端末の操作を、ページとは別のsupabase-jsクライアントからRPCを直接呼んで再現する。
 // ページがオフラインの間に呼べば、他端末の操作が先に確定した状況を作れる。
 export async function openOtherDevice(email: string, password: string) {
-  const { supabase, userId } = await signInAsTestUser(email, password);
+  const { supabase, userId } = await signInAsTestUser(email, password, true);
   return { supabase, userId };
 }
 

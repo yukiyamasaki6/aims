@@ -2,14 +2,13 @@
 // 表示はハッシュだけから決める。パネルが積む履歴の項目は、起点からの段数と、積んだ文書の識別子を状態に持つ。
 import {
   CHANGE_EMAIL_HASH,
-  CHANGE_PASSWORD_HASH,
   DELETE_ACCOUNT_HASH,
   SETTINGS_ACCOUNT_HASH,
   SETTINGS_HASH,
 } from "@/routes";
 
 // 項目の画面の表示。
-export type SettingsItemView = "email" | "password" | "delete-account";
+export type SettingsItemView = "email" | "delete-account";
 
 // 設定パネルの表示。分類「アカウント」か、その項目の画面。
 export type SettingsView = "account" | SettingsItemView;
@@ -17,7 +16,6 @@ export type SettingsView = "account" | SettingsItemView;
 const HASH_OF_VIEW: Record<SettingsView, string> = {
   account: SETTINGS_ACCOUNT_HASH,
   email: CHANGE_EMAIL_HASH,
-  password: CHANGE_PASSWORD_HASH,
   "delete-account": DELETE_ACCOUNT_HASH,
 };
 

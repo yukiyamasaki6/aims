@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 // 常にパスするCloudflareの公式ダミーキー（NEXT_PUBLIC_TURNSTILE_SITE_KEY・
 // TURNSTILE_SECRET_KEYとも1x0...AA系のテスト専用キーを使用）と組み合わせて
@@ -124,23 +124,6 @@ type TurnstileCounts = {
 };
 
 // 止めておいたウィジェットへ、トークンを渡す。
-export async function releaseTurnstileToken(page: Page): Promise<void> {
-  await page.evaluate(() =>
-    (
-      window as unknown as { e2eTurnstileRelease: () => void }
-    ).e2eTurnstileRelease(),
-  );
-}
-
-// トークンを受け取った回数(ページを読み込んでからの累計)。
-export async function turnstileTokenCount(page: Page): Promise<number> {
-  return page.evaluate(
-    () => (window as unknown as TurnstileCounts).e2eTurnstileTokenCount ?? 0,
-  );
-}
-
-// トークンを受け取った回数が`count`以上になるまで待ち、画面がそのトークンを反映する描画を終えるまで待つ。
-// 回数はページを読み込んでからの累計で、同じ文書の中で画面が切り替わると、切り替えた先のウィジェットの分が加わる。
 export async function waitForTurnstileToken(
   page: Page,
   count: number,
@@ -157,19 +140,4 @@ export async function waitForTurnstileToken(
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
       }),
   );
-}
-
-// チェックのやり直しの依頼(reset)が`count`回以上になったことを確かめる。
-export async function expectTurnstileReset(
-  page: Page,
-  count: number,
-): Promise<void> {
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (window as unknown as TurnstileCounts).e2eTurnstileResetCount ?? 0,
-      ),
-    )
-    .toBeGreaterThanOrEqual(count);
 }

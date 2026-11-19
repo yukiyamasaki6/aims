@@ -1,31 +1,25 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { type FormEvent, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ScreenFrame } from "@/components/screen-frame";
 import { BusyButton } from "@/components/ui/busy-button";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { DeleteAccount } from "../application/delete-account";
-import type { ScreenView } from "../application/screen-view";
+import { RESEND_COOLDOWN_SECONDS } from "../domain/auth-code";
 import {
   type DeleteAccountEvent,
   type DeleteAccountFlow,
   deleteAccountReducer,
   initialDeleteAccountFlow,
 } from "../domain/delete-account-flow";
-import { AuthField } from "./auth-field";
-import { PasswordInput } from "./password-input";
+import { OtpCodeStep } from "./otp-code-step";
 import { SettingsBackLink } from "./settings-back-link";
 import { Turnstile } from "./turnstile";
 import { useAuthTexts } from "./use-auth-texts";
 import { useCheckWait } from "./use-check-wait";
 import { useScreenView } from "./use-screen-view";
 
-// エラー文の要素のidの接頭辞(`${ID_PREFIX}-current-password-error`)。
-const ID_PREFIX = "delete-account";
-
-// アカウント削除の画面。削除される内容と取り消せないことを示し、現在のパスワードの確認で削除する。成功は遷移まで処理中のままで、失敗は理由を示して入力へ戻る。ヘッダーの戻るは処理中だけ押せない。
-// onBack: 設定パネルの分類「アカウント」へ戻る。onBusyChange: 送信中かを設定パネルへ知らせる(成功の後は遷移まで送信中のまま)。
 export function DeleteAccountForm({
   deleteAccount,
   siteKey,
@@ -37,22 +31,30 @@ export function DeleteAccountForm({
   onBack: () => void;
   onBusyChange: (busy: boolean) => void;
 }) {
-  const {
-    state: flow,
-    view,
-    checkRef,
-  } = useScreenView(deleteAccountReducer, initialDeleteAccountFlow);
-  const hydrated = useHydrated();
-  const t = useTranslations("auth");
-  const texts = useAuthTexts();
-  const errorText = texts.screenError(flow.error, flow.fieldErrors.captcha);
+  const screen = useScreenView(deleteAccountReducer, initialDeleteAccountFlow);
+  const { state: flow, view } = screen;
+  const [code, setCode] = useState("");
+  const { run, checkProps } = useCheckWait({
+    flow,
+    dispatch: view.dispatch,
+    resume: () => void deleteAccount.sendCode(view),
+  });
   useEffect(
     () => onBusyChange(flow.submitting),
     [flow.submitting, onBusyChange],
   );
-
-  const { onSubmit, checkProps } = useSubmit(deleteAccount, flow, view);
-
+  useEffect(
+    () =>
+      flow.resendCooldown === 0
+        ? undefined
+        : deleteAccount.tickCooldown(view.dispatch),
+    [flow.resendCooldown, deleteAccount, view.dispatch],
+  );
+  useEffect(() => {
+    if (flow.step !== "code" || flow.resendCooldown === RESEND_COOLDOWN_SECONDS)
+      setCode("");
+  }, [flow.step, flow.resendCooldown]);
+  const t = useTranslations("auth");
   return (
     <ScreenFrame
       title={t("deleteAccountTitle")}
@@ -61,74 +63,130 @@ export function DeleteAccountForm({
       <div className="h-full overflow-y-auto">
         <main className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8">
           <DeleteAccountNotice />
-          <form
-            onSubmit={onSubmit}
-            noValidate
-            data-hydrated={hydrated}
-            className="flex w-full flex-col gap-3"
-          >
-            <AuthField
-              errorId={`${ID_PREFIX}-current-password-error`}
-              error={texts.fieldError(
-                "currentPassword",
-                flow.fieldErrors.currentPassword,
-              )}
-            >
-              {(aria) => (
-                <PasswordInput
-                  name="password"
-                  autoComplete="current-password"
-                  placeholder={t("deleteAccountPasswordPlaceholder")}
-                  {...aria}
-                />
-              )}
-            </AuthField>
-            <Turnstile
-              siteKey={siteKey}
-              ref={checkRef}
-              onVerify={(token) =>
-                view.dispatch({ type: "captchaChecked", token })
-              }
-              {...checkProps}
-            />
-            <BusyButton
-              type="submit"
-              variant="destructive"
-              busy={flow.submitting}
-            >
-              {t("deleteAccountSubmit")}
-            </BusyButton>
-          </form>
-          {errorText && (
-            <p className="text-center text-destructive text-sm">{errorText}</p>
-          )}
+          <DeleteAccountStep
+            screen={screen}
+            deleteAccount={deleteAccount}
+            siteKey={siteKey}
+            code={code}
+            setCode={setCode}
+            run={() => run(undefined)}
+            checkProps={checkProps}
+          />
         </main>
       </div>
     </ScreenFrame>
   );
 }
 
-// 送信の処理と、チェックの待ち。値は送信時に読み(入力欄は制御しない)、チェックを待つ間のために押した時点の値を記憶する。
-function useSubmit(
-  deleteAccount: DeleteAccount,
-  flow: DeleteAccountFlow,
-  view: ScreenView<DeleteAccountFlow, DeleteAccountEvent>,
-) {
-  const { run, checkProps } = useCheckWait({
-    flow,
-    dispatch: view.dispatch,
-    resume: (input: Parameters<DeleteAccount["submit"]>[0]) =>
-      void deleteAccount.submit(input, view),
-  });
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    run({ password: String(data.get("password")) });
-  }
-  return { onSubmit, checkProps };
+type StepProps = {
+  screen: ReturnType<
+    typeof useScreenView<DeleteAccountFlow, DeleteAccountEvent>
+  >;
+  deleteAccount: DeleteAccount;
+  siteKey: string;
+  code: string;
+  setCode: (code: string) => void;
+  run: () => void;
+  checkProps: ReturnType<typeof useCheckWait>["checkProps"];
+};
+
+function DeleteAccountStep(props: StepProps) {
+  return props.screen.state.step === "code" ? (
+    <DeleteAccountCodeStep {...props} />
+  ) : (
+    <DeleteAccountRequestStep {...props} />
+  );
 }
 
-// 削除が取り消せないことと、削除される内容。
+function DeleteAccountCodeStep({
+  screen: { state: flow, view, checkRef },
+  deleteAccount,
+  siteKey,
+  code,
+  setCode,
+  run,
+  checkProps,
+}: StepProps) {
+  const texts = useAuthTexts();
+  const error = texts.screenError(flow.error, flow.fieldErrors.captcha);
+  return (
+    <OtpCodeStep
+      idPrefix="delete-account"
+      email={flow.email}
+      code={code}
+      onCodeChange={setCode}
+      codeError={texts.fieldError("code", flow.fieldErrors.code)}
+      resendError={texts.fieldError("resend", flow.fieldErrors.resend)}
+      pending={flow.pending === "delete" ? "verify" : flow.pending}
+      error={error}
+      destructive
+      onVerify={(event) => {
+        event.preventDefault();
+        void deleteAccount.verifyCode({ code }, view);
+      }}
+      onResend={run}
+      siteKey={siteKey}
+      checkRef={checkRef}
+      onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
+      {...checkProps}
+      resendCooldown={flow.resendCooldown}
+    />
+  );
+}
+
+function DeleteAccountRequestStep({
+  screen: { state: flow, view, checkRef },
+  deleteAccount,
+  siteKey,
+  run,
+  checkProps,
+}: StepProps) {
+  const t = useTranslations("auth");
+  const texts = useAuthTexts();
+  const hydrated = useHydrated();
+  const error = texts.screenError(flow.error, flow.fieldErrors.captcha);
+  return (
+    <>
+      {flow.step === "request" && (
+        <p className="text-sm">
+          {t("changeEmailCurrent", { email: flow.email })}
+        </p>
+      )}
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (flow.step === "confirmation") void deleteAccount.submit(view);
+          else run();
+        }}
+        noValidate
+        data-hydrated={hydrated}
+        className="flex w-full flex-col gap-3"
+      >
+        {flow.step === "request" && (
+          <Turnstile
+            siteKey={siteKey}
+            ref={checkRef}
+            onVerify={(token) =>
+              view.dispatch({ type: "captchaChecked", token })
+            }
+            {...checkProps}
+          />
+        )}
+        <BusyButton
+          type="submit"
+          variant={flow.step === "confirmation" ? "destructive" : "default"}
+          busy={flow.submitting}
+        >
+          {flow.step === "confirmation"
+            ? t("deleteAccountSubmit")
+            : t("otpSendCode")}
+        </BusyButton>
+      </form>
+      {error && <p className="text-center text-destructive text-sm">{error}</p>}
+    </>
+  );
+}
+
 function DeleteAccountNotice() {
   const t = useTranslations("auth");
   return (

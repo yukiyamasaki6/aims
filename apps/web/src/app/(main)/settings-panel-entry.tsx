@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import { createChangeEmail } from "@/features/auth/application/change-email";
-import { createChangePassword } from "@/features/auth/application/change-password";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { ChangeEmailForm } from "@/features/auth/ui/change-email-form";
-import { ChangePasswordForm } from "@/features/auth/ui/change-password-form";
 import { useDeleteAccount } from "@/features/auth/ui/delete-account-context";
 import { DeleteAccountForm } from "@/features/auth/ui/delete-account-form";
 import { useSession } from "@/features/auth/ui/session-context";
@@ -49,8 +47,6 @@ function SettingsItem({
   switch (view) {
     case "email":
       return <ChangeEmailItem {...controls} />;
-    case "password":
-      return <ChangePasswordItem {...controls} />;
     case "delete-account":
       return <DeleteAccountItem {...controls} />;
   }
@@ -72,17 +68,6 @@ function ChangeEmailItem(controls: SettingsItemControls) {
       {...controls}
     />
   );
-}
-
-function ChangePasswordItem(controls: SettingsItemControls) {
-  // 画面を開いている間、同じ手続きを保つ。
-  const [changePassword] = useState(() =>
-    createChangePassword({
-      authenticator: createSupabaseAuth(createClient),
-      connectivity: createBrowserConnectivity(),
-    }),
-  );
-  return <ChangePasswordForm changePassword={changePassword} {...controls} />;
 }
 
 function DeleteAccountItem(controls: SettingsItemControls) {

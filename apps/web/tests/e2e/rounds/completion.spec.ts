@@ -1,5 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { test } from "../fixtures";
 import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
@@ -7,12 +8,8 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import { expectKeypadSettled } from "../helpers/keypad";
-import {
-  getRoundRow,
-  openOtherDevice,
-  updateRound,
-} from "../helpers/other-device";
-import { createRound } from "../helpers/rounds";
+import { getRoundRow, updateRound } from "../helpers/other-device";
+import { createRound, signInAsTestUser } from "../helpers/rounds";
 import {
   comeBackOnline,
   goOffline,
@@ -56,7 +53,7 @@ async function openRound(
     ...overrides,
   });
   if (options.completed) {
-    const { supabase } = await openOtherDevice(
+    const { supabase } = await signInAsTestUser(
       getSharedEmail(),
       SHARED_PASSWORD,
     );
@@ -76,12 +73,18 @@ async function reload(page: Page) {
   await waitForHydration(page);
 }
 
-// 他端末のクライアント。待ちの間に繰り返し読むため、サインインはワーカーで1回にする。
-let otherDevice: ReturnType<typeof openOtherDevice> | undefined;
+// 保存の観測は、そのケースの準備用セッションで行う。
+let recordClient: ReturnType<typeof signInAsTestUser> | undefined;
+test.beforeEach(() => {
+  recordClient = undefined;
+});
+test.afterEach(async () => {
+  await (await recordClient)?.supabase.auth.stopAutoRefresh();
+});
 
 async function roundRow(roundId: string) {
-  otherDevice ??= openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
-  return getRoundRow((await otherDevice).supabase, roundId);
+  recordClient ??= signInAsTestUser(getSharedEmail(), SHARED_PASSWORD);
+  return getRoundRow((await recordClient).supabase, roundId);
 }
 
 async function status(roundId: string) {
