@@ -25,6 +25,8 @@ type OtpCodeStepProps = {
   error: string | null;
   onBack?: () => void;
   destructive?: boolean;
+  // 迷惑メールの案内を出さない。
+  hideSpamNote?: boolean;
   onVerify: (e: FormEvent<HTMLFormElement>) => void;
   onResend: () => void;
   siteKey: string;
@@ -54,6 +56,7 @@ export function OtpCodeStep({
   waiting,
   resendCooldown,
   destructive,
+  hideSpamNote,
 }: OtpCodeStepProps) {
   const t = useTranslations("auth");
   return (
@@ -74,9 +77,11 @@ export function OtpCodeStep({
         destructive={destructive}
       />
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
-      <p className="text-center text-muted-foreground text-sm">
-        {t("otpSpamNote")}
-      </p>
+      {!hideSpamNote && (
+        <p className="text-center text-muted-foreground text-sm">
+          {t("otpSpamNote")}
+        </p>
+      )}
       <Turnstile
         siteKey={siteKey}
         ref={checkRef}

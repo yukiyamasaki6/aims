@@ -26,6 +26,7 @@ export const initialDeleteAccountFlow: DeleteAccountFlow = {
 export type DeleteAccountEvent =
   | EmailOtpEvent
   | { type: "otpRequired"; userId: string; email: string }
+  | { type: "codeRequested"; userId: string; email: string }
   | { type: "deletionFailed"; failure: AuthFailure };
 
 function otpFlow(flow: DeleteAccountFlow): EmailOtpFlow {
@@ -112,20 +113,34 @@ export function deleteAccountReducer(
   if (event.type === "otpRequired")
     return {
       ...flow,
-      userId: event.userId,
-      email: event.email,
-      step: "request",
+      userId: null,
+      email: "",
+      step: "confirmation",
       pending: null,
       submitting: false,
       awaitingCheck: false,
       captchaToken: null,
+      resendCooldown: 0,
       fieldErrors: {},
       error: "otp_required",
+    };
+  if (event.type === "codeRequested")
+    return {
+      ...flow,
+      userId: event.userId,
+      email: event.email,
+      step: "request",
+      pending: "send",
+      submitting: true,
+      awaitingCheck: true,
+      captchaToken: null,
+      fieldErrors: {},
+      error: null,
     };
   if (event.type === "deletionFailed")
     return {
       ...flow,
-      step: event.failure.kind === "otp_required" ? "request" : "confirmation",
+      step: "confirmation",
       pending: null,
       submitting: false,
       awaitingCheck: false,
@@ -133,10 +148,17 @@ export function deleteAccountReducer(
       error: event.failure.kind,
     };
   const next = emailOtpReducer(otpFlow(flow), event);
+  const leaves =
+    flow.step === "request" &&
+    (event.type === "refused" ||
+      event.type === "failed" ||
+      event.type === "checkWaitReleased");
+  const step =
+    event.type === "codeSent" ? "code" : leaves ? "confirmation" : flow.step;
   return {
     ...flow,
     ...next,
-    step: event.type === "codeSent" ? "code" : flow.step,
+    step,
     submitting: next.pending !== null,
   };
 }

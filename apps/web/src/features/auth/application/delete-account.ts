@@ -203,19 +203,20 @@ export function createDeleteAccount(dependencies: Dependencies): DeleteAccount {
         )
       )
         return;
-      await withHold(dependencies, view, async (hold) => {
-        const current = await currentAccount(authenticator);
-        if (!hold.isActive()) return;
-        if (current.kind !== "current") {
-          showFailure(
-            view,
-            current.kind === "failed" ? current.failure : UNREACHABLE,
-            true,
-          );
-          await hold.release();
-          return;
-        }
-        await deleteCurrent(dependencies, current, hold, view);
+      const current = await currentAccount(authenticator);
+      if (!view.isMounted()) return;
+      if (current.kind !== "current") {
+        showFailure(
+          view,
+          current.kind === "failed" ? current.failure : UNREACHABLE,
+          true,
+        );
+        return;
+      }
+      view.dispatch({
+        type: "codeRequested",
+        userId: current.userId,
+        email: current.email,
       });
     },
     sendCode: (view) => sendCode(dependencies, view),

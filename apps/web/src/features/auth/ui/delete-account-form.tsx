@@ -37,7 +37,10 @@ export function DeleteAccountForm({
   const { run, checkProps } = useCheckWait({
     flow,
     dispatch: view.dispatch,
-    resume: () => void deleteAccount.sendCode(view),
+    resume: () =>
+      void (flow.step === "confirmation"
+        ? deleteAccount.submit(view)
+        : deleteAccount.sendCode(view)),
   });
   useEffect(
     () => onBusyChange(flow.submitting),
@@ -62,7 +65,7 @@ export function DeleteAccountForm({
     >
       <div className="h-full overflow-y-auto">
         <main className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8">
-          <DeleteAccountNotice />
+          {flow.step === "confirmation" && <DeleteAccountNotice />}
           <DeleteAccountStep
             screen={screen}
             deleteAccount={deleteAccount}
@@ -120,6 +123,7 @@ function DeleteAccountCodeStep({
       pending={flow.pending === "delete" ? "verify" : flow.pending}
       error={error}
       destructive
+      hideSpamNote
       onVerify={(event) => {
         event.preventDefault();
         void deleteAccount.verifyCode({ code }, view);
@@ -136,7 +140,6 @@ function DeleteAccountCodeStep({
 
 function DeleteAccountRequestStep({
   screen: { state: flow, view, checkRef },
-  deleteAccount,
   siteKey,
   run,
   checkProps,
@@ -145,6 +148,7 @@ function DeleteAccountRequestStep({
   const texts = useAuthTexts();
   const hydrated = useHydrated();
   const error = texts.screenError(flow.error, flow.fieldErrors.captcha);
+  const guidance = flow.error === "otp_required";
   return (
     <>
       {flow.step === "request" && (
@@ -155,8 +159,7 @@ function DeleteAccountRequestStep({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          if (flow.step === "confirmation") void deleteAccount.submit(view);
-          else run();
+          run();
         }}
         noValidate
         data-hydrated={hydrated}
@@ -172,17 +175,21 @@ function DeleteAccountRequestStep({
             {...checkProps}
           />
         )}
-        <BusyButton
-          type="submit"
-          variant={flow.step === "confirmation" ? "destructive" : "default"}
-          busy={flow.submitting}
-        >
-          {flow.step === "confirmation"
-            ? t("deleteAccountSubmit")
-            : t("otpSendCode")}
+        <BusyButton type="submit" variant="destructive" busy={flow.submitting}>
+          {t("deleteAccountSubmit")}
         </BusyButton>
       </form>
-      {error && <p className="text-center text-destructive text-sm">{error}</p>}
+      {error && (
+        <p
+          className={
+            guidance
+              ? "text-center text-sm"
+              : "text-center text-destructive text-sm"
+          }
+        >
+          {error}
+        </p>
+      )}
     </>
   );
 }

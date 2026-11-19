@@ -68,6 +68,18 @@ describe("OtpCodeStep", () => {
       expect(screen.getByText(authText("otpSpamNote"))).toBeInTheDocument();
     });
 
+    it("hideSpamNoteを渡すと、迷惑メールの案内を描かず、メールアドレスを含む説明は描く", () => {
+      // Given
+
+      // When
+      const form = createForm({ email: "me@example.com", hideSpamNote: true });
+      renderStep(form);
+
+      // Then
+      expect(screen.queryByText(authText("otpSpamNote"))).toBeNull();
+      expect(screen.getByText(/me@example\.com/)).toBeInTheDocument();
+    });
+
     it("認証コードの欄に、nameとメールのコードの自動入力のautocompleteを付ける", () => {
       // Given
       const form = createForm();

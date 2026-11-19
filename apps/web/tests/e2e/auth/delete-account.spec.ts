@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
@@ -13,7 +14,6 @@ import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
 import { signInOnOtherDevice } from "../helpers/other-browser-device";
 import { addRound, signInFreshUser } from "../helpers/round-fixtures";
 import { settingsPanel } from "../helpers/settings";
-import { waitForTurnstileToken } from "../helpers/turnstile";
 
 const t = translatorFor("auth");
 const settings = translatorFor("settings");
@@ -22,9 +22,29 @@ const navigation = translatorFor("navigation");
 // supabase/config.tomlのjwt_expiry（3600秒）を越える時間。
 const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 test.use({ storageState: { cookies: [], origins: [] } });
-test("直近OTPでログインした利用者が削除するとサインインへ移り再登録しても旧記録を表示しない", async ({
+
+// 「アカウントを削除」を押し、送信ボタンを挟まずに届く新しいコードを確認して削除し、遷移元なしのサインインへ移ったことの確認で終わる。
+async function deleteWithNewCode(page: Page, email: string) {
+  // 実Authは同じ宛先への送信を60秒空けるため、直前のログインのコード送信から間隔を空ける。
+  await waitForOtpSendWindow(email);
+  const previous = await mailIds(email);
+  await page.getByRole("button", { name: t("deleteAccountSubmit") }).click();
+  await expect(
+    page.getByRole("heading", { name: t("otpTitle") }),
+  ).toBeVisible();
+  markOtpSent(email);
+  // コードを確認するまでは削除されず、設定パネルに留まる。
+  await expect(page).toHaveURL(/#settings\/account\/delete-account$/);
+  await page
+    .getByPlaceholder(t("otpCodePlaceholder"))
+    .fill(await getOtpCodeFromMailpit(email, previous));
+  await page.getByRole("button", { name: t("deleteAccountVerify") }).click();
+  await expect(page).toHaveURL(/\/signin$/);
+}
+test("OTPでログインした利用者が設定から削除を選び、現在メールへ届く新しいコードを確認すると削除されてサインインへ移り、再登録しても旧記録を表示しない", async ({
   page,
 }) => {
+  test.setTimeout(240000);
   // 記録のある利用者で削除画面へ進む。
   const credentials = await signInFreshUser(page, "delete-otp");
   const name = `削除前-${randomUUID()}`;
@@ -44,9 +64,7 @@ test("直近OTPでログインした利用者が削除するとサインイン�
     settingsPanel(page).locator('[data-hydrated="true"]'),
   ).toBeAttached();
 
-  // 削除を明示して遷移元なしのサインインへ進む。
-  await page.getByRole("button", { name: t("deleteAccountSubmit") }).click();
-  await expect(page).toHaveURL(/\/signin$/);
+  await deleteWithNewCode(page, credentials.email);
 
   // 同じメールで再登録し履歴に旧記録がないことを確認する。
   await signUpAndSignIn(page, credentials);
@@ -95,50 +113,6 @@ test("実AuthのOTPで署名されたJWTは本人の削除を許し改ざんJWT�
   } finally {
     await client.auth.stopAutoRefresh();
   }
-});
-
-test("古いOTPの利用者は現在メールで再確認して削除を完了する", async ({
-  page,
-}) => {
-  test.setTimeout(150000);
-  // OTPでログインして、削除画面へ進む。
-  const credentials = await signInFreshUser(page, "delete-old-otp");
-  const signedAt = Date.now();
-  await page.goto("/rounds#settings/account/delete-account");
-  await expect(
-    settingsPanel(page).getByRole("heading", { name: t("deleteAccountTitle") }),
-  ).toBeVisible();
-  await expect(
-    settingsPanel(page).locator('[data-hydrated="true"]'),
-  ).toBeAttached();
-
-  // サーバーの認可にはブラウザ時計を使えないため、実際の60秒経過後に意思表示する。
-  await expect
-    .poll(() => Date.now() - signedAt > 61000, {
-      timeout: 65000,
-      intervals: [1000],
-      message: "AuthのOTP証跡が60秒を超える",
-    })
-    .toBe(true);
-  await page.getByRole("button", { name: t("deleteAccountSubmit") }).click();
-  await expect(
-    page.getByRole("button", { name: t("otpSendCode") }),
-  ).toBeVisible();
-
-  // 現在のメールへ送り、コード入力へ進む。
-  const previous = await mailIds(credentials.email);
-  await waitForTurnstileToken(page, 1);
-  await page.getByRole("button", { name: t("otpSendCode") }).click();
-  await expect(
-    page.getByRole("heading", { name: t("otpTitle") }),
-  ).toBeVisible();
-
-  // 届いたコードを確認して削除し、遷移元なしのサインインへ進む。
-  await page
-    .getByPlaceholder(t("otpCodePlaceholder"))
-    .fill(await getOtpCodeFromMailpit(credentials.email, previous));
-  await page.getByRole("button", { name: t("deleteAccountVerify") }).click();
-  await expect(page).toHaveURL(/\/signin$/);
 });
 
 test("古いOTPのJWTは更新しても新しいコードの送付だけでも削除できず、再確認した新しいセッションだけが削除できる", async () => {
@@ -221,7 +195,7 @@ test("別の端末でもサインインしている利用者がこの端末で�
   page,
   browser,
 }) => {
-  test.setTimeout(180000);
+  test.setTimeout(300000);
   // 別の端末でサインインして一覧を開く。
   const credentials = {
     email: `delete-other-device-${randomUUID()}@aims.test`,
@@ -241,9 +215,7 @@ test("別の端末でもサインインしている利用者がこの端末で�
       settingsPanel(page).locator('[data-hydrated="true"]'),
     ).toBeAttached();
 
-    // 削除を明示して遷移元なしのサインインへ進む。
-    await page.getByRole("button", { name: t("deleteAccountSubmit") }).click();
-    await expect(page).toHaveURL(/\/signin$/);
+    await deleteWithNewCode(page, credentials.email);
 
     // 別の端末は期限後の更新を拒否され、サインイン画面へ移る。
     const refresh = other.page.waitForResponse(
