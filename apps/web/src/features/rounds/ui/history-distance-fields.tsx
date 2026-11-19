@@ -24,7 +24,7 @@ const TILE_CLASS = cn(
 );
 const ADD_TILE_CLASS = cn(
   TILE_SIZE_CLASS,
-  "flex flex-col items-center justify-center rounded-xl border-2 border-dashed bg-background p-2 text-center text-sm outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+  "flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-ring bg-background p-2 text-center text-sm outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
 );
 
 // 確定した距離のタイルの中身。上から距離、射数/エンド、的の図だけを固定の位置に置く。
@@ -90,7 +90,7 @@ function GroupLabel({ children }: { children: string }) {
 function AddLabel({ children }: { children: string }) {
   return (
     <>
-      <Plus className="size-6 text-border" aria-hidden="true" />
+      <Plus className="size-6 text-ring" aria-hidden="true" />
       <span className="sr-only">{children}</span>
     </>
   );
