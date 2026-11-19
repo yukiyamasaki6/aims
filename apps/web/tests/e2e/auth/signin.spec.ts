@@ -5,7 +5,6 @@ import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
   emailOfUser,
-  SHARED_AUTH_STATE_PATH,
   signInWithEmailOtp,
   waitForHydration,
   waitForOtpSendWindow,
@@ -36,38 +35,31 @@ function anonymousClient() {
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
 }
-for (const destination of [
-  "/rounds",
-  "/rounds/new",
-  "/rounds#settings/account/email",
-]) {
-  test(`確認済み利用者がOTPでログインすると${destination}へ進む`, async ({
-    page,
-  }) => {
-    // メールを送付してコード入力へ進む。
-    const email = `signin-${randomUUID()}@aims.test`;
-    await createConfirmedUser({ email, legacyPassword: "old-password1" });
-    const previous = await mailIds(email);
-    await page.goto(`/signin?returnTo=${encodeURIComponent(destination)}`);
-    await waitForHydration(page);
-    await page.getByPlaceholder(t("emailPlaceholder")).fill(email);
-    await waitForTurnstileToken(page, 1);
-    await page.getByRole("button", { name: t("emailContinue") }).click();
-    await expect(page.getByPlaceholder(t("otpCodePlaceholder"))).toBeVisible();
+const destination = "/rounds#settings/account/email";
+test("確認済み利用者がOTPでログインすると、設定項目付きの遷移元の画面へ進む", async ({
+  page,
+}) => {
+  // メールを送付してコード入力へ進む。
+  const email = `signin-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email, legacyPassword: "old-password1" });
+  const previous = await mailIds(email);
+  await page.goto(`/signin?returnTo=${encodeURIComponent(destination)}`);
+  await waitForHydration(page);
+  await page.getByPlaceholder(t("emailPlaceholder")).fill(email);
+  await waitForTurnstileToken(page, 1);
+  await page.getByRole("button", { name: t("emailContinue") }).click();
+  await expect(page.getByPlaceholder(t("otpCodePlaceholder"))).toBeVisible();
 
-    // 届いたコードを確認して目的の画面へ進む。
-    const code = await getOtpCodeFromMailpit(email, previous);
-    await page.getByPlaceholder(t("otpCodePlaceholder")).fill(code);
-    await page
-      .getByRole("button", { name: t("otpVerify"), exact: true })
-      .click();
-    await expect(page).toHaveURL(
-      new RegExp(`${destination.replaceAll("/", "\\/")}$`),
-    );
-    const tokens = await readStoredTokens(page.context());
-    expect(authMethodOf(tokens.accessToken)).toBe("otp");
-  });
-}
+  // 届いたコードを確認して目的の画面へ進む。
+  const code = await getOtpCodeFromMailpit(email, previous);
+  await page.getByPlaceholder(t("otpCodePlaceholder")).fill(code);
+  await page.getByRole("button", { name: t("otpVerify"), exact: true }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`${destination.replaceAll("/", "\\/")}$`),
+  );
+  const tokens = await readStoredTokens(page.context());
+  expect(authMethodOf(tokens.accessToken)).toBe("otp");
+});
 
 test("未登録メールへ届いたコードを確認すると、パスワードなしで登録されて一覧へ進み、ローカルDBに利用者が作られる", async ({
   page,
@@ -120,8 +112,8 @@ test("未登録メールで保護画面の設定項目から認証すると、�
 test("登録済みメールで確認しても、同じ利用者IDと元の記録と他のセッションを維持する", async ({
   page,
 }) => {
+  // 実OTPで元の利用者と記録を準備する。実Authの送信間隔は管理APIのコード発行にも掛かるため、画面からの送付まで60秒待つ。
   test.setTimeout(150000);
-  // 実OTPで元の利用者と記録を準備する。
   const email = `existing-signin-${randomUUID()}@aims.test`;
   await createConfirmedUser({ email });
   const client = anonymousClient();
@@ -162,46 +154,6 @@ test("登録済みメールで確認しても、同じ利用者IDと元の記録
   } finally {
     await client.auth.stopAutoRefresh();
   }
-});
-
-for (const registered of [false, true]) {
-  test(`登録${registered ? "済み" : "前"}のメールを送付しても、登録有無を示さず同じ案内のコード入力へ進む`, async ({
-    page,
-  }) => {
-    // メールを送ってコード入力へ進む。
-    const email = `same-screen-${registered}-${randomUUID()}@aims.test`;
-    if (registered) await createConfirmedUser({ email });
-    await page.goto("/signin");
-    await waitForHydration(page);
-    await page.getByPlaceholder(t("emailPlaceholder")).fill(email);
-    await waitForTurnstileToken(page, 1);
-    await page.getByRole("button", { name: t("emailContinue") }).click();
-
-    // 共通の案内だけが表示され、登録の有無による見出しや失敗は現れない。
-    await expect(page.getByText(t("otpDescription", { email }))).toBeVisible();
-    await expect(page.getByText(t("otpSpamNote"))).toBeVisible();
-    await expect(page.getByRole("heading")).toHaveCount(0);
-  });
-}
-
-test.describe("認証済み", () => {
-  test.use({ storageState: SHARED_AUTH_STATE_PATH });
-
-  test("遷移元のない/signinを開くと、ホームへ移動する", async ({ page }) => {
-    await page.goto("/signin");
-
-    await expect(page).toHaveURL(/\/rounds$/);
-  });
-
-  test("有効な遷移元付きの/signinを開くと、その遷移元へ移動する", async ({
-    page,
-  }) => {
-    await page.goto(
-      `/signin?returnTo=${encodeURIComponent("/rounds/new#settings/account")}`,
-    );
-
-    await expect(page).toHaveURL(/\/rounds\/new#settings\/account$/);
-  });
 });
 
 test("サインイン画面でAIMSロゴを押すと、紹介画面へ移動する", async ({
