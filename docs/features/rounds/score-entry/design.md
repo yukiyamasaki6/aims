@@ -61,7 +61,7 @@
 - `features/rounds/domain/shot-pointer.ts`、`score-history.ts`、`shot-operations.ts`: 指している矢の遷移(開いたとき、書いた後、クリアの後、戻る・進むの後、他端末の変化)、取り消しの列の規則、矢の操作の組み立てを純粋関数にまとめる。
 - `features/rounds/domain/scorecard-scoring.ts`: 的から点数キーと配色を求め、エンドの生きている矢の数、空きの有無、並べ方を求める。
 - `features/rounds/domain/shot-id.ts`: 新しい矢のID(時刻順のUUID)を作る純粋関数。時刻と乱数は引数で、窓口の`newShotId`が`Clock.now()`と`UniqueIds.randomBytes`から読んで渡す。
-- `features/rounds/ui/keypad-panel.tsx`: 横向きの右側パネル。
+- `features/rounds/ui/keypad-panel.tsx`: 横向きの右側パネル。開閉の間は外枠の幅だけが動き、中身は開いたときの幅に固定して外枠で切り取るため、中身の文字と部品は再配置されず引き伸ばされない(作りは`rounds/history`のフィルターパネルと同じ。機能・配置・開閉の長さは変えない)。
 
 点数の書き込みとクリアは、取り消しの列へ1件(矢のID、変えた属性の前後の値、生死の変化)を積み、操作の列へ追記する。追記の直後に画面へ反映し、IndexedDBへの保存が完了してから送信する。保存の完了前に画面を離れると、保存が未完の末尾の数件が残らない窓がある(`rounds/sync`)。
 戻る・進むは、変えた属性だけを前の値・後の値で上書きする通常の記録・クリアとして積む。射手など変えていない属性は送らない。

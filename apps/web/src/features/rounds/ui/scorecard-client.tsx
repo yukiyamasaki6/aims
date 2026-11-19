@@ -74,7 +74,7 @@ export function ScorecardClient({
         </>
       }
     >
-      <div data-hydrated={model.hydrated} className="flex h-full">
+      <div data-hydrated={model.hydrated} className="@container flex h-full">
         <div className="flex min-w-0 flex-1 flex-col">
           <main
             ref={keypad.observeContainer}

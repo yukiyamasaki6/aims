@@ -105,4 +105,54 @@ describe("SegmentedControl", () => {
     expect(screen.getByTestId("unit-round")).toHaveTextContent("ラウンド");
     expect(screen.getByTestId("unit-distance")).toHaveTextContent("距離");
   });
+
+  it("選択の値を切り替えても、選択の状態はaria-checkedとdata-checkedの両方で選択中の選択肢だけに付く", () => {
+    // Given
+    const { rerender } = render(
+      <SegmentedControl
+        label="表示単位"
+        options={options}
+        value="round"
+        onChange={() => {}}
+      />,
+    );
+
+    // When
+    rerender(
+      <SegmentedControl
+        label="表示単位"
+        options={options}
+        value="distance"
+        onChange={() => {}}
+      />,
+    );
+
+    // Then
+    const distance = screen.getByRole("radio", { name: "距離" });
+    const round = screen.getByRole("radio", { name: "ラウンド" });
+    expect(distance).toHaveAttribute("aria-checked", "true");
+    expect(distance).toHaveAttribute("data-checked");
+    expect(round).toHaveAttribute("aria-checked", "false");
+    expect(round).not.toHaveAttribute("data-checked");
+  });
+
+  it("選択肢にない値を渡すと、どの選択肢も選択中にならず、描画も失敗しない", () => {
+    // Given
+
+    // When
+    render(
+      <SegmentedControl
+        label="表示単位"
+        options={options}
+        value="none"
+        onChange={() => {}}
+      />,
+    );
+
+    // Then
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio).toHaveAttribute("aria-checked", "false");
+    }
+  });
 });

@@ -692,7 +692,7 @@ describe("RoundsHistory", () => {
       },
     );
 
-    it("表示単位の選択中の項目からTabを押すと、先頭の行の閉じるボタンへ進む", async () => {
+    it("表示単位の選択中の項目からTabを押すと、先頭の行のリセットのアイコンへ進む", async () => {
       // Given
       const user = await renderOpenedHistory();
       unitRadio("round").focus();
@@ -701,7 +701,7 @@ describe("RoundsHistory", () => {
       await user.tab();
 
       // Then
-      expect(screen.getByTestId("history-filter-close")).toHaveFocus();
+      expect(filterAction("reset")).toHaveFocus();
     });
 
     it("距離単位では、ラウンド構成の距離は隠れて距離の行に選んだ距離が出て、ラウンドへ戻すと下書きのラウンド構成の距離が出る", async () => {
@@ -1534,22 +1534,53 @@ describe("RoundsHistory", () => {
       });
     });
 
-    describe("閉じるボタンと展開中の漏斗", () => {
+    describe("リセットのアイコンと展開中の漏斗", () => {
       const orientations = [
         ["縦長", false],
         ["横長", true],
       ] as const;
-      const closeButton = () =>
+      const resetIcon = () =>
         within(
           screen.getByRole("region", {
             name: roundsText("historyFilterTitle"),
           }),
-        ).getByRole("button", { name: roundsText("historyFilterClose") });
+        ).getAllByRole("button", { name: roundsText("historyControlsReset") });
       // 見た目の出力は、開閉の状態そのものである`aria-expanded`を除いたクラスで比べる。
       const funnelLook = () => toggle().className;
 
       it.each(orientations)(
-        "%sで閉じるボタンを押すと、未適用の変更とエラーを破棄して閉じ、漏斗へフォーカスが戻り、取得も記憶もしない",
+        "%sで開くと、先頭の行に名前「リセット」のボタンが1つあり、閉じる専用のボタンはなく、下部の行は検索だけである",
+        async (_orientation, landscape) => {
+          // Given
+          viewport.setLandscape(landscape);
+
+          // When
+          await renderOpenedHistory();
+
+          // Then
+          const region = screen.getByRole("region", {
+            name: roundsText("historyFilterTitle"),
+          });
+          expect(resetIcon()).toHaveLength(1);
+          expect(resetIcon()[0]).toHaveAttribute("type", "reset");
+          expect(
+            within(region).queryByRole("button", { name: "閉じる" }),
+          ).toBeNull();
+          expect(
+            within(region).getByRole("button", {
+              name: roundsText("historyControlsApply"),
+            }),
+          ).toBeInTheDocument();
+          expect(
+            within(region).getAllByRole("button", {
+              name: roundsText("historyControlsReset"),
+            }),
+          ).toHaveLength(1);
+        },
+      );
+
+      it.each(orientations)(
+        "%sで漏斗を再び押すと、未適用の変更とエラーを破棄して閉じ、漏斗へフォーカスが戻り、取得も記憶もしない",
         async (_orientation, landscape) => {
           // Given
           viewport.setLandscape(landscape);
@@ -1562,7 +1593,7 @@ describe("RoundsHistory", () => {
           const stored = memory.stored();
 
           // When
-          await user.click(closeButton());
+          await user.click(toggle());
 
           // Then
           expect(panel()).toBeNull();
@@ -1578,7 +1609,7 @@ describe("RoundsHistory", () => {
         },
       );
 
-      it("横長で検索して開いたままでも、閉じるボタンで閉じ、検索した条件は残り、検索後の未適用の変更だけを破棄する", async () => {
+      it("横長で検索して開いたままでも、漏斗の再押下で閉じ、検索した条件は残り、検索後の未適用の変更だけを破棄する", async () => {
         // Given
         viewport.setLandscape(true);
         const user = await renderOpenedHistory();
@@ -1587,7 +1618,7 @@ describe("RoundsHistory", () => {
         draftRange("scoreMin", "9");
 
         // When
-        await user.click(closeButton());
+        await user.click(toggle());
 
         // Then
         expect(panel()).toBeNull();
@@ -1598,14 +1629,14 @@ describe("RoundsHistory", () => {
         expect(rangeInput("scoreMin")).toHaveValue("5");
       });
 
-      it("閉じるボタンを押しても、検索もリセットも起きない", async () => {
+      it("漏斗の再押下で閉じても、検索もリセットも起きない", async () => {
         // Given
         const user = await renderOpenedHistory();
         draftRange("scoreMin", "5");
         const requests = [...fake.store.loadList.mock.calls];
 
         // When
-        await user.click(closeButton());
+        await user.click(toggle());
 
         // Then
         expect(memory.stored().input.scoreMin).toBeNull();
@@ -1626,18 +1657,6 @@ describe("RoundsHistory", () => {
           true,
           async (user: ReturnType<typeof userEvent.setup>) =>
             user.click(toggle()),
-        ],
-        [
-          "縦長の閉じるボタン",
-          false,
-          async (user: ReturnType<typeof userEvent.setup>) =>
-            user.click(closeButton()),
-        ],
-        [
-          "横長の閉じるボタン",
-          true,
-          async (user: ReturnType<typeof userEvent.setup>) =>
-            user.click(closeButton()),
         ],
         [
           "縦長のEsc",
@@ -3993,6 +4012,51 @@ describe("RoundsHistory", () => {
         expect(screen.queryByTestId("history-filter-distance-add")).toBeNull();
         expect(
           screen.queryByText(roundsText("historyFilterDistances")),
+        ).toBeNull();
+      });
+
+      it("単位が距離のときは、距離の指定の直上に「距離構成」の見出しが、指定の有無によらず出る", async () => {
+        // Given
+
+        // When
+        await renderDistanceUnit();
+
+        // Then
+        const label = screen.getByText(
+          roundsText("historyFilterDistanceGroup"),
+        );
+        expect(
+          label.compareDocumentPosition(selectButton() as Node) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        expect(label.parentElement).toContainElement(selectButton());
+      });
+
+      it("単位が距離で距離を指定済みのときも、要約の直上に「距離構成」の見出しが出る", async () => {
+        // Given
+
+        // When
+        await renderDistanceUnit({ distanceRow: distanceRow(50) });
+
+        // Then
+        const label = screen.getByText(
+          roundsText("historyFilterDistanceGroup"),
+        );
+        expect(label.parentElement).toContainElement(summary());
+      });
+
+      it("単位がラウンドのときは、「ラウンド構成」の見出しが出て、「距離構成」の見出しは出ない", async () => {
+        // Given
+
+        // When
+        await renderOpenedHistory();
+
+        // Then
+        expect(
+          screen.getByText(roundsText("historyFilterDistances")),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByText(roundsText("historyFilterDistanceGroup")),
         ).toBeNull();
       });
 

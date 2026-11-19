@@ -114,7 +114,7 @@ function HistoryFrame({
         )
       }
     >
-      <div className="flex h-full min-h-0 flex-col landscape:flex-row">
+      <div className="@container flex h-full min-h-0 flex-col landscape:flex-row">
         <HistoryFilterPanel
           open={session?.open ?? false}
           panelId={panelId}
@@ -125,7 +125,6 @@ function HistoryFrame({
             <HistoryFilterForm
               key={session.id}
               input={input}
-              onClose={close}
               onApply={(next) => {
                 if (activeId.current !== session.id) return;
                 onApply?.(next);
