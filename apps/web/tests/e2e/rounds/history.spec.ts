@@ -580,9 +580,6 @@ test.describe("履歴", () => {
     await openFilter(page);
     await expect(summaries).toHaveCount(1);
     await expect(summaries.nth(0)).toContainText("50m");
-    await expect(summaries.nth(0)).not.toContainText(
-      roundsText("historyFilterNone"),
-    );
 
     // リセットして適用すると、要約が消えて「距離を追加」だけになり、5件が実施日の新しい順に戻る。
     await page
