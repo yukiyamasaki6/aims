@@ -90,7 +90,7 @@ function GroupLabel({ children }: { children: string }) {
 function AddLabel({ children }: { children: string }) {
   return (
     <>
-      <Plus className="size-6 text-muted-foreground" aria-hidden="true" />
+      <Plus className="size-6 text-border" aria-hidden="true" />
       <span className="sr-only">{children}</span>
     </>
   );

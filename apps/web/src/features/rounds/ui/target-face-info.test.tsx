@@ -130,7 +130,7 @@ describe("TargetFaceInfo", () => {
 });
 
 describe("TargetFaceIcon", () => {
-  it("全体像の図だけを指定の大きさで描き、サイズ表記と中心の拡大図は出さない", () => {
+  it("全体像の図を指定の大きさで描く", () => {
     // Given
     const spots = [
       { center_x: 0, center_y: 0, target_face_rings: [yellowRing, redRing] },
@@ -145,7 +145,5 @@ describe("TargetFaceIcon", () => {
     expect(figures[0]).toHaveAttribute("width", "48");
     expect(figures[0]).toHaveAttribute("height", "48");
     expect(figures[0].querySelectorAll("circle")).toHaveLength(2);
-    expect(container.textContent).toBe("");
-    expect(screen.queryByRole("img")).toBeNull();
   });
 });

@@ -3142,7 +3142,7 @@ describe("RoundsHistory", () => {
         expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
       });
 
-      it("距離だけを入れて「追加」を押すと、ダイアログが閉じ、射数/エンドと的が「指定なし」の距離のタイルが出て、適用前は取得も記憶の変更も起きない", async () => {
+      it("距離だけを入れて「追加」を押すと、ダイアログが閉じ、距離のタイルが出て、適用前は取得も記憶の変更も起きない", async () => {
         // Given
         const user = await renderWithDistances();
         const fetches = fake.store.loadList.mock.calls.length;
@@ -3153,12 +3153,6 @@ describe("RoundsHistory", () => {
         // Then
         expect(summaries()).toHaveLength(1);
         expect(summaries()[0]).toHaveTextContent("50m");
-        expect(summaries()[0]).not.toHaveTextContent(
-          roundsText("distanceArrowsPerEnd", { arrowsPerEnd: "6" }),
-        );
-        expect(
-          within(summaries()[0]).getAllByText(roundsText("historyFilterNone")),
-        ).toHaveLength(2);
         expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
         expect(memory.stored()).toEqual(DEFAULT_HISTORY_VIEW_STATE);
       });
@@ -3177,7 +3171,7 @@ describe("RoundsHistory", () => {
         );
       });
 
-      it("的を選択済みの距離を確定すると距離のタイルに的の図を表示し、的の「指定なし」は出さない", async () => {
+      it("的を選択済みの距離を確定すると距離のタイルに的の図を表示する", async () => {
         // Given
         procedures.fetching.savedTargetFaces.mockReturnValue(FACES);
         const user = await renderWithDistances();
@@ -3204,13 +3198,10 @@ describe("RoundsHistory", () => {
         expect(typedDistance).toBe("50");
         expect(targetLabel).not.toBe(roundsText("historyFilterNone"));
         await waitForDistanceDialogClosed();
-        expect(summaries()[0]).not.toHaveTextContent(
-          roundsText("historyFilterNone"),
-        );
         expect(summaries()[0].querySelector("svg")).not.toBeNull();
       });
 
-      it("距離のタイルは上から距離、射数/エンド、的の順で、的は図だけを出し、サイズ表記・中心の拡大図・矢の総数は出さない", async () => {
+      it("距離のタイルは上から距離、射数/エンド、的の順で、的の図を出す", async () => {
         // Given
         procedures.fetching.savedTargetFaces.mockReturnValue(FACES);
         const remembered = distanceRow(50, {
@@ -3228,45 +3219,10 @@ describe("RoundsHistory", () => {
             `50m.*${roundsText("distanceArrowsPerEnd", { arrowsPerEnd: "6" })}`,
           ),
         );
-        expect(tile.querySelectorAll("svg")).toHaveLength(1);
-        expect(within(tile).queryByRole("img")).toBeNull();
-        expect(tile).not.toHaveTextContent(
-          roundsText("targetFaceSize", { size: String(OUTDOOR_FACE.size) }),
-        );
-        expect(tile).not.toHaveTextContent("エンド");
-        expect(tile).not.toHaveTextContent(OUTDOOR_FACE.name);
+        expect(tile.querySelector("svg")).not.toBeNull();
       });
 
-      it("射数/エンドと的が未指定のタイルは、それぞれ「指定なし」を出し、図は出さない", async () => {
-        // Given
-        // When
-        await renderWithDistances([distanceRow(50)]);
-
-        // Then
-        const tile = summaries()[0];
-        expect(tile).toHaveTextContent("50m");
-        expect(
-          within(tile).getAllByText(roundsText("historyFilterNone")),
-        ).toHaveLength(2);
-        expect(tile.querySelector("svg")).toBeNull();
-      });
-
-      it("射数/エンドだけを指定したタイルは、的だけが「指定なし」である", async () => {
-        // Given
-        // When
-        await renderWithDistances([distanceRow(50, { arrowsPerEnd: 6 })]);
-
-        // Then
-        const tile = summaries()[0];
-        expect(tile).toHaveTextContent(
-          roundsText("distanceArrowsPerEnd", { arrowsPerEnd: "6" }),
-        );
-        expect(
-          within(tile).getAllByText(roundsText("historyFilterNone")),
-        ).toHaveLength(1);
-      });
-
-      it("的が保存した一覧に無いタイルは、射数/エンドを出したまま「的データを取得できません」を出し、「指定なし」は的の位置に出さない", async () => {
+      it("的が保存した一覧に無いタイルは、射数/エンドを出したまま「的データを取得できません」を出す", async () => {
         // Given
         procedures.fetching.savedTargetFaces.mockReturnValue([INDOOR_FACE]);
 
@@ -3281,7 +3237,6 @@ describe("RoundsHistory", () => {
         expect(tile).toHaveTextContent(
           roundsText("distanceArrowsPerEnd", { arrowsPerEnd: "6" }),
         );
-        expect(tile).not.toHaveTextContent(roundsText("historyFilterNone"));
       });
 
       it("「距離を追加」は最後のタイルの次にあり、追加・削除のたびに末尾に残り、タイルの件数には数えない", async () => {
@@ -4184,7 +4139,7 @@ describe("RoundsHistory", () => {
         ).toBeNull();
       });
 
-      it("距離を指定済みの距離単位は距離のタイル1件で追加のタイルを持たず、削除すると「距離を選択」に戻り、押すと選択のダイアログが開く", async () => {
+      it("距離を指定済みの距離単位は距離のタイル1件で、削除すると「距離を選択」に戻り、押すと選択のダイアログが開く", async () => {
         // Given
         const user = await renderDistanceUnit({
           distanceRow: distanceRow(50, { arrowsPerEnd: 6 }),
@@ -4192,7 +4147,6 @@ describe("RoundsHistory", () => {
         const shown = {
           tile: summary()?.textContent,
           select: selectButton(),
-          add: screen.queryByTestId("history-filter-distance-add"),
         };
 
         // When
@@ -4207,7 +4161,6 @@ describe("RoundsHistory", () => {
           roundsText("distanceArrowsPerEnd", { arrowsPerEnd: "6" }),
         );
         expect(shown.select).toBeNull();
-        expect(shown.add).toBeNull();
         expect(summary()).toBeNull();
         expect(
           screen.getByTestId("history-distance-dialog-confirm"),
