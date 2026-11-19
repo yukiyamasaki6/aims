@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -515,15 +515,17 @@ describe("削除画面のコード入力の本文の「戻る」と再送待機�
       screen.getByRole("button", { name: authText("otpResend") }),
     );
     // Then
+    await waitFor(() =>
+      expect(
+        screen.getByPlaceholderText(authText("otpCodePlaceholder")),
+      ).toHaveValue(""),
+    );
     expect(h.authenticator.sendCode).toHaveBeenCalledTimes(2);
     expect(h.authenticator.sendCode).toHaveBeenLastCalledWith({
       email: "archer@example.test",
       captchaToken: "resend-check",
       shouldCreateUser: false,
     });
-    expect(
-      screen.getByPlaceholderText(authText("otpCodePlaceholder")),
-    ).toHaveValue("");
     expect(h.account.delete).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -113,13 +113,15 @@ describe("共通OTPフォーム", () => {
       "123456{Enter}",
     );
     // Then
+    await waitFor(() =>
+      expect(h.pageReplace.replace).toHaveBeenCalledExactlyOnceWith(
+        "/rounds/history",
+      ),
+    );
     expect(h.authenticator.verifyCode).toHaveBeenCalledExactlyOnceWith({
       email: "archer@example.test",
       code: "123456",
     });
-    expect(h.pageReplace.replace).toHaveBeenCalledExactlyOnceWith(
-      "/rounds/history",
-    );
   });
   it("チェック待ちの送付は押下時のメールを保持する", async () => {
     // Given
