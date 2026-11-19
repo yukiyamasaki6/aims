@@ -692,7 +692,7 @@ describe("RoundsHistory", () => {
       },
     );
 
-    it("表示単位の選択中の項目からTabを押すと、先頭の行の閉じるボタンへ進む", async () => {
+    it("表示単位の選択中の項目からTabを押すと、先頭の行のリセットのアイコンへ進む", async () => {
       // Given
       const user = await renderOpenedHistory();
       unitRadio("round").focus();
@@ -701,7 +701,7 @@ describe("RoundsHistory", () => {
       await user.tab();
 
       // Then
-      expect(screen.getByTestId("history-filter-close")).toHaveFocus();
+      expect(filterAction("reset")).toHaveFocus();
     });
 
     it("距離単位では、ラウンド構成の距離は隠れて距離の行に選んだ距離が出て、ラウンドへ戻すと下書きのラウンド構成の距離が出る", async () => {
@@ -1534,17 +1534,17 @@ describe("RoundsHistory", () => {
       });
     });
 
-    describe("閉じるボタンと展開中の漏斗", () => {
+    describe("リセットのアイコンと展開中の漏斗", () => {
       const orientations = [
         ["縦長", false],
         ["横長", true],
       ] as const;
-      const closeButton = () =>
+      const resetIcon = () =>
         within(
           screen.getByRole("region", {
             name: roundsText("historyFilterTitle"),
           }),
-        ).getByRole("button", { name: roundsText("historyFilterClose") });
+        ).getAllByRole("button", { name: roundsText("historyControlsReset") });
       // 見た目の出力は、開閉の状態そのものである`aria-expanded`を除いたクラスで比べる。
       const funnelLook = () => toggle().className;
 

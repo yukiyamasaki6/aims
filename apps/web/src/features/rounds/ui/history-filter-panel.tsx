@@ -29,6 +29,7 @@ function useFilterCollapse(open: boolean, onCollapsed: () => void) {
   }, [open, onCollapsed]);
 }
 
+// 横長の中身は、開いたときの外枠(w-2/5、左の線1px)と同じ幅(40cqw-1px、親の@container基準)に固定し、右端に寄せて外枠で切り取る。閉じる間に文字が折り返されて縦長に見えない。
 // 縦長は一覧の上(下端に枠・影)、横長は右の列(左の線だけ)。外枠が中身を切り取り、枠・影は外枠自身に付ける。
 export function HistoryFilterPanel({
   open,
@@ -66,7 +67,7 @@ export function HistoryFilterPanel({
         aria-hidden={!open}
         inert={!open}
         onKeyDown={(event) => closeOnEscape(event, onClose)}
-        className="flex min-h-0 min-w-0 flex-col overflow-hidden outline-none"
+        className="flex min-h-0 min-w-0 flex-col overflow-hidden outline-none landscape:ml-auto landscape:w-[calc(40cqw-1px)] landscape:shrink-0"
       >
         {children}
       </section>

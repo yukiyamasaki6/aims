@@ -41,7 +41,8 @@ export function KeypadPanel({
         open ? "w-2/5 border-l" : "invisible w-0",
       )}
     >
-      <div className="flex h-full flex-col">
+      {/* 中身は開いたときの外枠(w-2/5、左の線1px)と同じ幅(40cqw-1px、親の@container基準)に固定し、右端に寄せて外枠で切り取る。 */}
+      <div className="ml-auto flex h-full w-[calc(40cqw-1px)] shrink-0 flex-col">
         <div className="flex items-center justify-start p-4">
           <button
             type="button"
