@@ -29,6 +29,8 @@ function createForm(overrides: Partial<Props> = {}) {
     pending: null,
     error: null,
     onBack: vi.fn(),
+    verifyLabel: authText("otpVerify"),
+    verifyVariant: "default",
     onVerify: vi.fn((e) => e.preventDefault()),
     onResend: vi.fn(),
     siteKey: "site-key",
@@ -66,18 +68,6 @@ describe("OtpCodeStep", () => {
         ),
       ).toBeInTheDocument();
       expect(screen.getByText(authText("otpSpamNote"))).toBeInTheDocument();
-    });
-
-    it("hideSpamNoteを渡すと、迷惑メールの案内を描かず、メールアドレスを含む説明は描く", () => {
-      // Given
-
-      // When
-      const form = createForm({ email: "me@example.com", hideSpamNote: true });
-      renderStep(form);
-
-      // Then
-      expect(screen.queryByText(authText("otpSpamNote"))).toBeNull();
-      expect(screen.getByText(/me@example\.com/)).toBeInTheDocument();
     });
 
     it("認証コードの欄に、nameとメールのコードの自動入力のautocompleteを付ける", () => {
@@ -331,6 +321,27 @@ describe("OtpCodeStep", () => {
       // Then
       expect(zeroLabel).toBe(authText("otpResend"));
       expect(oneLabel).toBe("再送（1秒）");
+    });
+  });
+
+  describe("確認ボタンの文言", () => {
+    it("渡された文言を確認ボタンに描く", () => {
+      // Given
+
+      // When
+      const form = createForm({
+        verifyLabel: authText("deleteAccountVerify"),
+        verifyVariant: "destructive",
+      });
+      renderStep(form);
+
+      // Then
+      expect(
+        screen.getByRole("button", { name: authText("deleteAccountVerify") }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: authText("otpVerify") }),
+      ).toBeNull();
     });
   });
 });

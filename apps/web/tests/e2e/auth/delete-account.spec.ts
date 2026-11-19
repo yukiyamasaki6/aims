@@ -23,7 +23,7 @@ const navigation = translatorFor("navigation");
 const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 test.use({ storageState: { cookies: [], origins: [] } });
 
-// 「アカウントを削除」を押し、送信ボタンを挟まずに届く新しいコードを確認して削除し、遷移元なしのサインインへ移ったことの確認で終わる。
+// 「アカウントを削除」を押し、別の送信ボタンを挟まずに届く新しいコードを確認して削除し、遷移元なしのサインインへ移ったことの確認で終わる。
 async function deleteWithNewCode(page: Page, email: string) {
   // 実Authは同じ宛先への送信を60秒空けるため、直前のログインのコード送信から間隔を空ける。
   await waitForOtpSendWindow(email);
@@ -41,10 +41,14 @@ async function deleteWithNewCode(page: Page, email: string) {
   await page.getByRole("button", { name: t("deleteAccountVerify") }).click();
   await expect(page).toHaveURL(/\/signin$/);
 }
-test("OTPでログインした利用者が設定から削除を選び、現在メールへ届く新しいコードを確認すると削除されてサインインへ移り、再登録しても旧記録を表示しない", async ({
+test("OTPでログインした直後の利用者が設定から削除を選ぶと送信間隔の案内で留まり、間隔の後に押し直して現在メールへ届く新しいコードを確認すると削除されてサインインへ移り、再登録しても旧記録を表示しない", async ({
   page,
 }) => {
   test.setTimeout(240000);
+  // 実物のチェックは、送信のたびのやり直しで新しい結果を渡す。モックにも同じ取り直しをさせる。
+  await page.addInitScript(() => {
+    Object.assign(window, { e2eTurnstileReissueOnReset: true });
+  });
   // 記録のある利用者で削除画面へ進む。
   const credentials = await signInFreshUser(page, "delete-otp");
   const name = `削除前-${randomUUID()}`;
@@ -63,6 +67,13 @@ test("OTPでログインした利用者が設定から削除を選び、現在�
   await expect(
     settingsPanel(page).locator('[data-hydrated="true"]'),
   ).toBeAttached();
+
+  // ログインの直後に削除を押すと、実Authの送信間隔でコードの送付が拒否され、削除されずに同じ画面へ理由が表示される。
+  await page.getByRole("button", { name: t("deleteAccountSubmit") }).click();
+  await expect(page.getByText(t("failure.rate_limited"))).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: t("deleteAccountSubmit") }),
+  ).toBeVisible();
 
   await deleteWithNewCode(page, credentials.email);
 

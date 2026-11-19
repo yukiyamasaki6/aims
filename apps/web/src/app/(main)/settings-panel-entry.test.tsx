@@ -136,7 +136,6 @@ function routeOf(view: SettingsView | null): SettingsRoute {
 }
 
 const deleteAccount: DeleteAccount = {
-  submit: vi.fn(async () => {}),
   sendCode: vi.fn(async () => {}),
   verifyCode: vi.fn(async () => {}),
   tickCooldown: vi.fn(() => () => {}),

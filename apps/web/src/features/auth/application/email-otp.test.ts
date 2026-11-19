@@ -8,17 +8,19 @@ import {
   initialEmailOtpFlow,
 } from "../domain/email-otp-flow";
 import type { CallResult } from "./call-result";
-import { type CodeVerification, createEmailOtp } from "./email-otp";
+import {
+  type CodeVerification,
+  createEmailOtp,
+  deliverCode,
+  tickResendCooldown,
+} from "./email-otp";
 import { screenHarness } from "./screen-view-test-helpers";
 
 function setup(offline = false) {
   const authenticator = {
     sendCode: vi.fn(async (): Promise<CallResult> => ({ kind: "accepted" })),
     verifyCode: vi.fn(
-      async (): Promise<CodeVerification> => ({
-        kind: "verified",
-        userId: "user-1",
-      }),
+      async (): Promise<CodeVerification> => ({ kind: "verified" }),
     ),
   };
   const clock = createManualClock();
@@ -172,7 +174,7 @@ describe("共通OTPの手続き", () => {
     const running = h.procedure.verifyCode({ email, code: "123456" }, h.view);
     h.screen.mounted = false;
     // When
-    response.resolve({ kind: "verified", userId: "user-1" });
+    response.resolve({ kind: "verified" });
     await running;
     // Then
     expect(h.complete).not.toHaveBeenCalled();
@@ -224,10 +226,96 @@ it("確認中の二重操作で確認も送付も重複させない", async () =
   // When
   await h.procedure.verifyCode({ email, code: "123456" }, h.view);
   await h.procedure.sendCode({ email }, h.view);
-  response.resolve({ kind: "verified", userId: "user-1" });
+  response.resolve({ kind: "verified" });
   await first;
   // Then
   expect(h.authenticator.verifyCode).toHaveBeenCalledOnce();
   expect(h.authenticator.sendCode).toHaveBeenCalledOnce();
   expect(h.complete).toHaveBeenCalledOnce();
+});
+
+describe("共通の送付(deliverCode)", () => {
+  const request = { email, captchaToken: "check", shouldCreateUser: false };
+  function deliverySetup(result: CallResult, mounted = true) {
+    const authenticator = { sendCode: vi.fn(async () => result) };
+    const view = {
+      isMounted: () => mounted,
+      dispatch: vi.fn(),
+      resetCheck: vi.fn(),
+    };
+    return { authenticator, view };
+  }
+  it("受理されると、依頼を送り、渡された成功の出来事を反映してチェックをやり直し、trueを返す", async () => {
+    // Given
+    const { authenticator, view } = deliverySetup({ kind: "accepted" });
+    // When
+    const delivered = await deliverCode(authenticator, view, request, {
+      type: "codeSent",
+    });
+    // Then
+    expect(delivered).toBe(true);
+    expect(authenticator.sendCode).toHaveBeenCalledExactlyOnceWith(request);
+    expect(view.dispatch).toHaveBeenCalledExactlyOnceWith({ type: "codeSent" });
+    expect(view.resetCheck).toHaveBeenCalledTimes(1);
+  });
+  it("拒否されると、その失敗を拒否の出来事で反映してチェックをやり直し、falseを返す", async () => {
+    // Given
+    const { authenticator, view } = deliverySetup({
+      kind: "failed",
+      failure: { kind: "rate_limited" },
+    });
+    // When
+    const delivered = await deliverCode(authenticator, view, request, {
+      type: "codeSent",
+    });
+    // Then
+    expect(delivered).toBe(false);
+    expect(view.dispatch).toHaveBeenCalledExactlyOnceWith({
+      type: "refused",
+      failure: { kind: "rate_limited" },
+    });
+    expect(view.resetCheck).toHaveBeenCalledTimes(1);
+  });
+  it("応答の時点で画面を離れていると、受理されても反映もチェックのやり直しもせず、falseを返す", async () => {
+    // Given
+    const { authenticator, view } = deliverySetup({ kind: "accepted" }, false);
+    // When
+    const delivered = await deliverCode(authenticator, view, request, {
+      type: "codeSent",
+    });
+    // Then
+    expect(delivered).toBe(false);
+    expect(view.dispatch).not.toHaveBeenCalled();
+    expect(view.resetCheck).not.toHaveBeenCalled();
+  });
+});
+
+describe("共通の再送待機の計時(tickResendCooldown)", () => {
+  it("1秒の1ms前は通知せず、1秒で残り秒数を進める出来事を1回送る", () => {
+    // Given
+    const clock = createManualClock();
+    const dispatch = vi.fn();
+    tickResendCooldown(clock)(dispatch);
+    clock.advance(999);
+    const before = dispatch.mock.calls.length;
+    // When
+    clock.advance(1);
+    clock.advance(1000);
+    // Then
+    expect(before).toBe(0);
+    expect(dispatch).toHaveBeenCalledExactlyOnceWith({
+      type: "cooldownTicked",
+    });
+  });
+  it("予約を取り消すと、1秒が過ぎても通知しない", () => {
+    // Given
+    const clock = createManualClock();
+    const dispatch = vi.fn();
+    const cancel = tickResendCooldown(clock)(dispatch);
+    // When
+    cancel();
+    clock.advance(1000);
+    // Then
+    expect(dispatch).not.toHaveBeenCalled();
+  });
 });

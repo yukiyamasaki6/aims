@@ -10,7 +10,6 @@ export type AuthFailureKind =
   | "captcha_failed"
   | "email_exists"
   | "same_email"
-  | "otp_required"
   | "other";
 
 // 届かなかった、サインインしていない、認識している理由で拒否された、それ以外(認証サービスの文言は出さない)のどれか。

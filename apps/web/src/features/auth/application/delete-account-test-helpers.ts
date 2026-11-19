@@ -41,7 +41,6 @@ export function createDeleteAccountHarness({
     verifyCode: vi.fn(
       async (): Promise<import("./email-otp").CodeVerification> => ({
         kind: "verified",
-        userId: "user-1",
       }),
     ),
     readSession: vi.fn(async (_options?: { refresh?: boolean }) => readingOf()),

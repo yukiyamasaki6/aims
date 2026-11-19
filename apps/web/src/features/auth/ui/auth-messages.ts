@@ -16,7 +16,6 @@ export const authMessages = {
       email_exists:
         "このメールアドレスは使えません。別のメールアドレスを入力してください。",
       same_email: "現在と異なるメールアドレスを入力してください。",
-      otp_required: "削除するにはメールの認証コードで再確認してください。",
       other: "エラーが発生しました。しばらくしてから再度お試しください。",
     } satisfies Record<AuthFailureKind, string>,
     // 入力の誤りの種類。欄ごとに持つ。

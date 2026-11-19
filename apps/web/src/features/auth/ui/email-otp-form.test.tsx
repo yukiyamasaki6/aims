@@ -41,10 +41,7 @@ function setup() {
   const authenticator = {
     sendCode: vi.fn(async (): Promise<CallResult> => accepted),
     verifyCode: vi.fn(
-      async (): Promise<CodeVerification> => ({
-        kind: "verified",
-        userId: "user-1",
-      }),
+      async (): Promise<CodeVerification> => ({ kind: "verified" }),
     ),
   };
   const clock = createManualClock();

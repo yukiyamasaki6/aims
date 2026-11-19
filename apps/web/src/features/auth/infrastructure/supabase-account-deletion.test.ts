@@ -43,31 +43,42 @@ describe("createSupabaseAccountDeletion", () => {
   });
 
   it.each([
-    ["PT403(対象不一致)は、その他", "PT403", "other"],
     [
-      "他のコード(PT403以外)は、削除が行われなかったことが確実なその他",
-      "P0001",
-      "other",
+      "認可条件の不足(PT403、otp_confirmation_required)",
+      "PT403",
+      "otp_confirmation_required",
+      403,
     ],
     [
-      "制限時間(57014)も、DBが全体を取り消しているため、その他",
+      "対象の不一致(PT403、account_deletion_forbidden)",
+      "PT403",
+      "account_deletion_forbidden",
+      403,
+    ],
+    ["他のコードの拒否(P0001)", "P0001", "拒否", 400],
+    [
+      "制限時間(57014)",
       "57014",
-      "other",
+      "canceling statement due to statement timeout",
+      500,
     ],
-  ])("コード付きの拒否のうち、%sに写す", async (_name, code, kind) => {
-    // Given
-    const { account } = setup(async () => ({
-      data: null,
-      error: { code, message: "拒否" },
-      status: 403,
-    }));
+  ])(
+    "%sの拒否は、専用の種類を持たない失敗に写す",
+    async (_name, code, message, status) => {
+      // Given
+      const { account } = setup(async () => ({
+        data: null,
+        error: { code, message },
+        status,
+      }));
 
-    // When
-    const result = await account.delete("user-1");
+      // When
+      const result = await account.delete("user-1");
 
-    // Then
-    expect(result).toEqual({ kind: "failed", failure: { kind } });
-  });
+      // Then
+      expect(result).toEqual({ kind: "failed" });
+    },
+  );
 
   it.each([
     [
@@ -92,7 +103,7 @@ describe("createSupabaseAccountDeletion", () => {
         throw new Error("network down");
       },
     ],
-  ])("%sは、結果不明(届かなかった失敗)に写す", async (_name, respond) => {
+  ])("%s(結果不明)も、拒否と同じ失敗に写す", async (_name, respond) => {
     // Given
     const { account } = setup(respond);
 
@@ -100,26 +111,6 @@ describe("createSupabaseAccountDeletion", () => {
     const result = await account.delete("user-1");
 
     // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
+    expect(result).toEqual({ kind: "failed" });
   });
-});
-
-it.each([
-  ["PT403", "otp_confirmation_required", "otp_required"],
-  ["PT403", "account_deletion_forbidden", "other"],
-  ["P0001", "otp_confirmation_required", "other"],
-])("%sと%sの組合せだけを%sへ変換する", async (code, message, kind) => {
-  // Given
-  const { account } = setup(async () => ({
-    data: null,
-    error: { code, message },
-    status: 403,
-  }));
-  // When
-  const result = await account.delete("user-1");
-  // Then
-  expect(result).toEqual({ kind: "failed", failure: { kind } });
 });

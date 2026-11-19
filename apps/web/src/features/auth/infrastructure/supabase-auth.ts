@@ -193,7 +193,7 @@ async function verifyEmailCode(
     if (error)
       return { kind: "failed", failure: toAuthFailure(error, REJECTION_KINDS) };
     return data.session && data.user
-      ? { kind: "verified", userId: data.user.id }
+      ? { kind: "verified" }
       : { kind: "failed", failure: { kind: "other" } };
   } catch {
     return { kind: "failed", failure: UNREACHABLE };

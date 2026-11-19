@@ -1004,7 +1004,7 @@ describe("標準メールOTPのアダプター", () => {
     // Then
     expect(result).toEqual({ kind: "failed", failure: { kind } });
   });
-  it("確認成功のセッションと利用者を検査しIDを返す", async () => {
+  it("確認成功のセッションと利用者が揃えば、利用者IDを持たない確認済みの結果を返す", async () => {
     // Given
     const { service, auth } = setup();
     auth.verifyOtp.mockResolvedValue({
@@ -1017,7 +1017,7 @@ describe("標準メールOTPのアダプター", () => {
       code: "123456",
     });
     // Then
-    expect(result).toEqual({ kind: "verified", userId: "user-1" });
+    expect(result).toEqual({ kind: "verified" });
     expect(auth.verifyOtp).toHaveBeenCalledExactlyOnceWith({
       email: "archer@example.test",
       token: "123456",

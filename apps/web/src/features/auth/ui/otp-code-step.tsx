@@ -23,10 +23,10 @@ type OtpCodeStepProps = {
   // 実行中の確認か再送。どちらかが実行中の間は、3つのボタンを無効にする。
   pending: Pending;
   error: string | null;
-  onBack?: () => void;
-  destructive?: boolean;
-  // 迷惑メールの案内を出さない。
-  hideSpamNote?: boolean;
+  onBack: () => void;
+  // 確認ボタンの文言と見た目。
+  verifyLabel: string;
+  verifyVariant: "default" | "destructive";
   onVerify: (e: FormEvent<HTMLFormElement>) => void;
   onResend: () => void;
   siteKey: string;
@@ -47,6 +47,8 @@ export function OtpCodeStep({
   pending,
   error,
   onBack,
+  verifyLabel,
+  verifyVariant,
   onVerify,
   onResend,
   siteKey,
@@ -55,8 +57,6 @@ export function OtpCodeStep({
   onFailed,
   waiting,
   resendCooldown,
-  destructive,
-  hideSpamNote,
 }: OtpCodeStepProps) {
   const t = useTranslations("auth");
   return (
@@ -74,14 +74,13 @@ export function OtpCodeStep({
         pending={pending}
         errorId={`${idPrefix}-code-error`}
         onSubmit={onVerify}
-        destructive={destructive}
+        verifyLabel={verifyLabel}
+        verifyVariant={verifyVariant}
       />
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
-      {!hideSpamNote && (
-        <p className="text-center text-muted-foreground text-sm">
-          {t("otpSpamNote")}
-        </p>
-      )}
+      <p className="text-center text-muted-foreground text-sm">
+        {t("otpSpamNote")}
+      </p>
       <Turnstile
         siteKey={siteKey}
         ref={checkRef}
@@ -106,7 +105,8 @@ function CodeEntryForm({
   pending,
   errorId,
   onSubmit,
-  destructive,
+  verifyLabel,
+  verifyVariant,
 }: {
   code: string;
   onCodeChange: (value: string) => void;
@@ -114,7 +114,8 @@ function CodeEntryForm({
   pending: Pending;
   errorId: string;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
-  destructive?: boolean;
+  verifyLabel: string;
+  verifyVariant: "default" | "destructive";
 }) {
   const t = useTranslations("auth");
   return (
@@ -137,11 +138,11 @@ function CodeEntryForm({
       </AuthField>
       <BusyButton
         type="submit"
-        variant={destructive ? "destructive" : "default"}
+        variant={verifyVariant}
         busy={pending !== null}
         spinner={pending === "verify"}
       >
-        {destructive ? t("deleteAccountVerify") : t("otpVerify")}
+        {verifyLabel}
       </BusyButton>
     </form>
   );

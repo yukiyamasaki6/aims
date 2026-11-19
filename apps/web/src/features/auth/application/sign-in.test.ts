@@ -23,10 +23,7 @@ describe("ログインの入口", () => {
     const authenticator = {
       sendCode: vi.fn(async (): Promise<CallResult> => ({ kind: "accepted" })),
       verifyCode: vi.fn(
-        async (): Promise<CodeVerification> => ({
-          kind: "verified",
-          userId: "user-1",
-        }),
+        async (): Promise<CodeVerification> => ({ kind: "verified" }),
       ),
     };
     const pageReplace = { replace: vi.fn() };

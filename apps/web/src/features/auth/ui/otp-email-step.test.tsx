@@ -25,6 +25,8 @@ function createForm(overrides: Partial<Props> = {}) {
     onEmailChange: vi.fn(),
     emailError: undefined,
     submitting: false,
+    resendCooldown: 0,
+    resendError: undefined,
     error: null,
     hydrated: true,
     onSubmit: vi.fn((e) => e.preventDefault()),

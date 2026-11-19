@@ -1,23 +1,22 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { ScreenFrame } from "@/components/screen-frame";
-import { BusyButton } from "@/components/ui/busy-button";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { DeleteAccount } from "../application/delete-account";
-import { RESEND_COOLDOWN_SECONDS } from "../domain/auth-code";
 import {
   type DeleteAccountEvent,
   type DeleteAccountFlow,
   deleteAccountReducer,
   initialDeleteAccountFlow,
 } from "../domain/delete-account-flow";
-import { OtpCodeStep } from "./otp-code-step";
+import { FlowOtpCodeStep } from "./flow-otp-code-step";
+import { OtpSendForm } from "./otp-send-form";
 import { SettingsBackLink } from "./settings-back-link";
-import { Turnstile } from "./turnstile";
 import { useAuthTexts } from "./use-auth-texts";
 import { useCheckWait } from "./use-check-wait";
+import { useResendCooldownTick } from "./use-code-entry";
 import { useScreenView } from "./use-screen-view";
 
 export function DeleteAccountForm({
@@ -33,163 +32,88 @@ export function DeleteAccountForm({
 }) {
   const screen = useScreenView(deleteAccountReducer, initialDeleteAccountFlow);
   const { state: flow, view } = screen;
-  const [code, setCode] = useState("");
   const { run, checkProps } = useCheckWait({
     flow,
     dispatch: view.dispatch,
-    resume: () =>
-      void (flow.step === "confirmation"
-        ? deleteAccount.submit(view)
-        : deleteAccount.sendCode(view)),
+    resume: () => void deleteAccount.sendCode(view),
   });
-  useEffect(
-    () => onBusyChange(flow.submitting),
-    [flow.submitting, onBusyChange],
+  const busy = flow.pending !== null;
+  useEffect(() => onBusyChange(busy), [busy, onBusyChange]);
+  useResendCooldownTick(
+    flow.resendCooldown,
+    deleteAccount.tickCooldown,
+    view.dispatch,
   );
-  useEffect(
-    () =>
-      flow.resendCooldown === 0
-        ? undefined
-        : deleteAccount.tickCooldown(view.dispatch),
-    [flow.resendCooldown, deleteAccount, view.dispatch],
-  );
-  useEffect(() => {
-    if (flow.step !== "code" || flow.resendCooldown === RESEND_COOLDOWN_SECONDS)
-      setCode("");
-  }, [flow.step, flow.resendCooldown]);
   const t = useTranslations("auth");
   return (
     <ScreenFrame
       title={t("deleteAccountTitle")}
-      leading={<SettingsBackLink disabled={flow.submitting} onBack={onBack} />}
+      leading={<SettingsBackLink disabled={busy} onBack={onBack} />}
     >
       <div className="h-full overflow-y-auto">
         <main className="mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8">
-          {flow.step === "confirmation" && <DeleteAccountNotice />}
-          <DeleteAccountStep
-            screen={screen}
-            deleteAccount={deleteAccount}
-            siteKey={siteKey}
-            code={code}
-            setCode={setCode}
-            run={() => run(undefined)}
-            checkProps={checkProps}
-          />
+          {flow.step === "code" ? (
+            <FlowOtpCodeStep
+              idPrefix="delete-account"
+              email={flow.email}
+              screen={screen}
+              siteKey={siteKey}
+              checkProps={checkProps}
+              verifyLabel={t("deleteAccountVerify")}
+              verifyVariant="destructive"
+              onVerify={(code) => void deleteAccount.verifyCode({ code }, view)}
+              onResend={() => run(undefined)}
+            />
+          ) : (
+            <DeleteAccountConfirmation
+              screen={screen}
+              siteKey={siteKey}
+              checkProps={checkProps}
+              run={() => run(undefined)}
+            />
+          )}
         </main>
       </div>
     </ScreenFrame>
   );
 }
 
-type StepProps = {
+function DeleteAccountConfirmation({
+  screen: { state: flow, view, checkRef },
+  siteKey,
+  checkProps,
+  run,
+}: {
   screen: ReturnType<
     typeof useScreenView<DeleteAccountFlow, DeleteAccountEvent>
   >;
-  deleteAccount: DeleteAccount;
   siteKey: string;
-  code: string;
-  setCode: (code: string) => void;
-  run: () => void;
   checkProps: ReturnType<typeof useCheckWait>["checkProps"];
-};
-
-function DeleteAccountStep(props: StepProps) {
-  return props.screen.state.step === "code" ? (
-    <DeleteAccountCodeStep {...props} />
-  ) : (
-    <DeleteAccountRequestStep {...props} />
-  );
-}
-
-function DeleteAccountCodeStep({
-  screen: { state: flow, view, checkRef },
-  deleteAccount,
-  siteKey,
-  code,
-  setCode,
-  run,
-  checkProps,
-}: StepProps) {
-  const texts = useAuthTexts();
-  const error = texts.screenError(flow.error, flow.fieldErrors.captcha);
-  return (
-    <OtpCodeStep
-      idPrefix="delete-account"
-      email={flow.email}
-      code={code}
-      onCodeChange={setCode}
-      codeError={texts.fieldError("code", flow.fieldErrors.code)}
-      resendError={texts.fieldError("resend", flow.fieldErrors.resend)}
-      pending={flow.pending === "delete" ? "verify" : flow.pending}
-      error={error}
-      destructive
-      hideSpamNote
-      onVerify={(event) => {
-        event.preventDefault();
-        void deleteAccount.verifyCode({ code }, view);
-      }}
-      onResend={run}
-      siteKey={siteKey}
-      checkRef={checkRef}
-      onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
-      {...checkProps}
-      resendCooldown={flow.resendCooldown}
-    />
-  );
-}
-
-function DeleteAccountRequestStep({
-  screen: { state: flow, view, checkRef },
-  siteKey,
-  run,
-  checkProps,
-}: StepProps) {
+  run: () => void;
+}) {
   const t = useTranslations("auth");
   const texts = useAuthTexts();
   const hydrated = useHydrated();
-  const error = texts.screenError(flow.error, flow.fieldErrors.captcha);
-  const guidance = flow.error === "otp_required";
   return (
     <>
-      {flow.step === "request" && (
-        <p className="text-sm">
-          {t("changeEmailCurrent", { email: flow.email })}
-        </p>
-      )}
-      <form
+      <DeleteAccountNotice />
+      <OtpSendForm
         onSubmit={(event) => {
           event.preventDefault();
           run();
         }}
-        noValidate
-        data-hydrated={hydrated}
-        className="flex w-full flex-col gap-3"
-      >
-        {flow.step === "request" && (
-          <Turnstile
-            siteKey={siteKey}
-            ref={checkRef}
-            onVerify={(token) =>
-              view.dispatch({ type: "captchaChecked", token })
-            }
-            {...checkProps}
-          />
-        )}
-        <BusyButton type="submit" variant="destructive" busy={flow.submitting}>
-          {t("deleteAccountSubmit")}
-        </BusyButton>
-      </form>
-      {error && (
-        <p
-          className={
-            guidance
-              ? "text-center text-sm"
-              : "text-center text-destructive text-sm"
-          }
-        >
-          {error}
-        </p>
-      )}
+        hydrated={hydrated}
+        siteKey={siteKey}
+        checkRef={checkRef}
+        onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
+        {...checkProps}
+        submitting={flow.pending !== null}
+        label={t("deleteAccountSubmit")}
+        variant="destructive"
+        resendCooldown={flow.resendCooldown}
+        resendError={texts.fieldError("resend", flow.fieldErrors.resend)}
+        error={texts.screenError(flow.error, flow.fieldErrors.captcha)}
+      />
     </>
   );
 }

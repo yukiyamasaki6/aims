@@ -27,58 +27,61 @@ function setup() {
   );
   return { ...h, ...screen, view: screen.viewOf(initialDeleteAccountFlow) };
 }
-// 意思確認で削除を押し、続くコード送信がチェックの完了を受け取った状態にする。
-async function openRequest(h: ReturnType<typeof setup>) {
-  await h.deleteAccount.submit(h.view);
+// 意思確認の画面でチェックが完了した状態にする。
+function ready(h: ReturnType<typeof setup>) {
   h.view.dispatch({ type: "captchaChecked", token: "check" });
 }
+// コード入力で再送待機の60秒が過ぎ、チェックを取り直した状態にする。
+function passResendWait(h: ReturnType<typeof setup>) {
+  for (let second = 0; second < 60; second += 1)
+    h.view.dispatch({ type: "cooldownTicked" });
+  h.view.dispatch({ type: "captchaChecked", token: "resend-check" });
+}
 async function sendOtp(h: ReturnType<typeof setup>) {
-  await openRequest(h);
+  ready(h);
   await h.deleteAccount.sendCode(h.view);
 }
 
 describe("アカウント削除", () => {
-  it("意思確認で削除を押すと、直近にOTPでログインしていても削除を呼ばず、現在メールへのコード送信をチェックの完了待ちの処理中として続ける", async () => {
+  it("「アカウントを削除」の送信は、直近にOTPでログインしていても削除を呼ばず、自動登録せずに現在メールへコードを送ってコード入力へ進み、保持を取得しない", async () => {
     // Given
     const h = setup();
-    const hold = vi.spyOn(h.session, "holdEnd");
-    // When
-    await h.deleteAccount.submit(h.view);
-    // Then
-    expect(h.account.delete).not.toHaveBeenCalled();
-    expect(h.eraser.erase).not.toHaveBeenCalled();
-    expect(h.page.replace).not.toHaveBeenCalled();
-    expect(h.view.observedState).toMatchObject({
-      userId: "user-1",
-      email: "archer@example.test",
-      pending: "send",
-      submitting: true,
-      awaitingCheck: true,
-      error: null,
-    });
-    expect(hold).not.toHaveBeenCalled();
-    expect(h.clock.pendingCount()).toBe(0);
-  });
-  it("コード送付は自動登録せず、保持を取得せず、削除を呼ばない", async () => {
-    // Given
-    const h = setup();
-    await openRequest(h);
+    ready(h);
     const hold = vi.spyOn(h.session, "holdEnd");
     // When
     await h.deleteAccount.sendCode(h.view);
     // Then
-    expect(h.authenticator.sendCode).toHaveBeenCalledWith(
-      expect.objectContaining({
-        email: "archer@example.test",
-        captchaToken: "check",
-        shouldCreateUser: false,
-      }),
-    );
-    expect(h.view.observedState.step).toBe("code");
-    expect(hold).not.toHaveBeenCalled();
+    expect(h.authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
+      email: "archer@example.test",
+      captchaToken: "check",
+      shouldCreateUser: false,
+    });
+    expect(h.view.observedState).toMatchObject({
+      step: "code",
+      userId: "user-1",
+      email: "archer@example.test",
+      pending: null,
+      error: null,
+    });
     expect(h.account.delete).not.toHaveBeenCalled();
+    expect(h.eraser.erase).not.toHaveBeenCalled();
+    expect(hold).not.toHaveBeenCalled();
   });
-  it("確認結果のIDが一致したとき同じ対象で削除し、端末記録を消して遷移元なしのサインインへ進む", async () => {
+  it("チェックが未完了の押下は、現在の利用者の取得も送付も始めず、意思確認のまま処理中として待つ", async () => {
+    // Given
+    const h = setup();
+    // When
+    await h.deleteAccount.sendCode(h.view);
+    // Then
+    expect(h.authenticator.readCurrentAccount).not.toHaveBeenCalled();
+    expect(h.authenticator.sendCode).not.toHaveBeenCalled();
+    expect(h.view.observedState).toMatchObject({
+      step: "confirmation",
+      pending: "send",
+      awaitingCheck: true,
+    });
+  });
+  it("コードを確認し、確認後に読み直した現在の利用者とメールが依頼時と一致すると、同じ対象で削除し、端末記録を消して遷移元なしのサインインへ進む", async () => {
     // Given
     const h = setup();
     await sendOtp(h);
@@ -91,7 +94,7 @@ describe("アカウント削除", () => {
     expect(h.account.delete).toHaveBeenCalledExactlyOnceWith("user-1");
     expect(h.eraser.erase).toHaveBeenCalledExactlyOnceWith("user-1");
     expect(h.page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
-    expect(h.view.observedState.submitting).toBe(true);
+    expect(h.view.observedState.pending).toBe("verify");
   });
   it("消去失敗でも削除済み利用者のセッションを終了する", async () => {
     // Given
@@ -104,12 +107,12 @@ describe("アカウント削除", () => {
     expect(h.page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
   });
   it.each(["send", "verify"] as const)(
-    "%s前に利用者が切り替われば処理を止める",
+    "コード入力で%s前に利用者が切り替われば、要求を出さずコード入力に留まってエラーを示す",
     async (operation) => {
       // Given
       const h = setup();
-      if (operation === "send") await openRequest(h);
-      else await sendOtp(h);
+      await sendOtp(h);
+      if (operation === "send") passResendWait(h);
       h.authenticator.readCurrentAccount.mockResolvedValue({
         kind: "current",
         userId: "user-2",
@@ -121,27 +124,15 @@ describe("アカウント削除", () => {
       // Then
       expect(h.account.delete).not.toHaveBeenCalled();
       expect(h.authenticator.verifyCode).not.toHaveBeenCalled();
-      expect(h.authenticator.sendCode).toHaveBeenCalledTimes(
-        operation === "send" ? 0 : 1,
-      );
+      expect(h.authenticator.sendCode).toHaveBeenCalledTimes(1);
       expect(h.eraser.erase).not.toHaveBeenCalled();
+      expect(h.view.observedState).toMatchObject({
+        step: "code",
+        error: "other",
+        pending: null,
+      });
     },
   );
-  it("確認応答の利用者が異なる場合は削除を呼ばない", async () => {
-    // Given
-    const h = setup();
-    await sendOtp(h);
-    h.authenticator.verifyCode.mockResolvedValue({
-      kind: "verified",
-      userId: "user-2",
-    });
-    // When
-    await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
-    // Then
-    expect(h.account.delete).not.toHaveBeenCalled();
-    expect(h.eraser.erase).not.toHaveBeenCalled();
-    expect(h.view.observedState.error).toBe("other");
-  });
   it("同じIDでも送付先メールが変わればコードを確認しない", async () => {
     // Given
     const h = setup();
@@ -157,7 +148,7 @@ describe("アカウント削除", () => {
     expect(h.authenticator.verifyCode).not.toHaveBeenCalled();
     expect(h.account.delete).not.toHaveBeenCalled();
   });
-  it("確認応答を待つ間に現在メールが変わった場合は削除を開始しない", async () => {
+  it("確認応答を待つ間に現在メールが変わった場合は削除を開始せず、意思確認へ戻ってその他の失敗を示す", async () => {
     // Given
     const h = setup();
     await sendOtp(h);
@@ -173,31 +164,38 @@ describe("アカウント削除", () => {
       email: "changed@example.test",
     });
     // When
-    response.resolve({ kind: "verified", userId: "user-1" });
+    response.resolve({ kind: "verified" });
     await running;
     // Then
     expect(h.account.delete).not.toHaveBeenCalled();
     expect(h.eraser.erase).not.toHaveBeenCalled();
+    expect(h.view.observedState).toMatchObject({
+      step: "confirmation",
+      error: "other",
+      pending: null,
+    });
   });
-  it("確認後の削除がOTP不足（確認から60秒超過）なら記録を消さず、意思確認へ戻って再確認の案内を持つ", async () => {
+  it("確認後の削除が失敗（拒否・確定失敗・結果不明の区別なし）で終わると、記録を消さず、意思確認へ戻ってその他の失敗を示し、対象と再送待機を保ってトークンを破棄し、保持を解く", async () => {
     // Given
     const h = setup();
     await sendOtp(h);
-    h.account.delete.mockResolvedValue({
-      kind: "failed",
-      failure: { kind: "otp_required" },
-    });
+    h.view.dispatch({ type: "captchaChecked", token: "resend-check" });
+    h.account.delete.mockResolvedValue({ kind: "failed" });
     // When
     await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
     // Then
     expect(h.view.observedState).toMatchObject({
       step: "confirmation",
+      error: "other",
       pending: null,
-      submitting: false,
-      error: "otp_required",
+      userId: "user-1",
+      email: "archer@example.test",
+      resendCooldown: 60,
+      captchaToken: null,
     });
     expect(h.eraser.erase).not.toHaveBeenCalled();
     expect(h.page.replace).not.toHaveBeenCalled();
+    expect(h.clock.pendingCount()).toBe(0);
   });
   it.each(["code_expired", "rate_limited", "unreachable"] as const)(
     "コード確認の%sでは削除せずコード段階を保つ",
@@ -221,51 +219,21 @@ describe("アカウント削除", () => {
       expect(h.eraser.erase).not.toHaveBeenCalled();
     },
   );
-  it.each(["unreachable", "other"] as const)(
-    "削除が%sで終わると記録を消さず理由を示して操作を戻す",
-    async (kind) => {
-      // Given
-      const h = setup();
-      await sendOtp(h);
-      h.account.delete.mockResolvedValue({ kind: "failed", failure: { kind } });
-      // When
-      await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
-      // Then
-      expect(h.eraser.erase).not.toHaveBeenCalled();
-      expect(h.page.replace).not.toHaveBeenCalled();
-      expect(h.view.observedState).toMatchObject({
-        error: kind,
-        submitting: false,
-        pending: null,
-      });
-    },
-  );
-  it("削除が通信失敗で終わると、意思確認から再試行する段階へ戻る", async () => {
-    // Given
-    const h = setup();
-    await sendOtp(h);
-    h.account.delete.mockResolvedValue({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-    // When
-    await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
-    // Then
-    expect(h.view.observedState.step).toBe("confirmation");
-  });
 });
 
 describe("排他と保持", () => {
-  it("意思確認の二重押下は現在の利用者の取得を重複させない", async () => {
+  it("「アカウントを削除」の二重押下は現在の利用者の取得も送付も重複させない", async () => {
     // Given
     const h = setup();
+    ready(h);
     // When
     await Promise.all([
-      h.deleteAccount.submit(h.view),
-      h.deleteAccount.submit(h.view),
+      h.deleteAccount.sendCode(h.view),
+      h.deleteAccount.sendCode(h.view),
     ]);
     // Then
     expect(h.authenticator.readCurrentAccount).toHaveBeenCalledOnce();
+    expect(h.authenticator.sendCode).toHaveBeenCalledOnce();
     expect(h.account.delete).not.toHaveBeenCalled();
   });
   it("確認して削除の二重押下はコード確認も削除も重複させない", async () => {
@@ -292,7 +260,7 @@ describe("排他と保持", () => {
     expect(h.authenticator.verifyCode).not.toHaveBeenCalled();
     expect(h.account.delete).not.toHaveBeenCalled();
     expect(h.view.observedState).toMatchObject({
-      submitting: false,
+      pending: null,
       error: "unreachable",
     });
   });
@@ -323,16 +291,16 @@ describe("排他と保持", () => {
     h.account.delete.mockReturnValue(response.promise);
     const running = h.deleteAccount.verifyCode({ code: "123456" }, h.view);
     await h.clock.advanceAsync(89999);
-    const before = h.view.observedState.submitting;
+    const before = h.view.observedState.pending;
     // When
     await h.clock.advanceAsync(1);
     await running;
     response.resolve({ kind: "deleted" });
     await h.clock.advanceAsync(1);
     // Then
-    expect(before).toBe(true);
+    expect(before).toBe("verify");
     expect(h.view.observedState).toMatchObject({
-      submitting: false,
+      pending: null,
       error: "unreachable",
     });
     expect(h.eraser.erase).not.toHaveBeenCalled();
@@ -348,7 +316,7 @@ describe("排他と保持", () => {
     await h.clock.advanceAsync(90000);
     await running;
     // When
-    response.resolve({ kind: "verified", userId: "user-1" });
+    response.resolve({ kind: "verified" });
     await h.clock.advanceAsync(1);
     // Then
     expect(h.account.delete).not.toHaveBeenCalled();
@@ -394,7 +362,7 @@ describe("排他と保持", () => {
     expect(h.eraser.erase).toHaveBeenCalledExactlyOnceWith("user-1");
     expect(h.page.replace).not.toHaveBeenCalled();
     expect(h.view.observedState).toMatchObject({
-      submitting: false,
+      pending: null,
       error: "unreachable",
     });
   });
@@ -413,43 +381,28 @@ describe("排他と保持", () => {
 });
 
 describe("対象の確認の失敗", () => {
-  it("意思確認で現在の利用者の取得に失敗したときはコード要求へ進まずその失敗を示す", async () => {
+  it("「アカウントを削除」の送信で認証の喪失が分かったときは、送付せず意思確認に留まり、セッションの読み直しへ委ねる", async () => {
     // Given
     const h = setup();
-    h.authenticator.readCurrentAccount.mockResolvedValue({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-    // When
-    await h.deleteAccount.submit(h.view);
-    // Then
-    expect(h.account.delete).not.toHaveBeenCalled();
-    expect(h.view.observedState).toMatchObject({
-      step: "confirmation",
-      submitting: false,
-      error: "unreachable",
-    });
-  });
-  it("意思確認で認証の喪失が分かったときはコード要求へ進まずセッションの読み直しへ委ねる", async () => {
-    // Given
-    const h = setup();
+    ready(h);
     h.authenticator.readCurrentAccount.mockResolvedValue({ kind: "lost" });
     // When
-    await h.deleteAccount.submit(h.view);
+    await h.deleteAccount.sendCode(h.view);
     // Then
+    expect(h.authenticator.sendCode).not.toHaveBeenCalled();
     expect(h.account.delete).not.toHaveBeenCalled();
     expect(h.authenticator.readSession).toHaveBeenCalledWith({ refresh: true });
     expect(h.view.observedState).toMatchObject({
       step: "confirmation",
-      submitting: false,
+      pending: null,
     });
   });
   it.each(["send", "verify"] as const)(
-    "%s前の現在の利用者の取得に失敗したときは要求を出さずその失敗を示す",
+    "%s前の現在の利用者の取得に失敗したときは要求を出さず、その画面に留まって失敗を示す",
     async (operation) => {
       // Given
       const h = setup();
-      if (operation === "send") await openRequest(h);
+      if (operation === "send") ready(h);
       else await sendOtp(h);
       h.authenticator.readCurrentAccount.mockResolvedValue({
         kind: "failed",
@@ -464,10 +417,14 @@ describe("対象の確認の失敗", () => {
       );
       expect(h.authenticator.verifyCode).not.toHaveBeenCalled();
       expect(h.account.delete).not.toHaveBeenCalled();
-      expect(h.view.observedState.error).toBe("unreachable");
+      expect(h.view.observedState).toMatchObject({
+        step: operation === "send" ? "confirmation" : "code",
+        error: "unreachable",
+        pending: null,
+      });
     },
   );
-  it("確認応答の後の現在の利用者の取得に失敗したときは削除を開始せずその失敗を示す", async () => {
+  it("確認応答の後の現在の利用者の取得に失敗したときは削除を開始せず、意思確認へ戻ってその他の失敗を示す", async () => {
     // Given
     const h = setup();
     await sendOtp(h);
@@ -483,15 +440,19 @@ describe("対象の確認の失敗", () => {
     expect(h.authenticator.verifyCode).toHaveBeenCalledOnce();
     expect(h.account.delete).not.toHaveBeenCalled();
     expect(h.eraser.erase).not.toHaveBeenCalled();
-    expect(h.view.observedState.error).toBe("unreachable");
+    expect(h.view.observedState).toMatchObject({
+      step: "confirmation",
+      error: "other",
+      pending: null,
+    });
   });
 });
 
 describe("コード送付と確認の失敗・オフライン・離脱", () => {
-  it("コード送付が拒否されたときは削除を呼ばず、意思確認に留まってその失敗を示す", async () => {
+  it("送信間隔などでコード送付が拒否されたときは削除を呼ばず、意思確認に留まってその理由を示す", async () => {
     // Given
     const h = setup();
-    await openRequest(h);
+    ready(h);
     h.authenticator.sendCode.mockResolvedValue({
       kind: "failed",
       failure: { kind: "rate_limited" },
@@ -502,21 +463,55 @@ describe("コード送付と確認の失敗・オフライン・離脱", () => {
     expect(h.view.observedState).toMatchObject({
       step: "confirmation",
       error: "rate_limited",
-      submitting: false,
+      pending: null,
     });
     expect(h.account.delete).not.toHaveBeenCalled();
   });
-  it.each(["submit", "send", "verify"] as const)(
+  it("コード入力での再送が拒否されたときは、コード入力に留まってその理由を示す", async () => {
+    // Given
+    const h = setup();
+    await sendOtp(h);
+    passResendWait(h);
+    h.authenticator.sendCode.mockResolvedValue({
+      kind: "failed",
+      failure: { kind: "rate_limited" },
+    });
+    // When
+    await h.deleteAccount.sendCode(h.view);
+    // Then
+    expect(h.view.observedState).toMatchObject({
+      step: "code",
+      error: "rate_limited",
+      pending: null,
+    });
+    expect(h.account.delete).not.toHaveBeenCalled();
+  });
+  it("コード入力で再送待機と取り直したチェックの後に再送すると、同じ対象の現在メールへ新しいチェックの結果で送る", async () => {
+    // Given
+    const h = setup();
+    await sendOtp(h);
+    passResendWait(h);
+    // When
+    await h.deleteAccount.sendCode(h.view);
+    // Then
+    expect(h.authenticator.sendCode).toHaveBeenLastCalledWith({
+      email: "archer@example.test",
+      captchaToken: "resend-check",
+      shouldCreateUser: false,
+    });
+    expect(h.authenticator.sendCode).toHaveBeenCalledTimes(2);
+    expect(h.view.observedState).toMatchObject({ step: "code", error: null });
+  });
+  it.each(["send", "verify"] as const)(
     "オフラインでは%sの対象確認も要求も行わない",
     async (operation) => {
       // Given
       const h = setup();
-      if (operation === "send") await openRequest(h);
+      if (operation === "send") ready(h);
       if (operation === "verify") await sendOtp(h);
       h.authenticator.readCurrentAccount.mockClear();
       h.connectivity.goOffline();
       // When
-      if (operation === "submit") await h.deleteAccount.submit(h.view);
       if (operation === "send") await h.deleteAccount.sendCode(h.view);
       if (operation === "verify")
         await h.deleteAccount.verifyCode({ code: "123456" }, h.view);
@@ -529,24 +524,10 @@ describe("コード送付と確認の失敗・オフライン・離脱", () => {
       expect(h.account.delete).not.toHaveBeenCalled();
     },
   );
-  it("意思確認の対象確認を待つ間に画面を離れると、遅い応答で段階を進めない", async () => {
-    // Given
-    const h = setup();
-    const response = Promise.withResolvers<CurrentAccountResult>();
-    h.authenticator.readCurrentAccount.mockReturnValue(response.promise);
-    const running = h.deleteAccount.submit(h.view);
-    h.screen.mounted = false;
-    // When
-    response.resolve(CURRENT);
-    await running;
-    // Then
-    expect(h.events).toEqual([]);
-    expect(h.account.delete).not.toHaveBeenCalled();
-  });
   it("コード送付の対象確認を待つ間に画面を離れると送付を始めない", async () => {
     // Given
     const h = setup();
-    await openRequest(h);
+    ready(h);
     const response = Promise.withResolvers<CurrentAccountResult>();
     h.authenticator.readCurrentAccount.mockReturnValue(response.promise);
     const running = h.deleteAccount.sendCode(h.view);
@@ -560,7 +541,7 @@ describe("コード送付と確認の失敗・オフライン・離脱", () => {
   it("コード送付の応答を待つ間に画面を離れると遅い応答で段階を進めない", async () => {
     // Given
     const h = setup();
-    await openRequest(h);
+    ready(h);
     const response = Promise.withResolvers<CallResult>();
     h.authenticator.sendCode.mockReturnValue(response.promise);
     const running = h.deleteAccount.sendCode(h.view);
@@ -570,8 +551,8 @@ describe("コード送付と確認の失敗・オフライン・離脱", () => {
     response.resolve({ kind: "accepted" });
     await running;
     // Then
-    expect(h.view.observedState.step).not.toBe("code");
-    expect(h.events.map(({ type }) => type)).not.toContain("codeSent");
+    expect(h.view.observedState.step).toBe("confirmation");
+    expect(h.events.map(({ type }) => type)).not.toContain("codeSentTo");
   });
   it("削除応答待ちに離脱しても、成功確認後の消去と終了は進め、表示は更新しない", async () => {
     // Given
@@ -602,7 +583,7 @@ describe("コード送付と確認の失敗・オフライン・離脱", () => {
     h.screen.mounted = false;
     const before = h.events.length;
     // When
-    response.resolve({ kind: "failed", failure: { kind: "other" } });
+    response.resolve({ kind: "failed" });
     await running;
     // Then
     expect(h.events).toHaveLength(before);

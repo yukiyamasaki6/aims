@@ -97,6 +97,18 @@ export function beginSendCode(
   });
 }
 
+// 送付先を入力で受けず、手続きが認証サービスから読む画面の送信の開始。再送待機とチェックは通常の送信と同じ。
+export function beginSendCodeToCurrent(
+  flow: EmailOtpFlow,
+  input: { offline: boolean },
+): Start<EmailOtpFlow, { captchaToken: string }> {
+  return begin(flow, "send", input.offline, true, () => {
+    const wait = validateResendWait(flow.resendCooldown);
+    if (wait) return { ok: false, fieldErrors: { resend: wait } };
+    return { ok: true, request: { captchaToken: flow.captchaToken ?? "" } };
+  });
+}
+
 export function beginVerifyCode(
   flow: EmailOtpFlow,
   input: { email: string; code: string; offline: boolean },
