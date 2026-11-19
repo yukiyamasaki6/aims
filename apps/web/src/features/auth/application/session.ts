@@ -1,4 +1,5 @@
 import type { Clock } from "@/lib/clock/contract/clock";
+import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import { lostByStatus, type SessionStatus } from "../domain/auth-change";
 import type { AuthFailure } from "../domain/auth-failure";
 import { signInHref } from "../domain/auth-routes";
@@ -12,6 +13,7 @@ import {
   releaseEnd,
   SIGN_OUT_TIMEOUT_MS,
   type SignOutVerdict,
+  startSignOut,
 } from "../domain/session-end-flow";
 import type { SignInChanges } from "./auth-changes";
 import { type CallResult, failureOf } from "./call-result";
@@ -38,8 +40,10 @@ export type SessionReader = {
 // 例外は投げない(購読だけは、接続を得られないとき同期に投げる)。
 export type SessionAuthenticator = SignInChanges &
   SessionReader & {
-    // この端末のサインインだけを終える。
+    // この端末のサインインだけを終える。認証サービスでセッションの失効が受け付けられたときだけ、保存先のセッションを削除する。受け付けられなかったときは保存先に触らず失敗を返す。
     signOutHere(): Promise<CallResult>;
+    // 保存先のセッションを、認証サービスの応答に関わらず削除する。アカウント削除の完了用(削除済みの利用者のセッションを端末から消す)。
+    discardHere(): Promise<CallResult>;
   };
 
 // 記録の利用者(この文書の間、変わらない)との照合。持ち主は他の機能(ラウンドの記録)で、入口が渡す。
@@ -62,7 +66,7 @@ export type SessionEndHold = {
   isActive(): boolean;
   // 上限の計時を止める。削除の応答を受けた時点で呼ぶ。
   disarm(): void;
-  // この端末のサインインを終え、終えられたら遷移元を付けずにサインインへ移す。サインアウトの終え方と共通で、SIGN_OUT_TIMEOUT_MSで打ち切る。
+  // この端末のセッションを(失敗でも)削除し、終えられたら遷移元を付けずにサインインへ移す。判定と打ち切りはサインアウトと共通で、SIGN_OUT_TIMEOUT_MSで打ち切る。
   // failed: 終えられなかった(通信エラー)。それ以外は、完了(遷移で画面ごと捨てられる)。
   complete(): Promise<SignOutResult>;
   // 実行中を解き、サインインの状態を確かめて、失っていれば喪失として移す。
@@ -75,6 +79,7 @@ type Dependencies = {
   recordUser: RecordUser;
   identity: IdentityReader & IdentityWriter;
   clock: Clock;
+  connectivity: Pick<Connectivity, "isOffline">;
 };
 
 export type Session = {
@@ -104,19 +109,25 @@ export function createSession({
   recordUser,
   identity,
   clock,
+  connectivity,
 }: Dependencies): Session {
   let flow = initialSessionEndFlow;
 
   async function signOut(): Promise<SignOutResult> {
-    const start = beginSignOut(flow);
+    const start = startSignOut(flow, connectivity.isOffline());
     flow = start.state;
+    if (start.failure !== null)
+      return { kind: "failed", failure: start.failure };
     if (start.request === null) return { kind: "ignored" };
-    return endWithin(flow.generation);
+    return endWithin(flow.generation, authenticator.signOutHere);
   }
 
   // 世代mineの実行を、サインインの終了の上限(SIGN_OUT_TIMEOUT_MS)で打ち切って進める。
   // 打ち切りは、時計のコールバックの中で同期に適用する。完了と同時なら、先に決まった一方だけが効く。
-  async function endWithin(mine: number): Promise<SignOutResult> {
+  async function endWithin(
+    mine: number,
+    end: () => Promise<CallResult>,
+  ): Promise<SignOutResult> {
     const { promise: expired, resolve } =
       Promise.withResolvers<SignOutResult>();
     const cancel = clock.after(SIGN_OUT_TIMEOUT_MS, () => {
@@ -126,15 +137,18 @@ export function createSession({
       resolve(resultOf(expiry.result));
     });
     try {
-      return await Promise.race([finishSignOut(mine), expired]);
+      return await Promise.race([finishSignOut(mine, end), expired]);
     } finally {
       cancel();
     }
   }
 
   // 世代が変わった(打ち切られた)後は、状態も遷移も変えない。
-  async function finishSignOut(mine: number): Promise<SignOutResult> {
-    const failure = failureOf(await authenticator.signOutHere());
+  async function finishSignOut(
+    mine: number,
+    end: () => Promise<CallResult>,
+  ): Promise<SignOutResult> {
+    const failure = failureOf(await end());
     if (flow.generation !== mine) return { kind: "ignored" };
     const reading = await authenticator.readSession();
     if (flow.generation !== mine) return { kind: "ignored" };
@@ -163,7 +177,7 @@ export function createSession({
       disarm: cancel,
       complete() {
         cancel();
-        return endWithin(mine);
+        return endWithin(mine, authenticator.discardHere);
       },
       async release() {
         cancel();

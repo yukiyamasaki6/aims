@@ -30,7 +30,24 @@ export type SignOutVerdict =
   | { readonly kind: "completed" }
   | { readonly kind: "failed"; readonly failure: AuthFailure };
 
-// サインアウトを始める。実行中なら始めない。アカウント削除の保持(holdEnd)も、同じ命令で実行中を取る。
+// サインアウトの開始の結果。始めないとき(request が null)は、failure がオフラインの失敗(オフラインで拒否した)か、null(実行中のため始めなかった)。
+export type SignOutStart = Start<SessionEndFlow, true> & {
+  readonly failure: AuthFailure | null;
+};
+
+// サインアウトを始める。実行中なら始めない(failureなし)。実行中でなくオフラインなら、始めずにオフラインの失敗を返す(状態も世代も変えない)。
+export function startSignOut(
+  flow: SessionEndFlow,
+  offline: boolean,
+): SignOutStart {
+  if (flow.running) return { state: flow, request: null, failure: null };
+  if (offline) {
+    return { state: flow, request: null, failure: { kind: "offline" } };
+  }
+  return { ...beginSignOut(flow), failure: null };
+}
+
+// 実行中を取る。アカウント削除の保持(holdEnd)は、この命令を使う(オフラインの判定は削除側が行うため、含めない)。
 export function beginSignOut(
   flow: SessionEndFlow,
 ): Start<SessionEndFlow, true> {

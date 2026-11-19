@@ -48,6 +48,10 @@ export function createDeleteAccountHarness({
       state.status = "unauthenticated";
       return accepted;
     }),
+    discardHere: vi.fn(async (): Promise<CallResult> => {
+      state.status = "unauthenticated";
+      return accepted;
+    }),
     subscribe: vi.fn((listener: (change: SignInChange) => void) => {
       listeners.push(listener);
       return () => {
@@ -81,6 +85,7 @@ export function createDeleteAccountHarness({
         recorded.userId = userId;
       },
     },
+    connectivity,
   });
   const deleteAccount = createDeleteAccount({
     authenticator,

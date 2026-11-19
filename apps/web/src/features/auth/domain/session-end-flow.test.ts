@@ -7,6 +7,7 @@ import {
   initialSessionEndFlow,
   leave,
   releaseEnd,
+  startSignOut,
 } from "./session-end-flow";
 
 describe("beginSignOut", () => {
@@ -48,6 +49,61 @@ describe("beginSignOut", () => {
 
     // Then
     expect(result.request).not.toBeNull();
+  });
+});
+
+describe("startSignOut", () => {
+  it("オンラインで未実行なら、実行中にして開始する", () => {
+    // Given
+    const state = initialSessionEndFlow;
+
+    // When
+    const result = startSignOut(state, false);
+
+    // Then
+    expect(result).toEqual({
+      state: { running: true, generation: 1 },
+      request: true,
+      failure: null,
+    });
+  });
+
+  it("オフラインで未実行なら、状態も世代も変えずに、offlineの失敗で開始しない", () => {
+    // Given
+    const state = initialSessionEndFlow;
+
+    // When
+    const result = startSignOut(state, true);
+
+    // Then
+    expect(result.state).toBe(state);
+    expect(result.request).toBeNull();
+    expect(result.failure).toEqual({ kind: "offline" });
+  });
+
+  it("オフラインでも実行中なら、offlineの失敗にせず、状態を変えずに開始しない", () => {
+    // Given
+    const running = beginSignOut(initialSessionEndFlow).state;
+
+    // When
+    const result = startSignOut(running, true);
+
+    // Then
+    expect(result.state).toBe(running);
+    expect(result.request).toBeNull();
+    expect(result.failure).toBeNull();
+  });
+
+  it("オフラインで拒否した後、オンラインになれば、世代が進まずに開始できる", () => {
+    // Given
+    const rejected = startSignOut(initialSessionEndFlow, true).state;
+
+    // When
+    const result = startSignOut(rejected, false);
+
+    // Then
+    expect(result.state).toEqual({ running: true, generation: 1 });
+    expect(result.request).toBe(true);
   });
 });
 

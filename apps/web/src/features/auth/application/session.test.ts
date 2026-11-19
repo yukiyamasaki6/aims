@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Clock } from "@/lib/clock/contract/clock";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type { SessionStatus } from "../domain/auth-change";
 import type { AuthFailure } from "../domain/auth-failure";
 import {
@@ -28,6 +29,8 @@ function readingOf(status: SessionStatus): SessionReading {
 function setup(
   options: {
     signOutHere?: () => Promise<AuthFailure | null>;
+    discardHere?: () => Promise<AuthFailure | null>;
+    offline?: boolean;
     check?: () => Promise<SessionStatus>;
     here?: string;
     // 識別情報を保存できない環境(書いても読み戻せない)にする。
@@ -40,8 +43,11 @@ function setup(
   const state: { status: SessionStatus } = { status: "authenticated" };
   const check = options.check ?? (async () => state.status);
   const signOutHere = options.signOutHere ?? (async () => null);
+  const discardHere = options.discardHere ?? (async () => null);
+  const connectivity = createFakeConnectivity(options.offline ?? false);
   const authority = {
     signOutHere: vi.fn(async () => resultOf(await signOutHere())),
+    discardHere: vi.fn(async () => resultOf(await discardHere())),
     readSession: vi.fn(async () => readingOf(await check())),
     subscribe: vi.fn((listener: (event: SignInChange) => void) => {
       listeners.push(listener);
@@ -75,9 +81,11 @@ function setup(
     pageReplace: page,
     recordUser,
     identity,
+    connectivity,
   });
   return {
     session,
+    connectivity,
     clock: manualClock,
     authority,
     page,
@@ -145,6 +153,58 @@ describe("サインアウト", () => {
         expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
       },
     );
+  });
+
+  describe("オフラインの場合", () => {
+    it("認証サービスを呼ばず、offlineの失敗を返し、遷移しない", async () => {
+      // Given
+      const { session, authority, page } = setup({ offline: true });
+
+      // When
+      const result = await session.signOut();
+
+      // Then
+      expect(result).toEqual({ kind: "failed", failure: { kind: "offline" } });
+      expect(authority.signOutHere).not.toHaveBeenCalled();
+      expect(authority.readSession).not.toHaveBeenCalled();
+      expect(page.replace).not.toHaveBeenCalled();
+    });
+
+    it("拒否した後、オンラインにして再度サインアウトすると、完了して遷移元の無いサインインへ移る", async () => {
+      // Given
+      const { session, authority, connectivity, page, state } = setup({
+        offline: true,
+      });
+      authority.signOutHere.mockImplementation(async () => {
+        state.status = "unauthenticated";
+        return accepted;
+      });
+      await session.signOut();
+      connectivity.goOnline();
+
+      // When
+      const result = await session.signOut();
+
+      // Then
+      expect(result).toEqual({ kind: "ignored" });
+      expect(authority.signOutHere).toHaveBeenCalledOnce();
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+
+    it("拒否は10秒の打ち切りの計時を始めず、時間が進んでも結果も遷移も変わらない", async () => {
+      // Given
+      const { session, authority, clock, page } = setup({ offline: true });
+      const result = await session.signOut();
+
+      // When
+      await clock.advanceAsync(SIGN_OUT_TIMEOUT_MS);
+
+      // Then
+      expect(result).toEqual({ kind: "failed", failure: { kind: "offline" } });
+      expect(clock.pendingCount()).toBe(0);
+      expect(authority.signOutHere).not.toHaveBeenCalled();
+      expect(page.replace).not.toHaveBeenCalled();
+    });
   });
 
   describe("上限(SIGN_OUT_TIMEOUT_MS)までに終わらない場合", () => {
@@ -334,6 +394,12 @@ describe("サインアウト", () => {
         "authenticated",
         { kind: "rate_limited" },
         { kind: "rate_limited" },
+      ],
+      [
+        "読み取りが認証済みで、終了がその他の失敗を返した",
+        "authenticated",
+        { kind: "other" },
+        { kind: "other" },
       ],
       [
         "読み取りが不明で、終了が届かなかった",
@@ -629,12 +695,12 @@ describe("セッションの終了の保持(アカウント削除用)", () => {
   });
 
   describe("complete", () => {
-    it("この端末のサインインを終え、終えられたら、遷移元の無いサインインへ移る", async () => {
+    it("端末のセッションを削除し(サインアウトの失効は頼まず)、終えられたら、遷移元の無いサインインへ移る", async () => {
       // Given
       const { session, authority, page, state } = setup({
         here: "/rounds#settings/account/delete-account",
       });
-      authority.signOutHere.mockImplementation(async () => {
+      authority.discardHere.mockImplementation(async () => {
         state.status = "unauthenticated";
         return accepted;
       });
@@ -645,7 +711,26 @@ describe("セッションの終了の保持(アカウント削除用)", () => {
 
       // Then
       expect(result).toEqual({ kind: "ignored" });
-      expect(authority.signOutHere).toHaveBeenCalledOnce();
+      expect(authority.discardHere).toHaveBeenCalledOnce();
+      expect(authority.signOutHere).not.toHaveBeenCalled();
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+
+    it("オフラインでも、オフラインの判定を受けず、端末のセッションを削除する", async () => {
+      // Given
+      const { session, authority, page, state } = setup({ offline: true });
+      authority.discardHere.mockImplementation(async () => {
+        state.status = "unauthenticated";
+        return accepted;
+      });
+      const hold = session.holdEnd();
+
+      // When
+      const result = await hold?.complete();
+
+      // Then
+      expect(result).toEqual({ kind: "ignored" });
+      expect(authority.discardHere).toHaveBeenCalledOnce();
       expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
     });
 
@@ -665,7 +750,7 @@ describe("セッションの終了の保持(アカウント削除用)", () => {
     it("保持の上限(90秒)の計時を止め、サインアウトと同じ10秒で打ち切る", async () => {
       // Given
       const { session, clock, page } = setup({
-        signOutHere: () => new Promise<AuthFailure | null>(() => {}),
+        discardHere: () => new Promise<AuthFailure | null>(() => {}),
       });
       const hold = session.holdEnd();
       const result = hold?.complete();
@@ -682,7 +767,7 @@ describe("セッションの終了の保持(アカウント削除用)", () => {
       // Given
       const release = Promise.withResolvers<AuthFailure | null>();
       const { session, clock, state, page } = setup({
-        signOutHere: () => release.promise,
+        discardHere: () => release.promise,
       });
       state.status = "unauthenticated";
       const hold = session.holdEnd();

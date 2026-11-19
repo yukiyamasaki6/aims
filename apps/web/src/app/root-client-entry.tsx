@@ -250,6 +250,7 @@ function composeSession(inputs: Inputs, records: Records) {
     recordUser: records.control,
     identity: inputs.identityStore,
     clock: inputs.clock,
+    connectivity: inputs.connectivity,
   });
 }
 
