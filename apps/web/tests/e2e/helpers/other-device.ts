@@ -1,13 +1,37 @@
 import { randomUUID } from "node:crypto";
 import type { Page, Route } from "@playwright/test";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { testUserSession } from "./auth";
 import { signInAsTestUser } from "./rounds";
 
 // 他端末の操作を、ページとは別のsupabase-jsクライアントからRPCを直接呼んで再現する。
 // ページがオフラインの間に呼べば、他端末の操作が先に確定した状況を作れる。
+// ページが同じ宛先へ送ったコードの送信間隔を待たないよう、メールを送らず、
+// そのテストの記憶済みのセッションのアクセストークンだけを使う。
+// 更新しないクライアントにし、ブラウザと同じリフレッシュトークンを回さない。
 export async function openOtherDevice(email: string, password: string) {
-  const { supabase, userId } = await signInAsTestUser(email, password, true);
-  return { supabase, userId };
+  const stored = testUserSession(email);
+  if (!stored) return signInAsTestUser(email, password);
+  const supabase = createClient(url(), anonKey(), {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await supabase.auth.setSession(stored);
+  if (error || !data.user)
+    throw new Error(`Other device session failed: ${error?.code}`);
+  return { supabase, userId: data.user.id };
+}
+
+function url() {
+  const value = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!value)
+    throw new Error("Missing Supabase environment variables in e2e helper.");
+  return value;
+}
+function anonKey() {
+  const value = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!value)
+    throw new Error("Missing Supabase environment variables in e2e helper.");
+  return value;
 }
 
 export async function getDistanceIds(

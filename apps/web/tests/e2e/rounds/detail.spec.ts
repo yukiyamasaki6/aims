@@ -4,9 +4,9 @@ import { roundPath } from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,
+  injectStoredSession,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
-  signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
 import { disableRound, openOtherDevice } from "../helpers/other-device";
@@ -181,7 +181,9 @@ test("的の一覧を端末に保存せずにオフラインで開始したラ�
 
 test("他の端末で記録した入力中のラウンドは、オンラインで取得を済ませた後なら、一度も開かずにオフラインで再起動して開いても、記録と合計と仮の矢とテンキーが表示される", async ({
   profile,
+  baseURL,
 }) => {
+  if (!baseURL) throw new Error("Missing application URL in e2e test.");
   // 他の端末で記録した入力中のラウンドを用意し、この端末でサインインして端末への取得を済ませる。
   const roundId = await createRound({
     email: getSharedEmail(),
@@ -192,10 +194,10 @@ test("他の端末で記録した入力中のラウンドは、オンライン�
     shots: [shot(0, 1, "X"), shot(0, 1, "8")],
   });
   const first = await profile.open();
-  await signUpAndSignIn(first.page, {
-    email: getSharedEmail(),
-    password: SHARED_PASSWORD,
-  });
+  // 他の端末の記録の準備で確認済みのセッションを渡す(画面のサインインは同じ宛先の送信間隔を待つため)。
+  await injectStoredSession(first.context, baseURL, getSharedEmail());
+  await first.page.goto("/rounds");
+  await waitForHydration(first.page);
   await waitForServiceWorkerControl(first.page);
   await expectRoundBasesFetched(first.page, { roundId });
 

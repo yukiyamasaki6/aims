@@ -7,13 +7,13 @@ import {
   emailOfUser,
   signInWithEmailOtp,
   waitForHydration,
-  waitForOtpSendWindow,
 } from "../helpers/auth";
 import {
   getUserStatus,
   refreshStatus,
   updatePasswordDirect,
 } from "../helpers/auth-api";
+import { resetOtpSendInterval } from "../helpers/auth-db";
 import {
   getEmailFromMailpit,
   getOtpCodeFromMailpit,
@@ -112,8 +112,7 @@ test("未登録メールで保護画面の設定項目から認証すると、�
 test("登録済みメールで確認しても、同じ利用者IDと元の記録と他のセッションを維持する", async ({
   page,
 }) => {
-  // 実OTPで元の利用者と記録を準備する。実Authの送信間隔は管理APIのコード発行にも掛かるため、画面からの送付まで60秒待つ。
-  test.setTimeout(150000);
+  // 実OTPで元の利用者と記録を準備する。
   const email = `existing-signin-${randomUUID()}@aims.test`;
   await createConfirmedUser({ email });
   const client = anonymousClient();
@@ -130,7 +129,7 @@ test("登録済みメールで確認しても、同じ利用者IDと元の記録
     });
 
     // 同じメールを送付してコード入力へ進む。
-    await waitForOtpSendWindow(email);
+    await resetOtpSendInterval(email);
     const previous = await mailIds(email);
     await page.goto("/signin");
     await waitForHydration(page);

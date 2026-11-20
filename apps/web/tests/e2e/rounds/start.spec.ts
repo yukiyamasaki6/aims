@@ -5,6 +5,7 @@ import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
   getSharedEmail,
+  injectStoredSession,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
   signOutFromSettings,
@@ -131,7 +132,9 @@ test("的の一覧を端末に保存済みなら、オフラインでも開始�
 
 test("別のユーザーでサインインし直した後のオフラインでは、前のユーザーの個人プリセットが表示されない", async ({
   browser,
+  baseURL,
 }) => {
+  if (!baseURL) throw new Error("Missing application URL in e2e test.");
   // ユーザーAで開いて個人プリセットを端末に保存させ、サインアウトしてサインイン画面へ進む。
   const userA = {
     email: `e2e-start-user-a-${randomUUID()}@example.com`,
@@ -151,7 +154,10 @@ test("別のユーザーでサインインし直した後のオフラインで�
   const context = await browser.newContext({ storageState: undefined });
   const page = await context.newPage();
   await mockTurnstile(page);
-  await signUpAndSignIn(page, userA);
+  // ユーザーAは、プリセットの準備で確認済みのセッションを渡す(画面のサインインは同じ宛先の送信間隔を待つため)。
+  await injectStoredSession(context, baseURL, userA.email);
+  await page.goto("/rounds");
+  await waitForHydration(page);
   await openNewRound(page);
   await expect(presetButton(page, name)).toBeVisible();
   await page.goto("/rounds");
