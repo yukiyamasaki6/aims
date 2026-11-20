@@ -27,28 +27,9 @@ afterEach(() => {
 describe("スタンドアロンでvirtualKeyboardがある環境", () => {
   const standalone = { standalone: true, virtualKeyboard: true };
 
-  it("開くと、visualViewportの高さに拡大率を掛けた値をpxで書く", () => {
+  it("開くと、innerHeightをpxで書く", () => {
     // Given
-    // 拡大率が1以外の値で、掛け算を確かめる。
-    viewport = installFakeViewport({
-      ...standalone,
-      visualViewport: { height: 300, scale: 2 },
-    });
-
-    // When
-    renderHook(() => useAppHeight());
-
-    // Then
-    expect(appHeight()).toBe("600px");
-  });
-
-  it("visualViewportが無ければ、innerHeightをpxで書く", () => {
-    // Given
-    viewport = installFakeViewport({
-      ...standalone,
-      visualViewport: null,
-      innerHeight: 640,
-    });
+    viewport = installFakeViewport({ ...standalone, innerHeight: 640 });
 
     // When
     renderHook(() => useAppHeight());
@@ -57,10 +38,27 @@ describe("スタンドアロンでvirtualKeyboardがある環境", () => {
     expect(appHeight()).toBe("640px");
   });
 
-  it("visualViewportのresizeで更新する", () => {
+  it("visualViewportがあっても、その高さや拡大率は使わずinnerHeightを書く", () => {
+    // Given
+    // visualViewportをinnerHeightと食い違う値にして、読んでいないことを確かめる。
+    viewport = installFakeViewport({
+      ...standalone,
+      innerHeight: 700,
+      visualViewport: { height: 300, scale: 2 },
+    });
+
+    // When
+    renderHook(() => useAppHeight());
+
+    // Then
+    expect(appHeight()).toBe("700px");
+  });
+
+  it("visualViewportのresize(キーボード展開相当)では、書き直さない", () => {
     // Given
     viewport = installFakeViewport({
       ...standalone,
+      innerHeight: 700,
       visualViewport: { height: 700, scale: 1 },
     });
     renderHook(() => useAppHeight());
@@ -72,20 +70,17 @@ describe("スタンドアロンでvirtualKeyboardがある環境", () => {
     });
 
     // Then
-    expect(appHeight()).toBe("400px");
+    expect(appHeight()).toBe("700px");
   });
 
-  it("windowのresizeで、値が変わっていれば更新する", () => {
+  it("windowのresizeで、innerHeightが変わっていれば更新する", () => {
     // Given
-    viewport = installFakeViewport({
-      ...standalone,
-      visualViewport: { height: 700, scale: 1 },
-    });
+    viewport = installFakeViewport({ ...standalone, innerHeight: 700 });
     renderHook(() => useAppHeight());
 
     // When
     act(() => {
-      viewport.setVisualViewportHeight(450);
+      viewport.setInnerHeight(450);
       window.dispatchEvent(new Event("resize"));
     });
 
@@ -97,12 +92,13 @@ describe("スタンドアロンでvirtualKeyboardがある環境", () => {
     // Given
     viewport = installFakeViewport({
       ...standalone,
+      innerHeight: 700,
       visualViewport: { height: 700, scale: 1 },
     });
     renderHook(() => useAppHeight());
 
     // When
-    viewport.setVisualViewportHeight(650);
+    viewport.setInnerHeight(650);
     act(() => {
       vi.advanceTimersByTime(5000);
     });
@@ -119,13 +115,14 @@ describe("スタンドアロンでvirtualKeyboardがある環境", () => {
     // Given
     viewport = installFakeViewport({
       ...standalone,
+      innerHeight: 700,
       visualViewport: { height: 700, scale: 1 },
     });
     renderHook(() => useAppHeight());
 
     // When
     act(() => {
-      viewport.setVisualViewportHeight(450);
+      viewport.setInnerHeight(450);
       target.dispatchEvent(new Event(type));
     });
 
@@ -138,13 +135,13 @@ describe("スタンドアロンでvirtualKeyboardがある環境", () => {
     // 実機の高さは小数になり得るため、0.5pxの境界を小数で確かめる。
     viewport = installFakeViewport({
       ...standalone,
-      visualViewport: { height: 600, scale: 1 },
+      innerHeight: 600,
     });
     renderHook(() => useAppHeight());
     const change = (height: number) => {
       act(() => {
-        viewport.setVisualViewportHeight(height);
-        viewport.fireVisualViewportResize();
+        viewport.setInnerHeight(height);
+        window.dispatchEvent(new Event("resize"));
       });
       return appHeight();
     };
@@ -166,6 +163,7 @@ describe("スタンドアロンでvirtualKeyboardがある環境", () => {
     // Given
     viewport = installFakeViewport({
       ...standalone,
+      innerHeight: 700,
       visualViewport: { height: 700, scale: 1 },
     });
     const { unmount } = renderHook(() => useAppHeight());
@@ -174,13 +172,13 @@ describe("スタンドアロンでvirtualKeyboardがある環境", () => {
 
     // When
     unmount();
-    viewport.setVisualViewportHeight(300);
+    viewport.setInnerHeight(300);
     viewport.fireVisualViewportResize();
     window.dispatchEvent(new Event("resize"));
     vi.advanceTimersByTime(3000);
 
     // Then
-    expect(whileMounted).toBe(2);
+    expect(whileMounted).toBe(1);
     expect(timersWhileMounted).toBe(0);
     expect(viewport.subscriptions()).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
@@ -201,6 +199,7 @@ describe("補償が動かない環境", () => {
       // Given
       viewport = installFakeViewport({
         ...options,
+        innerHeight: 500,
         visualViewport: { height: 500, scale: 1 },
       });
 

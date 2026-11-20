@@ -103,16 +103,21 @@ Tailwind v4の`hover:`は、マウスを重ねられる環境(`@media (hover: ho
 ## 表示領域の高さの補償
 
 スタンドアロン(`display-mode: standalone`)かつ`navigator.virtualKeyboard`のある環境(Android Chrome系)では、起動時などに`100dvh`が可視の高さからずれ、画面の下端がはみ出すことがあった。
-そのため`src/hooks/use-app-height.ts`の`useAppHeight`(入口`root-client-entry.tsx`が呼ぶ)が、可視の高さ(`visualViewport.height * scale`、無ければ`innerHeight`)を`--app-height`へpxで書く。`app/layout.tsx`のbodyの高さ(`h-(--app-height)`)と各画面の`h-full`が、これに従う。
-書き直す契機は、マウント時、`window`の`resize`、`visualViewport`の`resize`だけで、直前の値との差が0.5px未満なら書かない。アンマウントで購読を全て解除する。
-ブラウザのタブやiOS Safariでは何もせず、`--app-height`は既定の`100dvh`のままである。iOS Safariはキーボードでの縮み方が変わる恐れがあるため対象にしない。
+そのため`src/hooks/use-app-height.ts`の`useAppHeight`(入口`root-client-entry.tsx`が呼ぶ)が、レイアウトビューポートの高さ(`innerHeight`)を`--app-height`へpxで書く。`visualViewport`は読まない。ソフトキーボードで縮むのはvisual viewportだけで、レイアウトビューポートは縮まない(`app/layout.tsx`の`interactiveWidget: "resizes-visual"`)ため、キーボードの開閉でbodyの高さが変わらない。`app/layout.tsx`のbodyの高さ(`h-(--app-height)`)と各画面の`h-full`が、これに従う。
+書き直す契機は、マウント時と`window`の`resize`だけで、直前の値との差が0.5px未満なら書かない。アンマウントで購読を全て解除する。
+ブラウザのタブやiOS Safariでは何もせず、`--app-height`は既定の`100dvh`のままである。iOS Safariは`interactiveWidget`に対応せず、可視の高さを書くとキーボードでの縮み方が変わる恐れがあるため対象にしない。
 
 削った契機: マウントから0.5秒・2秒後の再確認、`pageshow`・`orientationchange`・`visibilitychange`の購読。
 - 理由: 実機でAndroid Chrome系は上記の契機がなくても補償の効果が確認でき、タイマーと購読が増えるだけの複雑さを避けるため。
 - リスク: 通知(`resize`)なしに可視の高さが変わる環境で、値を取りこぼして下端がはみ出す恐れがある。はみ出しが起動直後、復帰直後、向きの変更後に再現したら、削った契機を`use-app-height.ts`へ戻す。
 
+削った契機の追加: `visualViewport`の`resize`の購読と、`visualViewport.height * scale`の読取り。
+- 理由: `resizes-visual`ではキーボードの展開でvisual viewportだけが縮み、これを書くとスタンドアロンでbodyがキーボード分縮んで、レイアウトが変わるため。ピンチズームの拡大率も高さに混ざるため読まない。
+- リスク: `innerHeight`が起動時に可視の高さと食い違う環境では補償が効かない。実機で再現したら、キーボードの有無を判別できる方法を検討する。
+
 ## 制約と未対応
 
+- ソフトキーボードの展開で、レイアウトビューポート基準の`fixed`要素(ダイアログ、ラウンドのホームの下部ボタン等)はキーボードに隠れうる。フォーカスした入力欄は、ブラウザがvisual viewportを動かして見せる。
 - 開閉状態は画面遷移やリロードで初期状態へ戻る。
 - オフラインではrefresh tokenの失効を検知できず、オンラインに戻った後の認証サービスの更新で検知する。
 - 遷移の瞬間に未完了のIndexedDBの書き込みは中断されうる。
