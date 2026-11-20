@@ -16,7 +16,7 @@ export function createSignIn({
 }): SignIn {
   return createEmailOtp({
     ...dependencies,
-    shouldCreateUser: false,
+    shouldCreateUser: true,
     complete: (from) => pageReplace.replace(destinationOf(from)),
   });
 }

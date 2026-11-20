@@ -10,6 +10,7 @@ import {
   type CodeField,
 } from "../domain/change-email-flow";
 import { type CallResult, failureOf } from "./call-result";
+import { type CooldownTick, tickResendCooldown } from "./email-otp";
 import type { ScreenView } from "./screen-view";
 
 // 認証サービスに、サインイン済みの利用者のメールアドレスを、現在と新しいメールアドレスの2つの認証コードで変更させる。
@@ -57,11 +58,8 @@ export type ChangeEmail = {
   ): Promise<void>;
   resend(view: ChangeEmailView): Promise<void>;
   // 再送の待ちを1秒進める出来事を、1秒後に1回送る予約。返す関数で取り消す。
-  tickCooldown(dispatch: ChangeEmailView["dispatch"]): () => void;
+  tickCooldown: CooldownTick;
 };
-
-// 再送の待ちの1秒の予約(業務の時間)。
-const COOLDOWN_TICK_MS = 1000;
 
 type Dependencies = {
   authenticator: ChangeEmailAuthenticator;
@@ -81,8 +79,7 @@ export function createChangeEmail({
     request: (input, view) => request(dependencies, input, view),
     confirm: (input, view) => confirm(dependencies, input, view),
     resend: (view) => resend(dependencies, view),
-    tickCooldown: (dispatch) =>
-      clock.after(COOLDOWN_TICK_MS, () => dispatch({ type: "cooldownTicked" })),
+    tickCooldown: tickResendCooldown(clock),
   };
 }
 

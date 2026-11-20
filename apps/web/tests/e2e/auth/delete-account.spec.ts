@@ -5,11 +5,10 @@ import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
-  markOtpSent,
   signInWithEmailOtp,
   signUpAndSignIn,
-  waitForOtpSendWindow,
 } from "../helpers/auth";
+import { backdateOtpEvidence, resetOtpSendInterval } from "../helpers/auth-db";
 import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
 import { signInOnOtherDevice } from "../helpers/other-browser-device";
 import { addRound, signInFreshUser } from "../helpers/round-fixtures";
@@ -25,14 +24,11 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 // 「アカウントを削除」を押し、別の送信ボタンを挟まずに届く新しいコードを確認して削除し、遷移元なしのサインインへ移ったことの確認で終わる。
 async function deleteWithNewCode(page: Page, email: string) {
-  // 実Authは同じ宛先への送信を60秒空けるため、直前のログインのコード送信から間隔を空ける。
-  await waitForOtpSendWindow(email);
+  // 実Authの送信間隔は、送信時刻の記録を戻して、直前のログインのコード送信から60秒が経過した状態にする。
+  await resetOtpSendInterval(email);
   const previous = await mailIds(email);
   await page.getByRole("button", { name: t("deleteAccountSubmit") }).click();
-  await expect(
-    page.getByRole("heading", { name: t("otpTitle") }),
-  ).toBeVisible();
-  markOtpSent(email);
+  await expect(page.getByPlaceholder(t("otpCodePlaceholder"))).toBeVisible();
   // コードを確認するまでは削除されず、設定パネルに留まる。
   await expect(page).toHaveURL(/#settings\/account\/delete-account$/);
   await page
@@ -44,7 +40,6 @@ async function deleteWithNewCode(page: Page, email: string) {
 test("OTPでログインした直後の利用者が設定から削除を選ぶと送信間隔の案内で留まり、間隔の後に押し直して現在メールへ届く新しいコードを確認すると削除されてサインインへ移り、再登録しても旧記録を表示しない", async ({
   page,
 }) => {
-  test.setTimeout(240000);
   // 実物のチェックは、送信のたびのやり直しで新しい結果を渡す。モックにも同じ取り直しをさせる。
   await page.addInitScript(() => {
     Object.assign(window, { e2eTurnstileReissueOnReset: true });
@@ -127,7 +122,6 @@ test("実AuthのOTPで署名されたJWTは本人の削除を許し改ざんJWT�
 });
 
 test("古いOTPのJWTは更新しても新しいコードの送付だけでも削除できず、再確認した新しいセッションだけが削除できる", async () => {
-  test.setTimeout(180000);
   const email = `delete-stale-${randomUUID()}@aims.test`;
   await createConfirmedUser({ email });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -153,19 +147,12 @@ test("古いOTPのJWTは更新しても新しいコードの送付だけでも�
   const otpRequired = { status: 403, message: "otp_confirmation_required" };
   try {
     const first = await signInWithEmailOtp(stale, email);
-    const verifiedAt = Date.now();
     const userId = first.data.user?.id ?? "";
     const firstToken = first.data.session?.access_token ?? "";
     expect(first.error === null && firstToken !== "").toBe(true);
-    // サーバーの認可にはテスト側の時計を使えないため、実際の60秒経過を待つ。
-    await expect
-      .poll(() => Date.now() - verifiedAt > 61000, {
-        timeout: 65000,
-        intervals: [1000],
-        message: "AuthのOTP証跡が60秒を超える",
-      })
-      .toBe(true);
-    expect(await rpc(firstToken, userId)).toEqual(otpRequired);
+    // サーバーの認可はテスト側の時計を使えないため、セッションのOTPの記録を2分戻してから更新し、60秒を超えて古い証跡のJWTを得る。
+    // 実際に60秒が経過することは確かめない。
+    await backdateOtpEvidence(email);
     const refreshed = await stale.auth.refreshSession();
     const refreshedToken = refreshed.data.session?.access_token ?? "";
     expect(refreshed.error === null && refreshedToken !== firstToken).toBe(
@@ -174,14 +161,13 @@ test("古いOTPのJWTは更新しても新しいコードの送付だけでも�
     expect(await rpc(refreshedToken, userId)).toEqual(otpRequired);
 
     // 新しいコードは送付されただけでは、どのセッションの証跡も更新しない。
-    await waitForOtpSendWindow(email);
+    await resetOtpSendInterval(email);
     const previous = await mailIds(email);
     const sent = await recent.auth.signInWithOtp({
       email,
       options: { shouldCreateUser: false, captchaToken: "test-captcha-token" },
     });
     expect(sent.error === null).toBe(true);
-    markOtpSent(email);
     const token = await getOtpCodeFromMailpit(email, previous);
     expect(await rpc(refreshedToken, userId)).toEqual(otpRequired);
 
@@ -206,7 +192,6 @@ test("別の端末でもサインインしている利用者がこの端末で�
   page,
   browser,
 }) => {
-  test.setTimeout(300000);
   // 別の端末でサインインして一覧を開く。
   const credentials = {
     email: `delete-other-device-${randomUUID()}@aims.test`,

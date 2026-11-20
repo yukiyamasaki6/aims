@@ -9,6 +9,7 @@ import {
   signInWithEmailOtp,
   signUpAndSignIn,
 } from "../helpers/auth";
+import { resetOtpSendInterval } from "../helpers/auth-db";
 import { fastForwardResendCooldown } from "../helpers/clock";
 import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
 import {
@@ -221,16 +222,8 @@ test("コード確認で再送の待機を過ぎて再送すると、新しい�
   await waitForTurnstileToken(page, 1);
   await fastForwardResendCooldown(page);
   await expect(resendButton).toHaveText(authText("otpResend"));
-  // ブラウザ時計の早送りはAuthの送信間隔を進めない。
-  test.setTimeout(150000);
-  const requestedAt = Date.now();
-  await expect
-    .poll(() => Date.now() - requestedAt >= 60000, {
-      timeout: 65000,
-      intervals: [1000],
-      message: "Authの再送間隔が経過する",
-    })
-    .toBe(true);
+  // ブラウザ時計の早送りはAuthの送信間隔を進めないため、送信時刻の記録を戻して実時間の経過の代わりにする。
+  await resetOtpSendInterval(addresses.current);
   previousMail.set(addresses.current, await mailIds(addresses.current));
   previousMail.set(addresses.next, await mailIds(addresses.next));
   await resendButton.click();

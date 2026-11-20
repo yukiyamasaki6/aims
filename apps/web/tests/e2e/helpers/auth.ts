@@ -10,6 +10,7 @@ import {
 import { type CookieOptions, createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { resetOtpSendInterval } from "./auth-db";
 import { getOtpCodeFromMailpit, mailIds } from "./mailpit";
 import { readStoredTokens } from "./stored-session";
 import { waitForTurnstileToken } from "./turnstile";
@@ -59,7 +60,7 @@ export function getSharedEmail(): string {
   return readFileSync(SHARED_EMAIL_PATH, "utf-8");
 }
 
-// サインアップ自体（OTPメール確認）の検証はsignup.spec.tsが
+// 登録とサインインの画面操作（OTPメール確認）の検証はsignin.spec.tsが
 // 担うため、それ以外のテストでは管理APIで確認済みユーザーを直接作成し、Mailpitへの
 // OTPポーリングを経由しない。
 export async function createConfirmedUser(input: {
@@ -87,6 +88,20 @@ export async function createConfirmedUser(input: {
   }
 }
 
+// ローカルDBの利用者のメールアドレス。画面を通した登録で、その利用者が作られたことを確かめるために使う。
+export async function emailOfUser(userId: string): Promise<string | undefined> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+  if (!supabaseUrl || !secretKey) {
+    throw new Error("Missing Supabase environment variables in e2e helper.");
+  }
+  const supabase = createClient(supabaseUrl, secretKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data } = await supabase.auth.admin.getUserById(userId);
+  return data.user?.email;
+}
+
 function cookieExpiry(options: CookieOptions): number {
   if (options.maxAge !== undefined)
     return Math.floor(Date.now() / 1000) + options.maxAge;
@@ -102,20 +117,14 @@ function cookieSameSite(
   return value === "none" ? "None" : "Lax";
 }
 
-// UI認証が検証対象でないケースの新しいcontextへ、実SDKが作ったセッションを渡す。
-export async function prepareConfirmedUserSession(
-  context: BrowserContext,
-  appUrl: string,
-  input: { email: string; password: string },
-): Promise<string> {
-  await createConfirmedUser(input);
+// Nextのローカルrewriteと揃え、Cookie名の導出・符号化・分割はSDKへ任せる。
+function cookieSessionClient(appUrl: string) {
   const upstreamUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publicKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!upstreamUrl || !publicKey) {
     throw new Error("Missing Supabase environment variables in e2e helper.");
   }
   const origin = new URL(appUrl);
-  // Nextのローカルrewriteと揃え、Cookie名の導出・符号化・分割はSDKへ任せる。
   const authUrl =
     new URL(upstreamUrl).hostname === "127.0.0.1"
       ? new URL("/supabase-api", origin).href
@@ -144,6 +153,17 @@ export async function prepareConfirmedUserSession(
       },
     },
   });
+  return { supabase, cookies };
+}
+
+// UI認証が検証対象でないケースの新しいcontextへ、実SDKが作ったセッションを渡す。
+export async function prepareConfirmedUserSession(
+  context: BrowserContext,
+  appUrl: string,
+  input: { email: string; password: string },
+): Promise<string> {
+  await createConfirmedUser(input);
+  const { supabase, cookies } = cookieSessionClient(appUrl);
   try {
     const { data, error } = await signInWithEmailOtp(supabase, input.email);
     if (error || !data.user)
@@ -153,6 +173,38 @@ export async function prepareConfirmedUserSession(
     await context.addCookies([...cookies.values()]);
     await rememberTestSession(context, input.email);
     return data.user.id;
+  } finally {
+    await supabase.auth.stopAutoRefresh();
+  }
+}
+
+// 準備のAPIで既に確認済みのセッション(testUserSession)を、メールを送らずにcontextへ渡す。
+// UIのサインインが検証対象でない端末で、同じ宛先への2通目の送信間隔待ちを避ける。
+export async function injectStoredSession(
+  context: BrowserContext,
+  appUrl: string,
+  email: string,
+): Promise<void> {
+  const stored = testUserSession(email);
+  if (!stored) throw new Error(`No stored session for ${email}.`);
+  const { supabase, cookies } = cookieSessionClient(appUrl);
+  try {
+    const { data, error } = await supabase.auth.setSession(stored);
+    if (error) throw new Error(`Session injection failed: ${error.code}`);
+    await context.addCookies([...cookies.values()]);
+    // 端末の記憶が空だと、アプリが利用者の切り替えとして最初の画面を読み込み直し、直後の操作と競合する。
+    // 端末に別の利用者の記憶があるときは、切り替えとして扱わせるため、空のときだけ設定する。
+    await context.addInitScript(
+      ({ origin, userId }) => {
+        if (
+          location.origin === origin &&
+          localStorage.getItem("aims:local-user-id") === null
+        )
+          localStorage.setItem("aims:local-user-id", userId);
+      },
+      { origin: new URL(appUrl).origin, userId: data.user?.id ?? "" },
+    );
+    await rememberTestSession(context, email);
   } finally {
     await supabase.auth.stopAutoRefresh();
   }
@@ -174,17 +226,16 @@ export async function signUpAndSignIn(
 ): Promise<void> {
   await createConfirmedUser(input);
 
-  await waitForOtpSendWindow(input.email);
+  await resetOtpSendInterval(input.email);
   await page.goto("/signin");
   await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(input.email);
   const previous = await mailIds(input.email);
   await waitForTurnstileToken(page, 1);
-  await page.getByRole("button", { name: authText("otpSendCode") }).click();
+  await page.getByRole("button", { name: authText("emailContinue") }).click();
   await expect(
-    page.getByRole("heading", { name: authText("otpTitle") }),
+    page.getByPlaceholder(authText("otpCodePlaceholder")),
   ).toBeVisible();
-  markOtpSent(input.email);
   const code = await getOtpCodeFromMailpit(input.email, previous);
   await page.getByPlaceholder(authText("otpCodePlaceholder")).fill(code);
   await clickSignInAndAwaitRounds(
@@ -228,29 +279,12 @@ export async function signInWithEmailOtp(
   email: string,
 ) {
   const previous = await mailIds(email);
-  await waitForOtpSendWindow(email);
-  let sent = await client.auth.signInWithOtp({
+  await resetOtpSendInterval(email);
+  const sent = await client.auth.signInWithOtp({
     email,
     options: { shouldCreateUser: false, captchaToken: "test-captcha-token" },
   });
-  if (sent.error?.code === "over_email_send_rate_limit") {
-    // メール変更直後や別端末の準備では、Authの実際の送信間隔が明けるまで待つ。
-    test.setTimeout(Math.max(test.info().timeout, 150000));
-    const rejectedAt = Date.now();
-    await expect
-      .poll(() => Date.now() - rejectedAt >= 61000, {
-        timeout: 65000,
-        intervals: [1000],
-        message: "Authの送信間隔が経過する",
-      })
-      .toBe(true);
-    sent = await client.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false, captchaToken: "test-captcha-token" },
-    });
-  }
   if (sent.error) throw new Error(`OTP request failed: ${sent.error.code}`);
-  lastSent.set(email, Date.now());
   const token = await getOtpCodeFromMailpit(email, previous);
   const result = await client.auth.verifyOtp({ email, token, type: "email" });
   const session = result.data.session;
@@ -285,23 +319,4 @@ async function rememberTestSession(context: BrowserContext, email: string) {
 // 同じテスト内のデータ準備は、そのテストで実際に確認済みのOTPセッションを使う。
 export function testUserSession(email: string) {
   return testSessions().get(email);
-}
-
-const lastSent = new Map<string, number>();
-// 画面から送ったコードの送信時刻を記録し、同じ宛先への次の送信が実Authの送信間隔を待てるようにする。
-export function markOtpSent(email: string) {
-  lastSent.set(email, Date.now());
-}
-export async function waitForOtpSendWindow(email: string) {
-  const sentAt = lastSent.get(email);
-  if (sentAt === undefined || Date.now() >= sentAt + 60000) return;
-  // 同じ宛先へ複数回送るケースでは待ちが重なるため、待つ分だけ上限を延ばす。
-  test.setTimeout(Math.max(test.info().timeout, 90000) + 65000);
-  await expect
-    .poll(() => Date.now() >= sentAt + 60000, {
-      timeout: 65000,
-      intervals: [1000],
-      message: "前回送信から60秒が経過する",
-    })
-    .toBe(true);
 }

@@ -19,5 +19,5 @@ export async function proxy(request: NextRequest) {
 // "/rounds/:path*"はROUNDS_PATHとその下で、proxy.test.tsが持ち主との一致(対象と、オフラインと枠の配布の対象外)を確かめる。
 // 設定はハッシュで表し、要求に含まれないため、対象に含めない。
 export const config = {
-  matcher: ["/signin", "/signup", "/rounds/:path*"],
+  matcher: ["/signin", "/rounds/:path*"],
 };

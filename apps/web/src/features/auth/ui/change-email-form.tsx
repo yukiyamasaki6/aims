@@ -28,6 +28,7 @@ import { SettingsBackLink } from "./settings-back-link";
 import { Turnstile, type TurnstileReset } from "./turnstile";
 import { useAuthTexts } from "./use-auth-texts";
 import { useCheckWait } from "./use-check-wait";
+import { useResendCooldownTick } from "./use-code-entry";
 import { useScreenView } from "./use-screen-view";
 
 // エラー文の要素のidの接頭辞(`${ID_PREFIX}-email-error`)。
@@ -57,13 +58,10 @@ export function ChangeEmailForm({
   useEffect(() => {
     void changeEmail.load({ dispatch, isMounted });
   }, [changeEmail, dispatch, isMounted]);
-  // 残りが変わるたびに1秒の予約をやり直し、0で止まり、離れるときに取り消す。
-  useEffect(
-    () =>
-      flow.resendCooldown === 0
-        ? undefined
-        : changeEmail.tickCooldown(dispatch),
-    [flow.resendCooldown, changeEmail, dispatch],
+  useResendCooldownTick(
+    flow.resendCooldown,
+    changeEmail.tickCooldown,
+    dispatch,
   );
   const busy = flow.pending !== null;
   useEffect(() => onBusyChange(busy), [busy, onBusyChange]);

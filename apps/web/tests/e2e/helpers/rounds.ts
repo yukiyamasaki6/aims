@@ -8,11 +8,7 @@ const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点�
 // ローカル・CIのTURNSTILE_SECRET_KEYはCloudflareのテスト専用
 // シークレット（常に検証を通過する）のため、captchaTokenの値自体は
 // 任意の非空文字列でよい。
-export async function signInAsTestUser(
-  email: string,
-  _password: string,
-  fresh = false,
-) {
+export async function signInAsTestUser(email: string, _password: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -21,7 +17,7 @@ export async function signInAsTestUser(
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
   try {
-    const stored = fresh ? undefined : testUserSession(email);
+    const stored = testUserSession(email);
     const { data, error } = stored
       ? await supabase.auth.setSession(stored)
       : await signInWithEmailOtp(supabase, email);

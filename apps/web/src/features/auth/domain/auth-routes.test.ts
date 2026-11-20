@@ -269,13 +269,18 @@ describe("redirectFor", () => {
       "/rounds/x?a=1",
     ],
     [
-      "認証済みでサインアップを開くと、遷移元を使わずラウンド一覧",
+      "認証済みで廃止されたサインアップを開いても、リダイレクトしない",
       {
         signedIn: true,
         pathname: "/signup",
         search: "?returnTo=%2Frounds%2Fx",
       },
-      "/rounds",
+      null,
+    ],
+    [
+      "未認証で廃止されたサインアップを開いても、リダイレクトしない",
+      { pathname: "/signup", search: "?returnTo=%2Frounds%2Fx" },
+      null,
     ],
   ])("%s", (_name, override, expected) => {
     // Given

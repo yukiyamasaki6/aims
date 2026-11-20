@@ -14,6 +14,11 @@ export function validateAuthCode(code: string): AuthCodeError | undefined {
 // 認証コードを送ってから、再送できるまでの待ち時間(秒)。
 export const RESEND_COOLDOWN_SECONDS = 60;
 
+// 再送待機の残り秒数を1秒進める。0を下限とする。
+export function decrementResendCooldown(remainingSeconds: number): number {
+  return Math.max(0, remainingSeconds - 1);
+}
+
 // 再送の待ちの誤りの種類。cooldown: 待ち時間が残っている。
 export type ResendWaitError = "cooldown";
 

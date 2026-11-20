@@ -1,14 +1,8 @@
-// サインインの前後の経路の規則。保護対象の画面、未認証専用の画面、サインインのURL、サインインの後に戻ってよい場所(遷移元)。
+// サインインの前後の経路の規則。保護対象の画面、サインインのURL、サインインの後に戻ってよい場所(遷移元)。
 // 認証の画面の経路の文字列は、経路表(src/routes.ts)が持つ。保護対象の画面の範囲は、ラウンドの画面の根の経路(ROUNDS_PATH)とその配下である。根は、サインインの後の既定の行き先でもある。
 // 遷移元は、パスとクエリに加えてハッシュ(設定パネルの表示)を含む。ハッシュは同じ文書の中の表示だけを決め、行き先のオリジンとパスを変えないため、検証の対象にしない。
-import {
-  ROUNDS_HOME_PATH,
-  ROUNDS_PATH,
-  SIGN_IN_PATH,
-  SIGN_UP_PATH,
-} from "@/routes";
+import { ROUNDS_HOME_PATH, ROUNDS_PATH, SIGN_IN_PATH } from "@/routes";
 
-const GUEST_ONLY_PATHS: readonly string[] = [SIGN_IN_PATH, SIGN_UP_PATH];
 export const RETURN_TO_PARAM = "returnTo";
 const BASE = "http://localhost";
 
@@ -46,7 +40,7 @@ export function signInHref(from: string | null): string {
 }
 
 // 要求に対するリダイレクト先(パスとクエリ)。リダイレクトしないときはnull。
-// 未認証で保護の範囲を開くと、遷移元付きのサインインへ送る。認証済みで未認証専用の画面を開くと、サインインなら有効な遷移元、それ以外は既定の行き先へ送る。
+// 未認証で保護の範囲を開くと、遷移元付きのサインインへ送る。認証済みでサインインを開くと、有効な遷移元か既定の行き先へ送る。
 export function redirectFor(request: {
   signedIn: boolean;
   pathname: string;
@@ -59,9 +53,6 @@ export function redirectFor(request: {
     return destinationOf(
       new URLSearchParams(request.search).get(RETURN_TO_PARAM),
     );
-  }
-  if (request.signedIn && GUEST_ONLY_PATHS.includes(request.pathname)) {
-    return ROUNDS_HOME_PATH;
   }
   return null;
 }

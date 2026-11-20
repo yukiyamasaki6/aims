@@ -12,23 +12,18 @@ import { useCheckWait } from "./use-check-wait";
 import { useResendCooldownTick } from "./use-code-entry";
 import { useScreenView } from "./use-screen-view";
 
-export type EmailOtpCopy = {
-  idPrefix: string;
-  emailTitle: string;
-};
-
 type CheckedInput = { email: string; from?: string | null };
 
 export function EmailOtpForm({
   procedure,
-  copy,
+  idPrefix,
   siteKey,
-  readReturnTo = () => null,
+  readReturnTo,
 }: {
   procedure: EmailOtp;
-  copy: EmailOtpCopy;
+  idPrefix: string;
   siteKey: string;
-  readReturnTo?: () => string | null;
+  readReturnTo: () => string | null;
 }) {
   const screen = useScreenView(emailOtpReducer, initialEmailOtpFlow);
   const { state: flow, view, checkRef: check } = screen;
@@ -47,7 +42,7 @@ export function EmailOtpForm({
   if (flow.step === "code")
     return (
       <FlowOtpCodeStep
-        idPrefix={copy.idPrefix}
+        idPrefix={idPrefix}
         email={email}
         screen={screen}
         siteKey={siteKey}
@@ -60,8 +55,7 @@ export function EmailOtpForm({
     );
   return (
     <OtpEmailStep
-      idPrefix={copy.idPrefix}
-      title={copy.emailTitle}
+      idPrefix={idPrefix}
       email={email}
       onEmailChange={setEmail}
       emailError={texts.fieldError("email", flow.fieldErrors.email)}

@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { buttonVariants } from "@/components/ui/button";
-import { SIGN_UP_PATH } from "@/routes";
+import { SIGN_IN_PATH } from "@/routes";
 
-// 「記録を始める」。サインアップの画面(経路表のSIGN_UP_PATH)へのリンクで、リンクなので、水和の前でも動く。
+// 「記録を始める」。サインインの画面(経路表のSIGN_IN_PATH)へのリンクで、リンクなので、水和の前でも動く。
 export function StartButton() {
   const t = useTranslations("introduction");
   return (
     <Link
-      href={SIGN_UP_PATH}
+      href={SIGN_IN_PATH}
       className={buttonVariants({ variant: "default" })}
     >
       {t("startButton")}

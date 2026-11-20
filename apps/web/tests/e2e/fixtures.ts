@@ -33,10 +33,7 @@ function watchAuthentication(context: BrowserContext) {
     const url = new URL(request.url());
     if (url.hostname.endsWith("cloudflare.com"))
       unexpected.push("Cloudflare request");
-    if (
-      request.isNavigationRequest() &&
-      /^\/(signin|signup)(\/|$)/.test(url.pathname)
-    ) {
+    if (request.isNavigationRequest() && /^\/signin(\/|$)/.test(url.pathname)) {
       unexpected.push(url.pathname);
     }
   };

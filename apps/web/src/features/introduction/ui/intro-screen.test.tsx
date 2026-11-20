@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { IntroScreen } from "./intro-screen";
 
 describe("IntroScreen", () => {
@@ -23,5 +24,19 @@ describe("IntroScreen", () => {
       ).not.toBeEmptyDOMElement();
       expect(card.querySelectorAll("p").length).toBeGreaterThan(1);
     });
+  });
+
+  it("ロゴを表示し、ロゴはリンクの中に置かない", () => {
+    // Given
+
+    // When
+    render(<IntroScreen />, { wrapper: IntlTestProvider });
+
+    // Then
+    const logo = screen.getByRole("img", {
+      name: translatorFor("shared")("logoAlt"),
+    });
+    expect(logo).toBeVisible();
+    expect(logo.closest("a")).toBeNull();
   });
 });

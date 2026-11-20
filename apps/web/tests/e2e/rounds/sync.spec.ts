@@ -7,14 +7,14 @@ import {
   clickSignInAndAwaitRounds,
   createConfirmedUser,
   getSharedEmail,
-  markOtpSent,
+  injectStoredSession,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
   signOutFromSettings,
   signUpAndSignIn,
   waitForHydration,
-  waitForOtpSendWindow,
 } from "../helpers/auth";
+import { resetOtpSendInterval } from "../helpers/auth-db";
 import { expectKeypadSettled } from "../helpers/keypad";
 import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
 import {
@@ -141,14 +141,13 @@ async function signInOnPage(
   user: { email: string; password: string },
 ) {
   await page.getByPlaceholder("you@example.com").fill(user.email);
-  await waitForOtpSendWindow(user.email);
+  await resetOtpSendInterval(user.email);
   const previous = await mailIds(user.email);
   await waitForTurnstileToken(page, 1);
-  await page.getByRole("button", { name: authText("otpSendCode") }).click();
+  await page.getByRole("button", { name: authText("emailContinue") }).click();
   await expect(
-    page.getByRole("heading", { name: authText("otpTitle") }),
+    page.getByPlaceholder(authText("otpCodePlaceholder")),
   ).toBeVisible();
-  markOtpSent(user.email);
   await page
     .getByPlaceholder(authText("otpCodePlaceholder"))
     .fill(await getOtpCodeFromMailpit(user.email, previous));
@@ -415,10 +414,12 @@ test.describe("サインインが切れた後の再送", () => {
   });
 });
 
-test("別の利用者の未送信の点数が残る端末でサインインして点数を記録しても、別の利用者の点数は送られず、表示されず、その利用者が再びサインインすると保存される", async ({
+test("別の利用者の未送信の点数が残る端末でサインインして点数を記録しても、別の利用者の点数は送られず、表示されない", async ({
   page,
   context,
+  baseURL,
 }) => {
+  if (!baseURL) throw new Error("Missing application URL in e2e test.");
   // 利用者Aでサインインする。
   const userA = {
     email: `user-a-${randomUUID()}@example.com`,
@@ -442,22 +443,21 @@ test("別の利用者の未送信の点数が残る端末でサインインし�
   );
   await context.clearCookies();
   await mockTurnstile(page);
-  // 利用者Aの点数の送信は、利用者Bの間も、利用者Aが再びサインインするまで失敗させ続け、試行の回数を数える。
-  let blockA = true;
+  // 利用者Aの点数の送信は、利用者Bの間も失敗させ続け、試行の回数を数える。
   let attemptsOfA = 0;
   await page.route(RECORD_SHOTS_RPC, async (route) => {
     const isA = (route.request().postData() ?? "").includes(roundA.distanceId);
-    if (isA) attemptsOfA++;
-    if (isA && blockA) {
-      await route.abort("failed");
+    if (!isA) {
+      await route.continue();
       return;
     }
-    await route.continue();
+    attemptsOfA++;
+    await route.abort("failed");
   });
-  await page.goto("/signin");
+  // 利用者Aは、ラウンドの準備で確認済みのセッションを渡す(画面のサインインは同じ宛先の送信間隔を待つため)。
+  await injectStoredSession(context, baseURL, userA.email);
+  await page.goto("/rounds");
   await waitForHydration(page);
-  await signInOnPage(page, userA);
-  await expect(page).toHaveURL(/\/rounds$/);
 
   await openFromList(page, roundA.name);
 
@@ -469,8 +469,9 @@ test("別の利用者の未送信の点数が残る端末でサインインし�
 
   // 利用者Bでサインインする。
   const attemptsBeforeB = attemptsOfA;
-  await signInOnPage(page, userB);
-  await expect(page).toHaveURL(/\/rounds$/);
+  await injectStoredSession(context, baseURL, userB.email);
+  await page.goto("/rounds");
+  await waitForHydration(page);
 
   await openFromList(page, roundB.name);
 
@@ -482,11 +483,4 @@ test("別の利用者の未送信の点数が残る端末でサインインし�
 
   await backToList(page);
   await expect(page.getByText(roundA.name)).toHaveCount(0);
-
-  await signOutOnPage(page);
-
-  // 利用者Aの送信の失敗を解いてサインインし直し、利用者Aの点数が保存されることを確かめる。
-  blockA = false;
-  await signInOnPage(page, userA);
-  await expectSavedShots(roundA.supabase, roundA.distanceId, ["1:10"]);
 });

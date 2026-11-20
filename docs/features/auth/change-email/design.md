@@ -41,13 +41,21 @@ Turnstileは再送だけに使う(要求と確認の呼び出しはチェック�
 - 要求と再送が受け付けられたら、コード欄を空にする(欄を作り直す。失敗のときは入力を保つ)。
 - 状態を示す領域(`role="status"`)は常に描画し、完了の文言だけを差し込む。完了の表示は、再読み込みや別の画面への移動の後は出ない。
 - 画面の作りは設定内の入力画面として揃える(`main`は`mx-auto flex min-h-full max-w-sm flex-col items-center justify-center gap-4 p-8`)。
-  `main`は、共用のヘッダー枠(`ScreenFrame`)の本文領域に画面が置くスクロールの入れ物(`h-full overflow-y-auto`)の中に置く。ヘッダーには現在地(メールアドレス変更)と、`leading`に分類「アカウント」へ戻るリンク(`SettingsBackLink`)を入れる。ヘッダー枠は設定パネルの中で描かれ、メニューボタンは出ない(`app/settings`)。`AuthHeader`は使わず、段階の説明(現在のメールアドレス、コード確認の案内)は本文の先頭の文、コード確認の段階の戻る(入力段階へ)は本文の先頭のボタンとして描く。2つのコード欄は、画面が1つのフォームとして`AuthField`と`Input`で描く。再送は`otp-code-step.tsx`の`ResendSection`(exportする)、チェックは`Turnstile`を使う。
+  `main`は、共用のヘッダー枠(`ScreenFrame`)の本文領域に画面が置くスクロールの入れ物(`h-full overflow-y-auto`)の中に置く。ヘッダーには現在地(メールアドレス変更)と、`leading`に分類「アカウント」へ戻るリンク(`SettingsBackLink`)を入れる。ヘッダー枠は設定パネルの中で描かれ、メニューボタンは出ない(`app/settings`)。本文に段階見出しを置かず、段階の説明(現在のメールアドレス、コード確認の案内)は本文の先頭の文、コード確認の段階の戻る(入力段階へ)は本文の先頭のボタンとして描く。2つのコード欄は、画面が1つのフォームとして`AuthField`と`Input`で描く。再送は`otp-code-step.tsx`の`ResendSection`(exportする)、チェックは`Turnstile`を使う。
+
+完了後の新たな認証は統合入口`/signin`で扱う。
+
+送付ボタンの「認証コードを送信」とヘッダーの「メールアドレス変更」は維持し、「メールで続ける」は使わない。
 
 ## 構成とデータの流れ
 
 チェック未完了の送信は、集約の開始の命令が待ちの状態にし、画面が`useCheckWait`でトークンの到着を受けて同じ操作を再開する(追加チェックの表示中は待ち、失敗と上限は不備として示す)。規則は`docs/features/auth/design.md`の「セキュリティチェックの待ち」に従う。
 
 構造の方針は`docs/architecture.md`に従う。
+再送待機の画面効果は`ui/use-code-entry.ts`の`useResendCooldownTick`を使い、残り秒数・`changeEmail.tickCooldown`・dispatchを渡す。
+残り秒数の更新は`domain/auth-code.ts`の`decrementResendCooldown`を使い、通常OTPと同じく0を下限にする。
+待機は要求・再送の受理で60秒から開始し、完了・入力へ戻ると0にし、離脱時は予約を取り消す。
+コード欄の世代、両側確認、初回要求にチェックを要さない規則、再送の成否とチェックの取り直しはメール変更側が維持する。
 
 - `supabase/config.toml`: `[auth.email]`に`double_confirm_changes = true`を足し、`[auth.email.template.email_change]`(件名「【AIMS】メールアドレス変更の認証コード」、`content_path`は`./supabase/templates/change-email.html`)を足す。
   `otp_expiry = 900`は変更のコードにも効く。`[remotes.*]`は上書きしないため、`supabase config push`で本番とプレビューにも反映される。
@@ -56,7 +64,8 @@ Turnstileは再送だけに使う(要求と確認の呼び出しはチェック�
 - `src/app/(main)/settings-panel-entry.tsx`: 入口。設定パネルの表示が`#settings/account/email`のときに描く項目の画面として、認証の実装、`Connectivity`、`Clock`、手続き、サイトキーを生成して画面へ渡し、設定パネルから受けた戻る操作と処理中の知らせも渡す。表示が変わると画面ごと外れ、次に開くと手続きも作り直す。
 - `src/features/auth/ui/change-email-form.tsx`: 画面。状態を`useScreenView`で持ち、開いたときに現在のメールアドレスを読む。コード欄は要求と再送の受け付けごとに作り直し、完了では本文に完了の文言だけを描く。ヘッダーの戻るの押せなさと、処理中の知らせ(`onBusyChange`)に渡す値は、集約の`pending`から決める。戻るの押下は受け取った`onBack`を呼ぶ。
 - `src/features/auth/ui/settings-back-link.tsx`: 設定パネルの分類「アカウント」へ戻るリンク(文言は「戻る」)。`href`は経路表の`SETTINGS_ACCOUNT_HASH`で、押下は既定の動作を止めて、受け取った`onBack`(設定パネルの移る操作。履歴を1つ積む)を呼ぶ。メールアドレス変更、アカウント削除のヘッダーが使う。押せないとき(`disabled`)は行き先(`href`)を持たない要素として描き、押下もフォーカスも受けず、見た目を薄くする(`opacity-50`)。
-- `src/features/auth/application/change-email.ts`: 手続き(`createChangeEmail({ authenticator, connectivity, clock })`)と約束(`ChangeEmailAuthenticator`)。操作は`load`、`request`、`confirm`、`resend`、`tickCooldown`である。分類「アカウント」へ戻るのは画面のリンク(設定パネルの移る操作)で、手続きは遷移を持たない。
+- `src/features/auth/application/change-email.ts`: 手続き(`createChangeEmail({ authenticator, connectivity, clock })`)と約束(`ChangeEmailAuthenticator`)。操作は`load`、`request`、`confirm`、`resend`、`tickCooldown`である。
+  `tickCooldown`は`application/email-otp.ts`の`CooldownTick`型と`tickResendCooldown(clock)`を使い、固有の1秒定数と予約処理を持たない。分類「アカウント」へ戻るのは画面のリンク(設定パネルの移る操作)で、手続きは遷移を持たない。
   約束の頼みごとは、現在のメールアドレスの読み取り、要求(結果は受け付けか失敗。受け付けのとき、応答の現在のメールアドレスを持つ)、確認(1つのコードにつき、結果は一方だけの確認か完了か失敗。手続きが欄の数だけ順に頼み、まとめる)、再送である。
 - `src/features/auth/domain/change-email-flow.ts`: 集約。段階、現在と新しいメールアドレス、欄ごとの確認できたコードの値、実行中の操作(`request`、`confirm`、`resend`)、再送の待ち、チェックのトークン、欄ごとのエラーと失敗、コード欄を作り直す世代(要求と再送の受け付けで進む)、完了(`completed`。終わりの状態)を持つ。
   開始の命令は`beginRequestEmailChange`、`beginConfirmEmailChange`、`beginResendEmailChangeCode`で、実行中 → 入力 → オフライン(再送は待機 → チェックを入力に含む)の順に判定する。

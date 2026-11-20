@@ -70,7 +70,6 @@ export const DELETE_ACCOUNT_HASH = `${SETTINGS_ACCOUNT_HASH}/delete-account`;
 
 // 認証の画面の経路。
 export const SIGN_IN_PATH = "/signin";
-export const SIGN_UP_PATH = "/signup";
 
 // アプリの紹介画面。ロゴの行き先。
 export const HOME_PATH = "/";

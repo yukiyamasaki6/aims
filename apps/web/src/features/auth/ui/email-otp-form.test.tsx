@@ -10,7 +10,6 @@ import type { CallResult } from "../application/call-result";
 import type { CodeVerification } from "../application/email-otp";
 import { createSignIn } from "../application/sign-in";
 import { SignInForm } from "./signin-form";
-import { SignUpForm } from "./signup-form";
 
 const authText = translatorFor("auth");
 
@@ -69,7 +68,7 @@ async function send(user: ReturnType<typeof userEvent.setup>) {
   );
   act(() => widget.onVerify?.("check"));
   await user.click(
-    screen.getByRole("button", { name: authText("otpSendCode") }),
+    screen.getByRole("button", { name: authText("emailContinue") }),
   );
 }
 beforeEach(() => {
@@ -94,12 +93,12 @@ describe("共通OTPフォーム", () => {
     await send(user);
     // Then
     expect(
-      screen.getByRole("heading", { name: authText("otpTitle") }),
+      screen.getByPlaceholderText(authText("otpCodePlaceholder")),
     ).toBeVisible();
     expect(h.authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
       email: "archer@example.test",
       captchaToken: "check",
-      shouldCreateUser: false,
+      shouldCreateUser: true,
     });
   });
   it("コード欄のEnterから確認して遷移元へ戻る", async () => {
@@ -132,7 +131,7 @@ describe("共通OTPフォーム", () => {
       "archer@example.test",
     );
     await user.click(
-      screen.getByRole("button", { name: authText("otpSendCode") }),
+      screen.getByRole("button", { name: authText("emailContinue") }),
     );
     // When
     act(() => widget.onVerify?.("late-check"));
@@ -141,7 +140,7 @@ describe("共通OTPフォーム", () => {
     expect(h.authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
       email: "archer@example.test",
       captchaToken: "late-check",
-      shouldCreateUser: false,
+      shouldCreateUser: true,
     });
   });
   it("戻るとメールと待機を残しコードを破棄する", async () => {
@@ -222,29 +221,29 @@ it("送付成功から60秒の1ms前は再送せず、ちょうどから再送�
   expect(h.authenticator.sendCode).toHaveBeenLastCalledWith({
     email: "archer@example.test",
     captchaToken: "resend-check",
-    shouldCreateUser: false,
+    shouldCreateUser: true,
   });
   expect(
     screen.getByPlaceholderText(authText("otpCodePlaceholder")),
   ).toHaveValue("");
 });
 
-it("遷移元の読み取りを持たない登録フォームは、遷移元なしで送付を依頼する", async () => {
+it("コードの入力から戻り、待機が終わると送付ボタンが「メールで続ける」に戻る", async () => {
   // Given
-  const signUp = {
-    sendCode: vi.fn(async () => {}),
-    verifyCode: vi.fn(async () => {}),
-    tickCooldown: vi.fn(() => () => {}),
-  };
-  render(<SignUpForm signUp={signUp} siteKey="site-key" />, {
-    wrapper: IntlTestProvider,
-  });
+  const h = setup();
   const user = userEvent.setup();
-  // When
   await send(user);
+  await user.click(screen.getByRole("button", { name: authText("back") }));
+
+  // When
+  for (let second = 0; second < 60; second += 1)
+    await act(() => h.clock.advanceAsync(1000));
+
   // Then
-  expect(signUp.sendCode).toHaveBeenCalledExactlyOnceWith(
-    { email: "archer@example.test", from: null },
-    expect.anything(),
-  );
+  expect(
+    screen.getByRole("button", { name: authText("emailContinue") }),
+  ).toBeVisible();
+  expect(
+    screen.queryByText(authText("otpResendWait", { seconds: "1" })),
+  ).toBeNull();
 });
