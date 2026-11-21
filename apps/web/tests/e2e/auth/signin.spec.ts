@@ -13,14 +13,22 @@ import {
   refreshStatus,
   updatePasswordDirect,
 } from "../helpers/auth-api";
-import { resetOtpSendInterval } from "../helpers/auth-db";
+import {
+  createGoogleLinkedUser,
+  resetOtpSendInterval,
+} from "../helpers/auth-db";
+import { blockGoogle, returnCancelledFromGoogle } from "../helpers/google-auth";
 import {
   getEmailFromMailpit,
   getOtpCodeFromMailpit,
   mailIds,
 } from "../helpers/mailpit";
 import { createRoundWithClient } from "../helpers/rounds";
-import { authMethodOf, readStoredTokens } from "../helpers/stored-session";
+import {
+  AUTH_COOKIE,
+  authMethodOf,
+  readStoredTokens,
+} from "../helpers/stored-session";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
 const t = translatorFor("auth");
@@ -153,6 +161,76 @@ test("登録済みメールで確認しても、同じ利用者IDと元の記録
   } finally {
     await client.auth.stopAutoRefresh();
   }
+});
+
+test("「Googleで続ける」は、チェックの完了を待たずに押せてGoogleの画面へ移り、取り消して戻ると、サインイン画面で理由が示され、再度押せる", async ({
+  page,
+}) => {
+  // チェックの完了を待たずに「Googleで続ける」を押して、Googleの画面へ移る。
+  const google = await blockGoogle(page);
+  await page.goto(`/signin?returnTo=${encodeURIComponent(destination)}`);
+  await waitForHydration(page);
+  const googleButton = page.getByRole("button", { name: t("googleContinue") });
+  await googleButton.click();
+  const authorization = await google.authorization();
+  expect(google.requests).toHaveLength(1);
+
+  // Googleの画面で取り消して、サインイン画面へ戻る。
+  await returnCancelledFromGoogle(page, authorization);
+  await expect(page.getByText(t("failure.google_cancelled"))).toBeVisible();
+  await expect(page).toHaveURL(/\/signin/);
+  expect(new URL(page.url()).searchParams.has("error")).toBe(false);
+  expect(
+    (await page.context().cookies()).some(({ name }) => name === AUTH_COOKIE),
+  ).toBe(false);
+  await expect(googleButton).toHaveAttribute("aria-disabled", "false");
+});
+
+test("オフラインで「Googleで続ける」を押すと、オフラインの文言が示され、Googleへ移らない", async ({
+  page,
+}) => {
+  const google = await blockGoogle(page);
+  await page.goto("/signin");
+  await waitForHydration(page);
+
+  await page.context().setOffline(true);
+  await page.getByRole("button", { name: t("googleContinue") }).click();
+
+  await expect(page.getByText(t("failure.offline"))).toBeVisible();
+  await expect(page).toHaveURL(/\/signin$/);
+  expect(google.requests).toEqual([]);
+});
+
+test("Googleにだけ残るアドレスでコードを要求すると、コード入力へ進まず案内が出て、通常の登録済みのアドレスはコード入力へ進む", async ({
+  page,
+}) => {
+  // 実物のチェックは、送信のたびのやり直しで新しい結果を渡す。モックにも同じ取り直しをさせる。
+  await page.addInitScript(() => {
+    Object.assign(window, { e2eTurnstileReissueOnReset: true });
+  });
+  const googleOnlyAddress = `google-only-${randomUUID()}@aims.test`;
+  await createGoogleLinkedUser({
+    email: `google-account-${randomUUID()}@aims.test`,
+    emailIdentity: false,
+    googleEmail: googleOnlyAddress,
+  });
+  const registeredAddress = `registered-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email: registeredAddress });
+
+  // Googleにだけ残るアドレスで要求して、案内が出るまで進む。
+  await page.goto("/signin");
+  await waitForHydration(page);
+  await page.getByPlaceholder(t("emailPlaceholder")).fill(googleOnlyAddress);
+  await waitForTurnstileToken(page, 1);
+  await page.getByRole("button", { name: t("emailContinue") }).click();
+  await expect(page.getByText(t("failure.google_only_address"))).toBeVisible();
+  await expect(page.getByPlaceholder(t("otpCodePlaceholder"))).toHaveCount(0);
+
+  // 登録済みのアドレスで要求し直して、コード入力へ進む。
+  await page.getByPlaceholder(t("emailPlaceholder")).fill(registeredAddress);
+  await waitForTurnstileToken(page, 2);
+  await page.getByRole("button", { name: t("emailContinue") }).click();
+  await expect(page.getByPlaceholder(t("otpCodePlaceholder"))).toBeVisible();
 });
 
 test("サインイン画面でAIMSロゴを押すと、紹介画面へ移動する", async ({

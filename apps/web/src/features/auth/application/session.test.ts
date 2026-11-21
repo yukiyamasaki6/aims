@@ -877,7 +877,7 @@ describe("セッション喪失の見張り", () => {
       session.watch();
 
       // When
-      emit({ kind: "signed-in", userId: "user-1" });
+      emit({ kind: "signed-in", userId: "user-1", summary: null });
 
       // Then
       expect(page.reload).not.toHaveBeenCalled();
@@ -892,7 +892,7 @@ describe("セッション喪失の見張り", () => {
       session.watch();
 
       // When
-      emit({ kind: "signed-in", userId: "user-2" });
+      emit({ kind: "signed-in", userId: "user-2", summary: null });
 
       // Then
       expect(identity.write).toHaveBeenCalledExactlyOnceWith("user-2");
@@ -910,7 +910,7 @@ describe("セッション喪失の見張り", () => {
       session.watch();
 
       // When
-      emit({ kind: "signed-in", userId: "user-1" });
+      emit({ kind: "signed-in", userId: "user-1", summary: null });
 
       // Then
       expect(page.reload).toHaveBeenCalledOnce();
@@ -922,7 +922,7 @@ describe("セッション喪失の見張り", () => {
       session.watch();
 
       // When
-      emit({ kind: "signed-in", userId: "user-2" });
+      emit({ kind: "signed-in", userId: "user-2", summary: null });
 
       // Then
       expect(identity.write).toHaveBeenCalledExactlyOnceWith("user-2");
@@ -938,7 +938,8 @@ describe("セッション喪失の見張り", () => {
       session.watch();
 
       // When
-      const act = () => emit({ kind: "signed-in", userId: "user-2" });
+      const act = () =>
+        emit({ kind: "signed-in", userId: "user-2", summary: null });
 
       // Then
       expect(act).toThrow("denied");
@@ -953,7 +954,7 @@ describe("セッション喪失の見張り", () => {
       session.watch();
 
       // When
-      emit({ kind: "signed-in", userId: "user-2" });
+      emit({ kind: "signed-in", userId: "user-2", summary: null });
 
       // Then
       expect(page.reload).not.toHaveBeenCalled();
@@ -966,7 +967,7 @@ describe("セッション喪失の見張り", () => {
       session.watch()();
 
       // When
-      emit({ kind: "signed-in", userId: "user-2" });
+      emit({ kind: "signed-in", userId: "user-2", summary: null });
 
       // Then
       expect(page.reload).not.toHaveBeenCalled();

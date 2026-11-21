@@ -19,8 +19,8 @@ select is(
 -- Hookの方式とclaims不変性を全行比較する。
 create temp table hook_cases(method jsonb, allowed boolean);
 insert into hook_cases values
- ('"otp"', true), ('"token_refresh"', true), ('"email_change"', true),
- ('"password"', false), ('"recovery"', false), ('"unexpected"', false),
+ ('"otp"', true), ('"token_refresh"', true), ('"email_change"', true), ('"oauth"', true),
+ ('"password"', false), ('"id_token"', false), ('"recovery"', false), ('"unexpected"', false),
  ('null', false), ('123', false), ('{}', false), ('[]', false), (null, false);
 create temp table hook_actual as
 select method, allowed,

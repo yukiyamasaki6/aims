@@ -54,6 +54,7 @@ function setup() {
   const rendered = render(
     <SignInForm
       signIn={signIn}
+      googleSignIn={{ start: vi.fn(), resume: vi.fn() }}
       siteKey="site-key"
       readReturnTo={() => "/rounds/history"}
     />,

@@ -21,7 +21,12 @@ function setLocation(search = "", hash = "") {
   });
 }
 
-const auth = vi.hoisted(() => ({ signInWithOtp: vi.fn(), verifyOtp: vi.fn() }));
+const auth = vi.hoisted(() => ({
+  signInWithOtp: vi.fn(),
+  verifyOtp: vi.fn(),
+  // biome-ignore lint/style/useNamingConvention: SDKのメソッド名。
+  signInWithOAuth: vi.fn(),
+}));
 const connection = vi.hoisted(() => ({
   createBrowserClient: vi.fn(() => ({ auth })),
 }));
@@ -228,5 +233,23 @@ describe("サインイン画面の入口", () => {
 
     // Then
     expect(page.replace).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
+  });
+
+  it("「Googleで続ける」を押すと、認証サービスへGoogleでの認証を頼む", async () => {
+    // Given
+    setLocation("?returnTo=%2Frounds%2Fnew");
+    auth.signInWithOAuth.mockResolvedValue({ error: null });
+    const user = userEvent.setup();
+    render(<SignInPage />, { wrapper: IntlTestProvider });
+
+    // When
+    await user.click(
+      screen.getByRole("button", { name: authText("googleContinue") }),
+    );
+
+    // Then
+    expect(auth.signInWithOAuth).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ provider: "google" }),
+    );
   });
 });

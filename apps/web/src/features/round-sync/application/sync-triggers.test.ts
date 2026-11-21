@@ -64,7 +64,7 @@ function setup(initialUserId: string | null = "user-1") {
 describe("認証の通知", () => {
   // サインインの変化をそのまま同期へ渡す。取得は始めない(常駐の取得は同期の開始で1回頼む)。反応の規則はラウンド側が持つ。
   it.each([
-    ["signed-in", { kind: "signed-in", userId: "user-9" }],
+    ["signed-in", { kind: "signed-in", userId: "user-9", summary: null }],
     ["signed-out", { kind: "signed-out" }],
   ] as const)("%sの通知は、そのまま同期へ渡す", (_name, change) => {
     // Given

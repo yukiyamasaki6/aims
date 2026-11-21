@@ -42,6 +42,22 @@ const renderItem: ComponentProps<typeof SettingsPanel>["renderItem"] = (
   controls,
 ) => <ItemProbe view={view} controls={controls} />;
 
+const EMAIL = "user@example.com";
+
+// 「Google認証」の行の代役。パネルから渡された処理中の知らせを押す2つのボタンを持つ。
+const renderGoogle: ComponentProps<typeof SettingsPanel>["renderGoogle"] = ({
+  onBusyChange,
+}) => (
+  <div>
+    <button type="button" onClick={() => onBusyChange(true)}>
+      Googleの処理を始める
+    </button>
+    <button type="button" onClick={() => onBusyChange(false)}>
+      Googleの処理を終える
+    </button>
+  </div>
+);
+
 function setup(props: Partial<ComponentProps<typeof SettingsPanel>> = {}) {
   const onMove = vi.fn();
   const onClose = vi.fn();
@@ -50,6 +66,8 @@ function setup(props: Partial<ComponentProps<typeof SettingsPanel>> = {}) {
       view="account"
       onMove={onMove}
       onClose={onClose}
+      email={EMAIL}
+      renderGoogle={renderGoogle}
       signOut={<button type="button">サインアウトの行</button>}
       renderItem={renderItem}
       {...props}
@@ -171,6 +189,8 @@ describe("SettingsPanel", () => {
           view="delete-account"
           onMove={onMove}
           onClose={onClose}
+          email={EMAIL}
+          renderGoogle={renderGoogle}
           signOut={null}
           renderItem={renderItem}
         />,
@@ -258,6 +278,8 @@ describe("SettingsPanel", () => {
           view={null}
           onMove={onMove}
           onClose={onClose}
+          email={EMAIL}
+          renderGoogle={renderGoogle}
           signOut={null}
           renderItem={renderItem}
         />,
@@ -313,6 +335,50 @@ describe("SettingsPanel", () => {
       },
     );
 
+    it.each([
+      ["閉じる操作", async (user: User) => user.click(closeButton())],
+      ["Esc", async (user: User) => user.keyboard("{Escape}")],
+      ["外側の押下", async (user: User) => user.click(backdrop())],
+      ["分類の選択", async (user: User) => user.click(categoryLink())],
+    ])(
+      "Googleの行が処理中を知らせている間は、%sで呼び先を呼ばない",
+      async (_name, operate) => {
+        // Given
+        const user = userEvent.setup();
+        const { onClose, onMove } = setup({ view: "account" });
+        await user.click(
+          screen.getByRole("button", { name: "Googleの処理を始める" }),
+        );
+
+        // When
+        await operate(user);
+
+        // Then
+        expect(onClose).not.toHaveBeenCalled();
+        expect(onMove).not.toHaveBeenCalled();
+      },
+    );
+
+    it("Googleの行の処理中が解けると、閉じる操作と分類の選択を再び受け付ける", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { onClose, onMove } = setup({ view: "account" });
+      await user.click(
+        screen.getByRole("button", { name: "Googleの処理を始める" }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Googleの処理を終える" }),
+      );
+
+      // When
+      await user.click(categoryLink());
+      await user.click(closeButton());
+
+      // Then
+      expect(onMove).toHaveBeenCalledExactlyOnceWith("account");
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
     it("項目が処理中を知らせている間は、項目から渡された戻る操作も、移る操作を呼ばない", async () => {
       // Given
       const { user, onMove } = await startBusy();
@@ -357,6 +423,8 @@ describe("SettingsPanel", () => {
           view="account"
           onMove={onMove}
           onClose={onClose}
+          email={EMAIL}
+          renderGoogle={renderGoogle}
           signOut={null}
           renderItem={renderItem}
         />,

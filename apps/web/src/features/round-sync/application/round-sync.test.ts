@@ -88,7 +88,11 @@ describe("開始", () => {
   it("サインインの変化は、そのまま記録の制御へ渡す", () => {
     // Given
     const t = setup();
-    const change = { kind: "signed-in", userId: "user-2" } as const;
+    const change = {
+      kind: "signed-in",
+      userId: "user-2",
+      summary: null,
+    } as const;
 
     // When
     t.sync.signInChanged(change);
@@ -159,7 +163,11 @@ describe("常駐の一括の取得", () => {
     await flush();
 
     // When
-    t.sync.signInChanged({ kind: "signed-in", userId: "user-1" });
+    t.sync.signInChanged({
+      kind: "signed-in",
+      userId: "user-1",
+      summary: null,
+    });
     await flush();
 
     // Then

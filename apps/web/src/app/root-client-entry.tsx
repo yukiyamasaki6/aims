@@ -4,9 +4,11 @@ import { useRouter } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { type ReactNode, useEffect, useState } from "react";
 import { createDeleteAccount } from "@/features/auth/application/delete-account";
+import { createLinkGoogle } from "@/features/auth/application/link-google";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
 import { createLocalRecordsEraser } from "@/features/auth/application/local-records-eraser";
 import { createSession } from "@/features/auth/application/session";
+import { createBrowserAccountSummaryStore } from "@/features/auth/infrastructure/browser-account-summary-store";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
 import {
@@ -14,7 +16,12 @@ import {
   createSupabaseAccountDeletion,
 } from "@/features/auth/infrastructure/supabase-account-deletion";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import {
+  createSupabaseEmailIdentity,
+  type EmailIdentityDbSchema,
+} from "@/features/auth/infrastructure/supabase-email-identity";
 import { DeleteAccountProvider } from "@/features/auth/ui/delete-account-context";
+import { LinkGoogleProvider } from "@/features/auth/ui/link-google-context";
 import { SessionProvider } from "@/features/auth/ui/session-context";
 import { createUpdateActivation } from "@/features/offline-pwa/application/update-activation";
 import { createBrowserLinkClicks } from "@/features/offline-pwa/infrastructure/browser-link-clicks";
@@ -80,12 +87,15 @@ import { createSupabaseDatabase } from "@/lib/supabase/infrastructure/database";
 function composeInputs(router: PageRouter) {
   const authenticator = createSupabaseAuth(createClient);
   const identityStore = createBrowserIdentityStore();
+  const accountSummaries = createBrowserAccountSummaryStore(identityStore);
   return {
     authenticator,
     identityStore,
+    accountSummaries,
     localIdentity: createLocalIdentity({
       changes: authenticator,
       writer: identityStore,
+      summaries: accountSummaries,
     }),
     sessionReader: authenticator,
     connectivity: createBrowserConnectivity(),
@@ -274,6 +284,18 @@ function composeAccount(
   });
 }
 
+// Googleアカウントの追加・削除(戻りの預かり、読み直し、メールの手段の確認、解除)。
+function composeLinkGoogle(inputs: Inputs) {
+  return createLinkGoogle({
+    authenticator: inputs.authenticator,
+    emailIdentity: createSupabaseEmailIdentity(
+      createSupabaseDatabase<EmailIdentityDbSchema>(createClient),
+    ),
+    summaries: inputs.accountSummaries,
+    connectivity: inputs.connectivity,
+  });
+}
+
 // アプリで1つの部品を、1度だけ生成して結ぶ。
 function composeApp(router: PageRouter) {
   const inputs = composeInputs(router);
@@ -283,6 +305,7 @@ function composeApp(router: PageRouter) {
     localIdentity: inputs.localIdentity,
     session,
     deleteAccount: composeAccount(inputs, records, session),
+    linkGoogle: composeLinkGoogle(inputs),
     roundWindow: records.roundWindow,
     ...composeStores(inputs, records),
     ...composeSync(inputs, records),
@@ -311,8 +334,10 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
           <RoundProceduresProvider procedures={app.procedures}>
             <SessionProvider session={app.session}>
               <DeleteAccountProvider deleteAccount={app.deleteAccount}>
-                <SwUpdateActivator activation={app.swUpdate} />
-                {children}
+                <LinkGoogleProvider linkGoogle={app.linkGoogle}>
+                  <SwUpdateActivator activation={app.swUpdate} />
+                  {children}
+                </LinkGoogleProvider>
               </DeleteAccountProvider>
             </SessionProvider>
           </RoundProceduresProvider>

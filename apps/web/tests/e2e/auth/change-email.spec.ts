@@ -9,7 +9,10 @@ import {
   signInWithEmailOtp,
   signUpAndSignIn,
 } from "../helpers/auth";
-import { resetOtpSendInterval } from "../helpers/auth-db";
+import {
+  createGoogleLinkedUser,
+  resetOtpSendInterval,
+} from "../helpers/auth-db";
 import { fastForwardResendCooldown } from "../helpers/clock";
 import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
 import {
@@ -143,7 +146,7 @@ test("新しいメールアドレスを送り、現在と新しいアドレス�
 
   // メールアドレス変更の項目を押し直すと、新しいアドレスが現在として表示される。
   await settingsPanel(page)
-    .getByRole("link", { name: settingsText("changeEmailItem") })
+    .getByRole("link", { name: settingsText("emailChange"), exact: true })
     .click();
   await expect(
     page.getByText(authText("changeEmailCurrent", { email: addresses.next })),
@@ -164,6 +167,44 @@ test("新しいメールアドレスを送り、現在と新しいアドレス�
   }
   await page.goto("/rounds");
   await expect(page).toHaveURL(/\/rounds/);
+});
+
+test("Googleで作ったアカウントでも、メールアドレスを変更でき、Googleの行は変わらない", async ({
+  page,
+}) => {
+  // Googleで作ったアカウントで、メールのコードでサインインして、新しいメールアドレスを送る。
+  const user = await createGoogleLinkedUser({
+    email: uniqueEmail("change-email-google"),
+    emailIdentity: false,
+  });
+  const addresses = {
+    current: user.email,
+    next: uniqueEmail("change-email-google-next"),
+  };
+  await signUpAndSignIn(page, { email: addresses.current, password: PASSWORD });
+  await openChangeEmail(page);
+  await requestChange(page, addresses);
+
+  // 届いた2つのコードを入れて確認し、完了の表示へ進む。
+  await confirmBoth(page, addresses);
+
+  // 戻ると、新しいアドレスがメールアドレスの行に表示され、Googleの行は変わらない。
+  await panelBackLink(page).click();
+  await expectAccountCategory(page);
+  await expect(settingsPanel(page).getByText(addresses.next)).toBeVisible();
+  await expect(settingsPanel(page).getByText(user.googleEmail)).toBeVisible();
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  try {
+    const result = await signInWithEmailOtp(client, addresses.next);
+    expect(result.error).toBeNull();
+    expect(result.data.user?.id).toBe(user.id);
+  } finally {
+    await client.auth.stopAutoRefresh();
+  }
 });
 
 test("一方のコードを誤って確認すると、誤りの欄にだけエラーが出て、誤りの欄だけ正しいコードに直して確認すると完了する", async ({

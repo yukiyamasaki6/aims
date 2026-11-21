@@ -58,9 +58,10 @@
 
 | 対象 | 機能 | ユーザーの目的 | roadmap.mdの機能 |
 | :--- | :--- | :--- | :--- |
-| auth | signin | サインインする | メールOTP認証 |
+| auth | signin | サインインする | メールOTP認証、Google認証 |
 | auth | signout | サインアウトする | メールOTP認証 |
 | auth | change-email | サインイン後にメールアドレスを変更する | メール変更 |
+| auth | link-google | サインイン後に、Googleアカウントでのサインインを追加・削除する | Google認証 |
 | auth | delete-account | サインイン後にアカウントと記録を削除する | アカウント削除 |
 | rounds | start | ラウンドを始める | ラウンド・種目管理 |
 | rounds | score-entry | 矢の点数を記録・修正する | 素点テンキー入力、誤入力修正・差し替え |
@@ -111,7 +112,7 @@ flowchart TD
     Logo -->|クリック| Landing
     Landing -->|「記録を始める」（未認証）| SignIn
     Landing -->|「記録を始める」（認証済み）| Rounds
-    SignIn -->|サインイン成功| Rounds
+    SignIn -->|サインイン成功（Googleでの認証を含む）| Rounds
     Rounds -->|ラウンドの開始ボタン（右下）| RoundsNew
     Rounds -->|入力中のカードクリック| RoundDetail
     History -->|ラウンドカードクリック（from=history）| RoundDetail

@@ -8,7 +8,7 @@
 
 begin;
 
-select plan(32);
+select plan(34);
 
 -- ============================================================
 -- fixture
@@ -177,6 +177,12 @@ select pg_temp.mk_edit('R3', 'A');
 delete from public.round_users where round_id = pg_temp.uid('R3') and user_id = pg_temp.uid('A');
 select pg_temp.mk_preset('Ap', 'A');
 select pg_temp.mk_auth_rows('A');
+
+-- G: Googleだけで作った確認済みの利用者(メールの手段なし。メールの手段を残すトリガーの対象外の形)。
+select pg_temp.mk_user('G', 'google-only@example.test');
+update auth.users set email_confirmed_at = now() where id = pg_temp.uid('G');
+insert into auth.identities (provider_id, user_id, identity_data, provider)
+values ('google-sub-G', pg_temp.uid('G'), jsonb_build_object('sub', 'google-sub-G', 'email', 'google-only@example.test'), 'google');
 
 -- ---- 呼び出しと測定の補助 ----
 
@@ -430,6 +436,18 @@ select is(
   pg_temp.leftover_refs(pg_temp.uid('S')),
   0::bigint,
   '利用者のIDを値に持つ行が、利用者を指す全ての外部キーの列で0件になる'
+);
+
+-- Googleだけの利用者は、OTPの認証で削除でき、Googleの手段も消える。
+create temp table da_g_call as select pg_temp.call_as(pg_temp.uid('G'), pg_temp.fresh()) as r;
+
+select is((select r from da_g_call), 'ok', 'Googleだけで作った確認済みの利用者が、OTPの認証で削除できる(メールの手段を残すトリガーに妨げられない)');
+
+select is_empty(
+  $$select 'auth.users' from auth.users where id = pg_temp.uid('G')
+    union all select 'identities' from auth.identities where user_id = pg_temp.uid('G')
+    union all select 'users' from public.users where id = pg_temp.uid('G')$$,
+  'Googleだけの利用者の認証の行(Googleの手段を含む)とプロフィールが消える'
 );
 
 -- ============================================================

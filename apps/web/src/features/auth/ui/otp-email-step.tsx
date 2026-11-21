@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import type { FormEvent, RefObject } from "react";
+import type { FormEvent, ReactNode, RefObject } from "react";
 import { Input } from "@/components/ui/input";
 import { AuthField } from "./auth-field";
 import { OtpSendForm } from "./otp-send-form";
@@ -24,6 +24,8 @@ type OtpEmailStepProps = {
   onCheck: (token: string | null) => void;
   onFailed: () => void;
   waiting: boolean;
+  // フォームの上に差し込む部品(サインインのGoogleの操作)。
+  leading?: ReactNode;
 };
 
 export function OtpEmailStep({
@@ -42,38 +44,42 @@ export function OtpEmailStep({
   onCheck,
   onFailed,
   waiting,
+  leading,
 }: OtpEmailStepProps) {
   const t = useTranslations("auth");
   return (
-    <OtpSendForm
-      onSubmit={onSubmit}
-      hydrated={hydrated}
-      siteKey={siteKey}
-      checkRef={checkRef}
-      onCheck={onCheck}
-      onFailed={onFailed}
-      waiting={waiting}
-      submitting={submitting}
-      label={t("emailContinue")}
-      variant="default"
-      resendCooldown={resendCooldown}
-      resendError={resendError}
-      error={error}
-    >
-      <AuthField errorId={`${idPrefix}-email-error`} error={emailError}>
-        {(aria) => (
-          <Input
-            type="email"
-            name="email"
-            autoComplete="email"
-            placeholder={t("emailPlaceholder")}
-            readOnly={submitting}
-            value={email}
-            onChange={(e) => onEmailChange(e.target.value)}
-            {...aria}
-          />
-        )}
-      </AuthField>
-    </OtpSendForm>
+    <>
+      {leading}
+      <OtpSendForm
+        onSubmit={onSubmit}
+        hydrated={hydrated}
+        siteKey={siteKey}
+        checkRef={checkRef}
+        onCheck={onCheck}
+        onFailed={onFailed}
+        waiting={waiting}
+        submitting={submitting}
+        label={t("emailContinue")}
+        variant="default"
+        resendCooldown={resendCooldown}
+        resendError={resendError}
+        error={error}
+      >
+        <AuthField errorId={`${idPrefix}-email-error`} error={emailError}>
+          {(aria) => (
+            <Input
+              type="email"
+              name="email"
+              autoComplete="email"
+              placeholder={t("emailPlaceholder")}
+              readOnly={submitting}
+              value={email}
+              onChange={(e) => onEmailChange(e.target.value)}
+              {...aria}
+            />
+          )}
+        </AuthField>
+      </OtpSendForm>
+    </>
   );
 }

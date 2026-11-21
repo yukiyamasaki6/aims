@@ -44,18 +44,24 @@ function useBusy(view: SettingsView | null) {
 
 // 設定パネル。今の画面の上に重ねるモーダルのダイアログで、見出し、閉じる、分類の一覧と、表示の領域を描く。
 // view: 開いている表示(閉じているときはnull)。onMove: パネルの中で移る。onClose: 閉じる。
-// signOut: 分類「アカウント」のサインアウトの行。renderItem: 項目の画面。表示が変わると外す(入力と途中の経過は残らない)。
+// email: 現在のメールアドレス。renderGoogle: 「Google認証」の値と操作。signOut: 分類「アカウント」のサインアウトの行。renderItem: 項目の画面。表示が変わると外す(入力と途中の経過は残らない)。
 // 閉じた後のフォーカスはパネルが戻さない(戻し先はレフトパネルの要素で、入口がレフトパネルへ渡す)。
 export function SettingsPanel({
   view,
   onMove,
   onClose,
+  email,
+  renderGoogle,
   signOut,
   renderItem,
 }: {
   view: SettingsView | null;
   onMove: (view: SettingsView) => void;
   onClose: () => void;
+  email: string;
+  renderGoogle: (controls: {
+    onBusyChange: (busy: boolean) => void;
+  }) => ReactNode;
   signOut: ReactNode;
   renderItem: SettingsItemRenderer;
 }) {
@@ -115,7 +121,13 @@ export function SettingsPanel({
           </nav>
           <div className="min-h-0 min-w-0 flex-1">
             {view === "account" && (
-              <SettingsAccount onMove={move} signOut={signOut} />
+              <SettingsAccount
+                email={email}
+                renderGoogle={renderGoogle}
+                onBusyChange={setBusy}
+                onMove={move}
+                signOut={signOut}
+              />
             )}
             {view !== null && view !== "account" && (
               // 表示ごとにkeyを変えて作り直す。

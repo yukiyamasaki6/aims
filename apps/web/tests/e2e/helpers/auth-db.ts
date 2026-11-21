@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 
 // ローカルのテスト用DBだけに接続する。ホストが手元でなければ、本番へ向けた書き換えを避けるため実行しない。
@@ -51,4 +52,85 @@ export function backdateOtpEvidence(email: string) {
       [email],
     ),
   );
+}
+
+export type GoogleLinkedUser = {
+  id: string;
+  email: string;
+  // Googleの手段が持つアドレス。
+  googleEmail: string;
+};
+
+// Googleで作った(または結び付けた)確認済みの利用者を、認証サービスの表へ直接入れる。実際のGoogleでの認証は、E2Eでは再現できない。
+// emailIdentity: メールの手段も持つ(メールで作ってGoogleを追加した形)。持たないときは、Googleの手段だけを持つ(Googleで作った形)。
+// googleEmail: Googleの手段だけに残るアドレス(メールアドレスの変更の後にGoogle側に残った形)。省略時はアカウントのアドレス。
+// 認証サービスの列のうちトークンの列は、NULLだと認証サービスが500にするため空文字にする。
+export function createGoogleLinkedUser(input: {
+  email: string;
+  emailIdentity: boolean;
+  googleEmail?: string;
+}): Promise<GoogleLinkedUser> {
+  const id = randomUUID();
+  const googleEmail = input.googleEmail ?? input.email;
+  const googleSubject = randomUUID().replaceAll("-", "");
+  const providers = input.emailIdentity ? ["email", "google"] : ["google"];
+  return withLocalDb(async (client) => {
+    await client.query("begin");
+    try {
+      await client.query(
+        `insert into auth.users (
+           instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+           raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+           confirmation_token, recovery_token, email_change_token_new, email_change,
+           email_change_token_current, reauthentication_token, phone_change, phone_change_token
+         ) values (
+           '00000000-0000-0000-0000-000000000000', $1, 'authenticated', 'authenticated', $2, '', now(),
+           $3::jsonb, '{}'::jsonb, now(), now(),
+           '', '', '', '', '', '', '', ''
+         )`,
+        [
+          id,
+          input.email,
+          JSON.stringify({ provider: providers[0], providers }),
+        ],
+      );
+      await client.query(
+        `insert into auth.identities (
+           id, user_id, provider_id, provider, identity_data, last_sign_in_at, created_at, updated_at
+         ) values ($1, $2, $3, 'google', $4::jsonb, now(), now(), now())`,
+        [
+          randomUUID(),
+          id,
+          googleSubject,
+          JSON.stringify({
+            iss: "https://accounts.google.com",
+            sub: googleSubject,
+            email: googleEmail,
+            email_verified: true,
+          }),
+        ],
+      );
+      if (input.emailIdentity)
+        await client.query(
+          `insert into auth.identities (
+             id, user_id, provider_id, provider, identity_data, last_sign_in_at, created_at, updated_at
+           ) values ($1::uuid, $2::uuid, $2::uuid::text, 'email', $3::jsonb, now(), now(), now())`,
+          [
+            randomUUID(),
+            id,
+            JSON.stringify({
+              sub: id,
+              email: input.email,
+              email_verified: true,
+              phone_verified: false,
+            }),
+          ],
+        );
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    }
+    return { id, email: input.email, googleEmail };
+  });
 }

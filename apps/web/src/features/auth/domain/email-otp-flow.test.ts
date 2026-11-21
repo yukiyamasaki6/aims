@@ -166,4 +166,23 @@ describe("メールOTPの判断", () => {
       resendCooldown: 0,
     });
   });
+  it("Googleにだけ残るアドレスの送付拒否は、メール入力に留まり、案内の理由を載せ、再送待機を始めず、コード入力へ進まない", () => {
+    // Given
+    const sending = beginSendCode(checked, { email, offline: false }).state;
+
+    // When
+    const next = emailOtpReducer(sending, {
+      type: "refused",
+      failure: { kind: "google_only_address" },
+    });
+
+    // Then
+    expect(next).toMatchObject({
+      step: "email",
+      pending: null,
+      error: "google_only_address",
+      captchaToken: null,
+      resendCooldown: 0,
+    });
+  });
 });

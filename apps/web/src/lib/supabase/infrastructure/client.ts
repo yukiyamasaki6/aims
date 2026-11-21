@@ -9,5 +9,8 @@ export function createClient() {
     throw new Error("Missing Supabase environment variables in client.");
   }
 
-  return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
+  // URLの`code`は自動で交換しない。Googleでの認証の戻りは、戻り先の画面が明示して1回だけ交換する(自動の交換は、最初に接続を使った画面が、別の検証子の`code`を先に消費しうるため)。
+  return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: { detectSessionInUrl: false },
+  });
 }

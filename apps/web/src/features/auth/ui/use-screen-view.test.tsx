@@ -115,6 +115,30 @@ describe("useScreenView", () => {
     expect(view.isMounted()).toBe(false);
   });
 
+  it("同じ画面で2つ目の状態(Google)を持ち、その実行中に画面を離れると、どちらの表示中の判定も偽になる", () => {
+    // Given
+    const { result, unmount } = renderHook(() => ({
+      otp: useScreenView(add, 10),
+      google: useScreenView(add, 0),
+    }));
+    act(() => {
+      result.current.google.view.begin((state) => ({
+        state: state + 1,
+        request: "go",
+      }));
+    });
+    const { otp, google } = result.current;
+    const before = [otp.view.isMounted(), google.view.isMounted()];
+
+    // When
+    unmount();
+
+    // Then
+    expect(before).toEqual([true, true]);
+    expect(otp.view.isMounted()).toBe(false);
+    expect(google.view.isMounted()).toBe(false);
+  });
+
   describe("begin", () => {
     const start = (state: number, amount: number): Start<number, number> =>
       state + amount > 100

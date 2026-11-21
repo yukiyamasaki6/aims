@@ -68,6 +68,10 @@ export const SETTINGS_ACCOUNT_HASH = `${SETTINGS_HASH}/account`;
 export const CHANGE_EMAIL_HASH = `${SETTINGS_ACCOUNT_HASH}/email`;
 export const DELETE_ACCOUNT_HASH = `${SETTINGS_ACCOUNT_HASH}/delete-account`;
 
+// Googleアカウントの追加(`auth/link-google`)の戻り先のクエリ。戻りが追加のものだと見分けるための固定の値の組(`?link-google=1`)で、押した操作との対応を確かめるものではない。
+export const LINK_GOOGLE_PARAM = "link-google";
+export const LINK_GOOGLE_VALUE = "1";
+
 // 認証の画面の経路。
 export const SIGN_IN_PATH = "/signin";
 

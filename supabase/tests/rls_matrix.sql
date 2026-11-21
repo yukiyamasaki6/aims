@@ -544,7 +544,8 @@ where p.pronamespace = 'public'::regnamespace;
 --   RPC、アカウント削除（delete_account）、履歴の取得（rounds_list、distances_list）と、それが読むラウンドの条件の関数（history_rounds）、SELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
 --   distance_config_over_limit: SECURITY INVOKERのsave_round_as_presetが呼ぶ純関数のため、authenticatedだけtrue。anonはfalse。
 --   is_round_editor、shot_fits: RPC（SECURITY DEFINER）の内部だけが呼ぶため、どちらもfalse。
---   トリガー関数（handle_new_user, set_updated_at）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
+--   ensure_email_identity: authenticatedだけtrue。anonはfalse（メールの手段の作成は呼び出した本人だけ）。
+--   トリガー関数（handle_new_user, set_updated_at, keep_email_identity）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
 -- 新しい関数を追加したら、PUBLICからREVOKEし、この表に行を追加する。
 create temp table rls_fn_expected (
   signature text, role_name text, can_execute boolean,
@@ -569,6 +570,8 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.distances_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb,jsonb)', 'authenticated', true),
   ('public.email_otp_access_token_hook(jsonb)', 'anon', false),
   ('public.email_otp_access_token_hook(jsonb)', 'authenticated', false),
+  ('public.ensure_email_identity()',                                                  'anon',          false),
+  ('public.ensure_email_identity()',                                                  'authenticated', true),
   ('public.handle_new_user()',                                                        'anon',          false),
   ('public.handle_new_user()',                                                        'authenticated', false),
   ('public.history_rounds(text,text,date,date,jsonb)',                                'anon',          false),
@@ -577,6 +580,8 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.is_round_editor(uuid)',                                                    'authenticated', false),
   ('public.is_round_member(uuid)',                                                    'anon',          false),
   ('public.is_round_member(uuid)',                                                    'authenticated', true),
+  ('public.keep_email_identity()',                                                    'anon',          false),
+  ('public.keep_email_identity()',                                                    'authenticated', false),
   ('public.record_shots(jsonb)',                                                      'anon',          false),
   ('public.record_shots(jsonb)',                                                      'authenticated', true),
   ('public.rounds_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb)', 'anon',          false),
