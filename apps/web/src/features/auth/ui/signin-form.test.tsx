@@ -172,7 +172,7 @@ describe("SignInForm", () => {
       });
     });
 
-    it("取り消しの戻りで理由を示し、ボタンを再び押せる", async () => {
+    it("取り消しの戻りでは何も示さず、ボタンを再び押せる", async () => {
       // Given
       const h = setup({
         search: "?error=access_denied&error_description=cancelled",
@@ -182,8 +182,24 @@ describe("SignInForm", () => {
       h.render();
 
       // Then
+      await waitFor(() =>
+        expect(googleButton()).toHaveAttribute("aria-disabled", "false"),
+      );
       expect(
-        await screen.findByText(authText("failure.google_cancelled")),
+        screen.queryByText(authText("failure.google_auth_failed")),
+      ).toBeNull();
+    });
+
+    it("失敗の戻りでは「Googleでの認証に失敗しました。」を示し、ボタンを再び押せる", async () => {
+      // Given
+      const h = setup({ search: "?error=server_error" });
+
+      // When
+      h.render();
+
+      // Then
+      expect(
+        await screen.findByText("Googleでの認証に失敗しました。"),
       ).toBeVisible();
       expect(googleButton()).toHaveAttribute("aria-disabled", "false");
     });

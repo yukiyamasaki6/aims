@@ -14,7 +14,6 @@ import {
   beginRemoveGoogle,
   type LinkGoogleEvent,
   type LinkGoogleFlow,
-  type LinkGoogleNotice,
 } from "../domain/link-google-flow";
 import type { AccountSummaryStore } from "./account-summary-store";
 import { type CallResult, failureOf } from "./call-result";
@@ -26,7 +25,7 @@ export type AccountReading =
   | { readonly kind: "failed"; readonly failure: AuthFailure }
   | { readonly kind: "lost" };
 
-// 認証サービスにGoogleアカウントの追加・削除を頼む。例外は投げず、結果は値で返す。
+// 認証サービスにGoogleアカウントの追加・解除を頼む。例外は投げず、結果は値で返す。
 // startGoogleLink: Googleの画面へ移す(移った後は結果を受け取らない)。returnPathは今のオリジンからの戻り先。
 // readAccount: 現在の利用者を認証サービスから読み直す。unlinkGoogle: Googleの手段(identityId)を解除する。
 export type LinkGoogleAuthenticator = {
@@ -35,7 +34,7 @@ export type LinkGoogleAuthenticator = {
   unlinkGoogle(identityId: string): Promise<CallResult>;
 };
 
-// Googleの削除の前に、メールの手段が無ければ作る。例外は投げず、結果は値で返す。
+// Googleの解除の前に、メールの手段が無ければ作る。例外は投げず、結果は値で返す。
 export type EmailIdentityPreparation = {
   ensure(): Promise<CallResult>;
 };
@@ -51,7 +50,7 @@ export type LinkGoogle = {
   capture(search: string): boolean;
   // 行の部品のマウント時に呼ぶ。預かった戻りがあれば処理する。無ければ、オンラインのとき読み直す。
   resume(view: LinkGoogleView): Promise<void>;
-  // 削除の確認の後。メールの手段を確かめてから、Googleの手段を解除する。
+  // 解除の確認の後。メールの手段を確かめてから、Googleの手段を解除する。
   remove(input: { identityId: string }, view: LinkGoogleView): Promise<void>;
 };
 
@@ -65,15 +64,28 @@ type Dependencies = {
 // 追加の戻り先。成功の戻りではハッシュが保たれ、失敗の戻りでは認証サービスが置き換える(入口が分類「アカウント」を開き直す)。背景の画面はホームに固定する。
 const RETURN_PATH = `${ROUNDS_PATH}?${LINK_GOOGLE_PARAM}=${LINK_GOOGLE_VALUE}${SETTINGS_ACCOUNT_HASH}`;
 
-// 戻りの失敗の理由。
-function returnFailureKind(googleReturn: GoogleReturn) {
+// 追加の失敗と、解除の失敗。認証サービスの理由によらず、同じ種類で示す。
+const AUTH_FAILED: AuthFailure = { kind: "google_auth_failed" };
+const UNLINK_FAILED: AuthFailure = { kind: "google_unlink_failed" };
+
+// 記録の概要からGoogleの手段を外し、記録も更新して返す。記録が無いときはnull(行は変わらない)。
+function withoutGoogle(summaries: AccountSummaryStore): AccountSummary | null {
+  const recorded = summaries.read();
+  if (recorded === null) return null;
+  const account = { ...recorded, google: null };
+  summaries.write(account);
+  return account;
+}
+
+// 戻りの失敗。取り消し・拒否は、何も示さない(失敗の種類も作らない)。
+function returnFailureOf(googleReturn: GoogleReturn): AuthFailure | null {
   switch (googleReturn.kind) {
     case "cancelled":
-      return "google_link_cancelled";
+      return null;
     case "taken":
-      return "google_link_taken";
+      return { kind: "google_link_taken" };
     default:
-      return "other";
+      return AUTH_FAILED;
   }
 }
 
@@ -92,7 +104,6 @@ export function createLinkGoogle({
     view: LinkGoogleView,
     result: {
       account: AccountSummary | null;
-      notice: LinkGoogleNotice | null;
       failure: AuthFailure | null;
     },
   ) {
@@ -100,7 +111,6 @@ export function createLinkGoogle({
     view.dispatch({
       type: "finished",
       account: result.account,
-      notice: result.notice,
       failure: result.failure?.kind ?? null,
     });
   }
@@ -112,14 +122,16 @@ export function createLinkGoogle({
     return reading;
   }
 
-  // 結果が分からない失敗のとき、読み直した行を示す(読み直せなければ記録の行のまま)。
-  async function finishWithFailure(view: LinkGoogleView, failure: AuthFailure) {
+  // 結果が分からない解除のとき、読み直した行を示す。まだ結び付いていれば失敗を示し、結び付きが無ければ何も示さない。読み直せなければ、記録の行のまま失敗を示す。
+  async function finishUnknownUnlink(view: LinkGoogleView) {
     const reading = await reread();
     if (reading.kind === "lost") return;
     finish(view, {
       account: reading.kind === "read" ? reading.account : null,
-      notice: null,
-      failure,
+      failure:
+        reading.kind === "read" && reading.account.google === null
+          ? null
+          : UNLINK_FAILED,
     });
   }
 
@@ -128,24 +140,15 @@ export function createLinkGoogle({
     googleReturn: GoogleReturn,
   ) {
     if (googleReturn.kind !== "code") {
-      finish(view, {
-        account: null,
-        notice: null,
-        failure: { kind: returnFailureKind(googleReturn) },
-      });
+      finish(view, { account: null, failure: returnFailureOf(googleReturn) });
       return;
     }
     if (!view.begin(beginGoogleLinkReturn)) return;
-    // `code`は交換しない。結び付けは認証サービスが戻り(`/callback`)の時点で済ませている。読み直して、結び付いていれば追加した旨を示す。
+    // `code`は交換しない。結び付けは認証サービスが戻り(`/callback`)の時点で済ませている。読み直して行を更新する(知らせは出さない)。読み直せなかったときも何も示さず、行は記録のままにする(次に開いたときの読み直しで追いつく)。
     const reading = await reread();
     if (reading.kind === "lost") return;
-    if (reading.kind === "failed") {
-      finish(view, { account: null, notice: null, failure: reading.failure });
-      return;
-    }
     finish(view, {
-      account: reading.account,
-      notice: reading.account.google === null ? null : "added",
+      account: reading.kind === "read" ? reading.account : null,
       failure: null,
     });
   }
@@ -168,7 +171,7 @@ export function createLinkGoogle({
       const failure = failureOf(
         await authenticator.startGoogleLink({ returnPath: RETURN_PATH }),
       );
-      if (failure) finish(view, { account: null, notice: null, failure });
+      if (failure) finish(view, { account: null, failure: AUTH_FAILED });
     },
     capture(search) {
       capturedReturn = linkGoogleReturnOf(search);
@@ -189,26 +192,24 @@ export function createLinkGoogle({
       // 先にメールの手段を確かめる。失敗ならGoogleは変わらない。
       const prepared = failureOf(await emailIdentity.ensure());
       if (prepared) {
-        finish(view, { account: null, notice: null, failure: prepared });
+        finish(view, { account: null, failure: UNLINK_FAILED });
         return;
       }
       const unlinked = failureOf(
         await authenticator.unlinkGoogle(input.identityId),
       );
       if (unlinked) {
-        // 拒否は理由だけを示す。結果が分からない(届かなかった)ときだけ、読み直した行を示す。
-        if (unlinked.kind === "unreachable") {
-          await finishWithFailure(view, unlinked);
-        } else {
-          finish(view, { account: null, notice: null, failure: unlinked });
-        }
+        // 拒否は理由だけを示す。結果が分からない(届かなかった)ときだけ、読み直した行で決める。
+        if (unlinked.kind === "unreachable") await finishUnknownUnlink(view);
+        else finish(view, { account: null, failure: UNLINK_FAILED });
         return;
       }
       const reading = await reread();
       if (reading.kind === "lost") return;
+      // 解除は成功と確定している。読み直せたときは読み直した値、読み直せなかったときは記録の概要からGoogleを外した値で、行を「追加」にする。
       finish(view, {
-        account: reading.kind === "read" ? reading.account : null,
-        notice: "removed",
+        account:
+          reading.kind === "read" ? reading.account : withoutGoogle(summaries),
         failure: null,
       });
     },

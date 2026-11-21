@@ -25,7 +25,7 @@
 | `src/features/auth/ui/flow-otp-code-step.tsx` | `useScreenView`の結果（screen）を受け取り、流れの状態からコード入力部品を組み立てる共通部品（`FlowOtpCodeStep`）。削除の確認部品（`DeleteAccountConfirmation`）も同じくscreenを受け取る |
 | `src/features/auth/domain/auth-code.ts` | 6桁の入力上限、コード未入力の検査、60秒の再送待機と0を下限とする残り秒数の更新（`decrementResendCooldown`） |
 | `src/features/auth/domain/auth-routes.ts` | 認証ガード、許可する遷移元、既定の行き先。経路文字列は`src/routes.ts`が持つ |
-| `src/features/auth/domain/auth-failure.ts` | 文言を持たない失敗の種類。Googleの種類は4つ: `google_cancelled`(サインインの取り消し)、`google_only_address`(Googleの手段にだけ残るアドレスの送付)、`google_link_cancelled`(追加の取り消し)、`google_link_taken`(別のアカウントで使われているGoogleの追加) |
+| `src/features/auth/domain/auth-failure.ts` | 文言を持たない失敗の種類。Googleの種類は4つ: `google_auth_failed`(サインイン・追加のGoogleでの認証の失敗。開始・交換・戻りの`error`の拒否・制限・通信を区別しない)、`google_unlink_failed`(Googleの解除の失敗。関数・解除の拒否・通信・結果不明で、読み直してもまだ結び付いているとき)、`google_link_taken`(別のアカウントで使われているGoogleの追加)、`google_only_address`(Googleの手段にだけ残るアドレスの送付)。取り消し(`access_denied`)は失敗の種類を作らず、何も示さない。オフラインは既存の`offline` |
 | `src/features/auth/application/call-result.ts` | IOの受理・失敗の結果。認証サービスの文言は表示しない |
 | `src/features/auth/ui/use-screen-view.ts` | 状態と`ScreenView`、表示中の判定、チェック部品の参照 |
 | `src/features/auth/domain/captcha-token.ts` | チェック完了・待機・解除の規則 |
@@ -102,14 +102,14 @@ SIGNED_INと利用者のある起動時復元はuserId付きのsigned-in、SIGNE
 - 戻りの後始末: 画面または入口が戻りのクエリを読んだ後、`PageAddress.rewrite`(`history.replaceState`。新しい状態のオブジェクトを渡す)で外し、再読み込みで同じ戻りを繰り返さない。
 - bfcache: Googleの画面からブラウザの戻るで戻ると、移る前の実行中のまま復元されうる。`use-page-restore`で実行中を解く。
 - 「Googleで続ける」と「追加」はCAPTCHAを使わない(認証サービスのCAPTCHAはOAuthに掛からない)。
-- DB: `auth.identities`のトリガーが、確認済みのアカウントを残したままメールの手段だけを削除することを拒否する。Googleの削除の前に、`ensure_email_identity()`がメールの手段を作る(`docs/features/auth/link-google/design.md`)。
+- DB: `auth.identities`のトリガーが、確認済みのアカウントを残したままメールの手段だけを削除することを拒否する。Googleの解除の前に、`ensure_email_identity()`がメールの手段を作る(`docs/features/auth/link-google/design.md`)。
 
 ### アカウントの概要の記録
 
 設定の「メールアドレス」「Google認証」の行は、オフラインでアクセストークンが切れていても表示する。`getSession`は、期限の切れたセッションをオフラインでは返さないため、端末に記録する。
 - サインインの通知(`signed-in`)は、利用者のIDに加えて概要(メールアドレス、行に示すGoogleの手段。`session.user.identities`から作る。読めなければ`null`)を持つ。`LocalIdentity`が`aims:account-summary`に書き、`signed-out`で消す。`null`の通知では書き換えない。
-- 行の部品は、オンラインで開いたときと追加・削除の後に`getUser()`で読み直し、記録を更新する。
-- 記録の利用者が端末の識別情報と違う、または記録が無いときは、メールアドレスは`getSession`から読めれば示し、Googleの行は読み直すまで「追加」も「削除」も押せない読み込み中として示す。
+- 行の部品は、オンラインで開いたときと追加・解除の後に`getUser()`で読み直し、記録を更新する。
+- 記録の利用者が端末の識別情報と違う、または記録が無いときは、メールアドレスは`getSession`から読めれば示し、Googleの行は読み直すまで「追加」も「解除」も押せない読み込み中として示す。
 
 ### 本文見出しと操作の文言
 

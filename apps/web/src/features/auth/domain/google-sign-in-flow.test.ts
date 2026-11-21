@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UNREACHABLE } from "./auth-failure";
+import type { AuthFailure } from "./auth-failure";
 import {
   beginGoogleReturn,
   beginGoogleSignIn,
@@ -9,6 +9,7 @@ import {
 } from "./google-sign-in-flow";
 
 const running: GoogleSignInFlow = { running: true, error: null };
+const GOOGLE_AUTH_FAILED: AuthFailure = { kind: "google_auth_failed" };
 
 describe("beginGoogleSignIn", () => {
   it("オンラインで実行中でなければ、実行中にして依頼を返す", () => {
@@ -25,7 +26,10 @@ describe("beginGoogleSignIn", () => {
 
   it("開始では、以前のエラーを消す", () => {
     // Given
-    const failed: GoogleSignInFlow = { running: false, error: "other" };
+    const failed: GoogleSignInFlow = {
+      running: false,
+      error: "google_auth_failed",
+    };
 
     // When
     const result = beginGoogleSignIn(failed, { offline: false });
@@ -70,7 +74,10 @@ describe("beginGoogleSignIn", () => {
 describe("beginGoogleReturn", () => {
   it("戻りの交換の開始は、実行中にして、以前の理由を消す", () => {
     // Given
-    const failed: GoogleSignInFlow = { running: false, error: "other" };
+    const failed: GoogleSignInFlow = {
+      running: false,
+      error: "google_auth_failed",
+    };
 
     // When
     const result = beginGoogleReturn(failed);
@@ -92,16 +99,16 @@ describe("beginGoogleReturn", () => {
 });
 
 describe("googleSignInReducer", () => {
-  it("failedは、実行中を解いて理由を載せる", () => {
+  it("failedは、実行中を解いて失敗を載せる", () => {
     // Given
     // When
     const next = googleSignInReducer(running, {
       type: "failed",
-      failure: UNREACHABLE,
+      failure: GOOGLE_AUTH_FAILED,
     });
 
     // Then
-    expect(next).toEqual({ running: false, error: UNREACHABLE.kind });
+    expect(next).toEqual({ running: false, error: "google_auth_failed" });
   });
 
   it("restoredは、実行中を解く", () => {
@@ -115,7 +122,10 @@ describe("googleSignInReducer", () => {
 
   it("実行中でなければ、restoredは状態を変えない", () => {
     // Given
-    const idle: GoogleSignInFlow = { running: false, error: "other" };
+    const idle: GoogleSignInFlow = {
+      running: false,
+      error: "google_auth_failed",
+    };
 
     // When
     const next = googleSignInReducer(idle, { type: "restored" });

@@ -14,7 +14,7 @@ import { useLinkGoogle } from "./link-google-context";
 import { useAuthTexts } from "./use-auth-texts";
 import { useScreenView } from "./use-screen-view";
 
-// 設定の「Google認証」の行の値と操作(Googleのメールアドレス、「追加」「削除」、削除の確認、知らせ)。行の名は設定の機能が持つ。
+// 設定の「Google認証」の行の値と操作(Googleのメールアドレス、「追加」「解除」、解除の確認、失敗の理由)。行の名は設定の機能が持つ。
 // onBusyChange: 処理中かを設定パネルへ知らせる(処理中は閉じる・分類・戻るを受け付けない)。
 // マウント時に、預かった戻りの処理か、オンラインのときの読み直しを行う。
 export function LinkGoogleRow({
@@ -38,9 +38,10 @@ export function LinkGoogleRow({
     void linkGoogle.resume(view);
   }, []);
   usePageRestore(() => dispatch({ type: "restored" }));
+  // 行の枠(設定の機能)が`flex-wrap`で、値と操作の横に並べ、失敗の段落を行全体の幅で下に折り返す。
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex min-h-11 items-center gap-2">
+    <>
+      <div className="flex h-11 min-w-0 flex-1 items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-muted-foreground text-sm">
           {state.account === null
             ? t("linkGoogleLoading")
@@ -77,31 +78,14 @@ export function LinkGoogleRow({
         error={null}
         nested
       />
-    </div>
+    </>
   );
 }
 
-// 操作の結果の知らせ(失敗の理由か、追加・削除の成功)。
+// 失敗の理由。行の中身の下に、行全体の幅で足す(幅は行の枠が折り返しで与える)。知らせ(成功、取り消し)は出さない。
 function RowMessage({ flow }: { flow: LinkGoogleFlow }) {
-  const t = useTranslations("auth");
   const texts = useAuthTexts();
-  const message = flow.error
-    ? texts.failure(flow.error)
-    : flow.notice === "added"
-      ? t("linkGoogleAdded")
-      : flow.notice === "removed"
-        ? t("linkGoogleRemoved")
-        : null;
+  const message = texts.failure(flow.error);
   if (!message) return null;
-  return (
-    <p
-      className={
-        flow.error
-          ? "pb-2 text-destructive text-sm"
-          : "pb-2 text-muted-foreground text-sm"
-      }
-    >
-      {message}
-    </p>
-  );
+  return <p className="w-full pb-2 text-destructive text-sm">{message}</p>;
 }

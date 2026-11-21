@@ -169,9 +169,9 @@ type RejectionKind = Exclude<
   | "other"
   | "unreachable"
   | "offline"
-  | "google_cancelled"
+  | "google_auth_failed"
+  | "google_unlink_failed"
   | "google_only_address"
-  | "google_link_cancelled"
   | "google_link_taken"
 >;
 

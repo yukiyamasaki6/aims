@@ -31,6 +31,12 @@ const WITH_GOOGLE: AccountSummary = {
   google: { id: "identity-1", email: "archer@gmail.example" },
 };
 
+const FAILURE_KEYS = [
+  "failure.google_auth_failed",
+  "failure.google_unlink_failed",
+  "failure.google_link_taken",
+] as const;
+
 const pending = () => new Promise<never>(() => {});
 
 function setup(
@@ -90,7 +96,7 @@ describe("LinkGoogleRow", () => {
       );
     });
 
-    it("Googleが結び付いているとき、Googleのアドレスと「削除」を示す", async () => {
+    it("Googleが結び付いているとき、Googleのアドレスと「解除」を示す", async () => {
       // Given
       const h = setup({ stored: WITH_GOOGLE });
 
@@ -108,7 +114,7 @@ describe("LinkGoogleRow", () => {
       );
     });
 
-    it("記録が無く読み直す前は、読み込み中を示し、「追加」も「削除」も押せない", () => {
+    it("記録が無く読み直す前は、読み込み中を示し、「追加」も「解除」も押せない", () => {
       // Given
       const h = setup({ stored: null });
       h.authenticator.readAccount.mockReturnValue(pending());
@@ -121,7 +127,7 @@ describe("LinkGoogleRow", () => {
       expect(screen.queryByRole("button")).toBeNull();
     });
 
-    it("記録が無く読み直せないときも、読み込み中のまま「追加」も「削除」も押せない", async () => {
+    it("記録が無く読み直せないときも、読み込み中のまま「追加」も「解除」も押せない", async () => {
       // Given
       const h = setup({ stored: null });
       h.authenticator.readAccount.mockResolvedValue({
@@ -206,8 +212,8 @@ describe("LinkGoogleRow", () => {
     });
   });
 
-  describe("削除", () => {
-    it("「削除」を押すと確認を示し、キャンセルすると手続きを呼ばず元の行へ戻る", async () => {
+  describe("解除", () => {
+    it("「解除」を押すと確認を示し、キャンセルすると手続きを呼ばず元の行へ戻る", async () => {
       // Given
       const h = setup({ stored: WITH_GOOGLE });
       h.mount();
@@ -231,10 +237,35 @@ describe("LinkGoogleRow", () => {
       expect(screen.getByText("archer@gmail.example")).toBeVisible();
     });
 
-    it("確認で確定すると、メールの手段を確かめてからGoogleの手段を解除し、削除した旨を示す", async () => {
+    it("確認で確定すると、解除中は確認の「解除」だけが処理中になり、行のボタンは処理中にならない", async () => {
       // Given
       const h = setup({ stored: WITH_GOOGLE });
-      // マウント時の読み直しは結び付きのまま、削除後の読み直しは結び付きなしを返す。
+      h.authenticator.unlinkGoogle.mockReturnValue(pending());
+      h.mount();
+      const user = userEvent.setup();
+      const rowButton = removeButton();
+      await user.click(rowButton);
+      const dialog = await screen.findByRole("dialog");
+      const confirm = within(dialog).getByTestId("confirm-dialog-confirm");
+
+      // When
+      await user.click(confirm);
+
+      // Then
+      await waitFor(() =>
+        expect(confirm).toHaveAttribute("aria-disabled", "true"),
+      );
+      expect(rowButton).toHaveAttribute("aria-disabled", "false");
+      expect(
+        screen.queryByRole("button", { name: authText("linkGoogleAdd") }),
+      ).toBeNull();
+      expect(h.onBusyChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it("解除が成功すると、メールの手段を確かめてからGoogleの手段を解除し、確認が閉じて行が「追加」になり、知らせを出さない", async () => {
+      // Given
+      const h = setup({ stored: WITH_GOOGLE });
+      // マウント時の読み直しは結び付きのまま、解除後の読み直しは結び付きなしを返す。
       h.authenticator.readAccount
         .mockResolvedValueOnce(readingOf(WITH_GOOGLE))
         .mockResolvedValue(readingOf(WITHOUT_GOOGLE));
@@ -247,36 +278,45 @@ describe("LinkGoogleRow", () => {
       await user.click(within(dialog).getByTestId("confirm-dialog-confirm"));
 
       // Then
-      expect(
-        await screen.findByText(authText("linkGoogleRemoved")),
-      ).toBeVisible();
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(addButton()).toBeVisible();
       expect(h.emailIdentity.ensure).toHaveBeenCalledOnce();
       expect(h.authenticator.unlinkGoogle).toHaveBeenCalledExactlyOnceWith(
         "identity-1",
       );
-      expect(addButton()).toBeVisible();
+      expect(
+        screen.queryByText(authText("failure.google_unlink_failed")),
+      ).toBeNull();
+      expect(h.onBusyChange).toHaveBeenLastCalledWith(false);
     });
 
-    it("解除が届かなかったとき、通信エラーを示し、読み直した行を示す", async () => {
+    it("解除が拒否されると、確認が閉じて行の下に「Google認証の解除に失敗しました。」を示し、処理中を解く", async () => {
       // Given
       const h = setup({ stored: WITH_GOOGLE });
       h.authenticator.unlinkGoogle.mockResolvedValue({
         kind: "failed",
-        failure: { kind: "unreachable" },
+        failure: { kind: "rate_limited" },
       } satisfies CallResult);
       h.mount();
       const user = userEvent.setup();
-      await user.click(removeButton());
+      const rowButton = removeButton();
+      await user.click(rowButton);
       const dialog = await screen.findByRole("dialog");
 
       // When
       await user.click(within(dialog).getByTestId("confirm-dialog-confirm"));
 
       // Then
+      const message = await screen.findByText(
+        authText("failure.google_unlink_failed"),
+      );
+      expect(message).toBeVisible();
       expect(
-        await screen.findByText(authText("failure.unreachable")),
-      ).toBeVisible();
-      expect(screen.getByText("archer@gmail.example")).toBeVisible();
+        rowButton.compareDocumentPosition(message) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(h.onBusyChange).toHaveBeenLastCalledWith(false);
     });
   });
 
@@ -304,7 +344,7 @@ describe("LinkGoogleRow", () => {
       expect(h.authenticator.readAccount).not.toHaveBeenCalled();
     });
 
-    it("預かった追加の戻りが成功なら、読み直して追加した旨を示す", async () => {
+    it("預かった追加の戻りが成功なら、読み直して行を更新し、知らせを出さない", async () => {
       // Given
       const h = setup({ stored: WITHOUT_GOOGLE, read: WITH_GOOGLE });
       h.linkGoogle.capture(`?${LINK_GOOGLE_PARAM}=${LINK_GOOGLE_VALUE}&code=c`);
@@ -313,26 +353,39 @@ describe("LinkGoogleRow", () => {
       h.mount();
 
       // Then
-      expect(
-        await screen.findByText(authText("linkGoogleAdded")),
-      ).toBeVisible();
-      expect(screen.getByText("archer@gmail.example")).toBeVisible();
+      expect(await screen.findByText("archer@gmail.example")).toBeVisible();
+      for (const key of FAILURE_KEYS) {
+        expect(screen.queryByText(authText(key))).toBeNull();
+      }
+    });
+
+    it("預かった追加の戻りが取り消しなら、何も示さず、行は元のままである", async () => {
+      // Given
+      const h = setup({ stored: WITHOUT_GOOGLE });
+      h.linkGoogle.capture(
+        `?${LINK_GOOGLE_PARAM}=${LINK_GOOGLE_VALUE}&error=access_denied&error_description=cancelled`,
+      );
+
+      // When
+      h.mount();
+
+      // Then
+      await waitFor(() => expect(h.onBusyChange).toHaveBeenCalled());
+      expect(addButton()).toBeVisible();
+      for (const key of FAILURE_KEYS) {
+        expect(screen.queryByText(authText(key))).toBeNull();
+      }
     });
 
     it.each([
-      [
-        "取り消し",
-        "error=access_denied&error_description=cancelled",
-        "failure.google_link_cancelled",
-      ],
       [
         "別のアカウントで使用中",
         "error=server_error&error_code=identity_already_exists",
         "failure.google_link_taken",
       ],
-      ["その他の失敗", "error=server_error", "failure.other"],
+      ["その他の失敗", "error=server_error", "failure.google_auth_failed"],
     ] as const)(
-      "預かった追加の戻りが%sなら、その理由を示し、行は元のままである",
+      "預かった追加の戻りが%sなら、その理由を段落で示し、行は元のままである",
       async (_name, query, textKey) => {
         // Given
         const h = setup({ stored: WITHOUT_GOOGLE });

@@ -86,7 +86,7 @@ describe("Googleでのサインインの手続き", () => {
       expect(view.observedState).toEqual(running);
     });
 
-    it("開始が失敗したら、その他の理由を示して実行中を解く", async () => {
+    it("開始が失敗したら、種類によらずGoogleでの認証の失敗を示して実行中を解く", async () => {
       // Given
       const { googleSignIn, authenticator, viewOf } = setup();
       authenticator.startGoogleSignIn.mockResolvedValue(
@@ -98,7 +98,10 @@ describe("Googleでのサインインの手続き", () => {
       await googleSignIn.start({ returnPath: RETURN_PATH }, view);
 
       // Then
-      expect(view.observedState).toEqual({ running: false, error: "other" });
+      expect(view.observedState).toEqual({
+        running: false,
+        error: "google_auth_failed",
+      });
     });
   });
 
@@ -126,7 +129,7 @@ describe("Googleでのサインインの手続き", () => {
       expect(view.observedState).toEqual(initialGoogleSignInFlow);
     });
 
-    it("取り消しの戻りは、遷移元を残してURLから戻りを外し、取り消しの理由を示して再操作できる", async () => {
+    it("取り消しの戻りは、遷移元を残してURLから戻りを外すだけで、何も示さず再操作できる", async () => {
       // Given
       const { googleSignIn, authenticator, address, viewOf } = setup({
         search: `?returnTo=${RETURN_TO}&error=access_denied&error_description=denied`,
@@ -141,13 +144,10 @@ describe("Googleでのサインインの手続き", () => {
         `?returnTo=${RETURN_TO}`,
       );
       expect(authenticator.exchangeGoogleCode).not.toHaveBeenCalled();
-      expect(view.observedState).toEqual({
-        running: false,
-        error: "google_cancelled",
-      });
+      expect(view.observedState).toEqual(initialGoogleSignInFlow);
     });
 
-    it("その他の失敗の戻りは、URLから戻りを外し、その他の理由を示して、交換しない", async () => {
+    it("その他の失敗の戻りは、URLから戻りを外し、Googleでの認証の失敗を示して、交換しない", async () => {
       // Given
       const { googleSignIn, authenticator, address, viewOf } = setup({
         search: "?error=server_error&error_description=x",
@@ -160,12 +160,15 @@ describe("Googleでのサインインの手続き", () => {
       // Then
       expect(address.rewrite).toHaveBeenCalledExactlyOnceWith("");
       expect(authenticator.exchangeGoogleCode).not.toHaveBeenCalled();
-      expect(view.observedState).toEqual({ running: false, error: "other" });
+      expect(view.observedState).toEqual({
+        running: false,
+        error: "google_auth_failed",
+      });
     });
   });
 
   describe("別のアカウントで使用中の戻り(追加の戻りの形)", () => {
-    it("サインインでは、その他の理由を示し、URLから戻りを外して、交換しない", async () => {
+    it("サインインでは、Googleでの認証の失敗を示し、URLから戻りを外して、交換しない", async () => {
       // Given
       const { googleSignIn, authenticator, address, viewOf } = setup({
         search: "?error=server_error&error_code=identity_already_exists",
@@ -178,7 +181,10 @@ describe("Googleでのサインインの手続き", () => {
       // Then
       expect(address.rewrite).toHaveBeenCalledExactlyOnceWith("");
       expect(authenticator.exchangeGoogleCode).not.toHaveBeenCalled();
-      expect(view.observedState).toEqual({ running: false, error: "other" });
+      expect(view.observedState).toEqual({
+        running: false,
+        error: "google_auth_failed",
+      });
     });
   });
 
@@ -240,7 +246,7 @@ describe("Googleでのサインインの手続き", () => {
       ["制限", { kind: "rate_limited" }],
       ["その他", { kind: "other" }],
     ])(
-      "交換が%sで失敗したら、その理由を示し、実行中を解いて、置き換えない",
+      "交換が%sで失敗したら、種類によらずGoogleでの認証の失敗を示し、実行中を解いて、置き換えない",
       async (_name, failure) => {
         // Given
         const { googleSignIn, authenticator, pageReplace, viewOf } = setup({
@@ -256,7 +262,7 @@ describe("Googleでのサインインの手続き", () => {
         expect(pageReplace.replace).not.toHaveBeenCalled();
         expect(view.observedState).toEqual({
           running: false,
-          error: failure.kind,
+          error: "google_auth_failed",
         });
       },
     );

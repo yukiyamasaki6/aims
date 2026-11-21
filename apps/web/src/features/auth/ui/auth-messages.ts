@@ -16,13 +16,11 @@ export const authMessages = {
       email_exists:
         "このメールアドレスは使えません。別のメールアドレスを入力してください。",
       same_email: "現在と異なるメールアドレスを入力してください。",
-      google_cancelled:
-        "Googleでの認証が完了しなかったため、サインインしていません。",
+      google_auth_failed: "Googleでの認証に失敗しました。",
+      google_unlink_failed: "Google認証の解除に失敗しました。",
       google_only_address:
-        "このメールアドレスはGoogleアカウントでのサインインに使われています。「Googleで続ける」からサインインしてください。",
-      google_link_cancelled: "Googleアカウントは追加されていません。",
-      google_link_taken:
-        "このGoogleアカウントは別のアカウントで使われているため、追加できません。",
+        "このメールアドレスはGoogleアカウントで登録されています。",
+      google_link_taken: "このGoogleアカウントは既に使用されています。",
       other: "エラーが発生しました。しばらくしてから再度お試しください。",
     } satisfies Record<AuthFailureKind, string>,
     // 入力の誤りの種類。欄ごとに持つ。
@@ -62,12 +60,9 @@ export const authMessages = {
     googleContinue: "Googleで続ける",
     googleDivider: "または",
     linkGoogleAdd: "追加",
-    linkGoogleRemove: "削除",
+    linkGoogleRemove: "解除",
     linkGoogleLoading: "読み込み中",
-    linkGoogleAdded: "Googleアカウントを追加しました。",
-    linkGoogleRemoved: "Googleアカウントの結び付きを削除しました。",
-    linkGoogleConfirm:
-      "Googleアカウントの結び付きを削除します。削除後は、メールアドレスの認証コードでサインインできます。後でこのGoogleアカウントで認証すると、メールアドレスがこのアカウントと同じときは再びこのアカウントに結び付き、異なるときは新しいアカウントが作られます。",
+    linkGoogleConfirm: "Google認証を解除しますか？",
     // メールアドレスの変更
     changeEmailTitle: "メールアドレス変更",
     changeEmailCurrent: "現在のメールアドレス: {email}",

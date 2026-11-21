@@ -195,13 +195,13 @@ content_path = "./supabase/templates/change-email.html"
 # Googleアカウントの追加・削除を、アカウントのメールアドレスへ知らせる(認証サービスの標準の通知。AIMSは送らない)。
 [auth.email.notification.identity_linked]
 enabled = true
-subject = "【AIMS】Googleアカウントが追加されました"
-content_path = "./supabase/templates/identity-linked-notification.html"
+subject = "【AIMS】Google認証が追加されました"
+content_path = "./supabase/templates/google-auth-linked.html"
 
 [auth.email.notification.identity_unlinked]
 enabled = true
-subject = "【AIMS】Googleアカウントの結び付きが削除されました"
-content_path = "./supabase/templates/identity-unlinked-notification.html"
+subject = "【AIMS】Google認証が解除されました"
+content_path = "./supabase/templates/google-auth-unlinked.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

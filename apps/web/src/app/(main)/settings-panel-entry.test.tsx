@@ -181,7 +181,7 @@ function renderEntry(view: SettingsView) {
 // 「メールアドレス」の行の値(変更のリンクの手前の領域)。
 function emailValue() {
   return screen.getByRole("link", { name: settingsText("emailChange") })
-    .previousElementSibling;
+    .parentElement?.previousElementSibling;
 }
 
 // jsdomにmatchMediaが無いため、入口の表示領域の補償が読む名前を、タブ(補償しない)の偽物で差す。

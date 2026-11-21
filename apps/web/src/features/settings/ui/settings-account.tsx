@@ -18,24 +18,26 @@ function RowLink({
   children: ReactNode;
 }) {
   return (
-    <a
-      href={settingsHashOf(view)}
-      onClick={(event: MouseEvent) => {
-        event.preventDefault();
-        onMove(view);
-      }}
-      className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
-    >
-      {children}
-    </a>
+    <span className="flex h-11 items-center">
+      <a
+        href={settingsHashOf(view)}
+        onClick={(event: MouseEvent) => {
+          event.preventDefault();
+          onMove(view);
+        }}
+        className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+      >
+        {children}
+      </a>
+    </span>
   );
 }
 
-// 行の名と、その右の領域(値と操作)。行全体はリンクにしない。
+// 行の名と、その右の領域(値と操作)。行の中身は高さ44pxの1段に上揃えで固定し、下に足す内容(失敗の段落。行全体の幅で、折り返しで次の段に置く)で行が縦に伸びても動かない。行全体はリンクにしない。
 function Row({ name, children }: { name: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-11 items-center gap-3 px-3 text-sm">
-      <span className="shrink-0">{name}</span>
+    <div className="flex flex-wrap items-start gap-x-3 px-3 text-sm">
+      <span className="flex h-11 shrink-0 items-center">{name}</span>
       {children}
     </div>
   );
@@ -65,8 +67,8 @@ export function SettingsAccount({
       <div className="mx-auto max-w-xl p-8">
         <div className="flex flex-col [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-foreground/40">
           <Row name={t("emailRow")}>
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">
-              {email}
+            <span className="flex h-11 min-w-0 flex-1 items-center">
+              <span className="truncate text-muted-foreground">{email}</span>
             </span>
             <RowLink view="email" onMove={onMove}>
               {t("emailChange")}
@@ -74,7 +76,7 @@ export function SettingsAccount({
           </Row>
           <Row name={t("googleRow")}>{renderGoogle({ onBusyChange })}</Row>
           <Row name={t("deleteAccountRow")}>
-            <span className="flex-1" />
+            <span className="h-11 flex-1" />
             <RowLink view="delete-account" onMove={onMove}>
               {t("deleteAccountAction")}
             </RowLink>

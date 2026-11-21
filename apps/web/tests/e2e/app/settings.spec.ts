@@ -180,7 +180,7 @@ test.describe("Googleのアカウント", () => {
     await openHomeThenSettings(page);
   }
 
-  test("Googleで作ったアカウントは、メールのコードでサインインでき、設定にGoogleのアドレスと「削除」が出る", async ({
+  test("Googleで作ったアカウントは、メールのコードでサインインでき、設定にGoogleのアドレスと「解除」が出る", async ({
     page,
   }) => {
     // Googleで作ったアカウントで、メールのコードでサインインして設定を開く。
@@ -197,7 +197,7 @@ test.describe("Googleのアカウント", () => {
     await expect(googleRemoveButton(page)).toBeVisible();
   });
 
-  test("設定の「追加」は、Googleの画面へ移り、取り消して戻ると、設定の分類「アカウント」が開いて追加されていない旨が示される", async ({
+  test("設定の「追加」は、Googleの画面へ移り、取り消して戻ると、設定の分類「アカウント」が開き、何も知らせず行は「追加」のままである", async ({
     page,
   }) => {
     // メールで作ったアカウントで設定を開き、「追加」を押してGoogleの画面へ移る。
@@ -211,20 +211,20 @@ test.describe("Googleのアカウント", () => {
     // Googleの画面で取り消して、設定へ戻る。
     await returnCancelledFromGoogle(page, authorization);
     await expectAccountCategory(page);
-    await expect(
-      settingsPanel(page).getByText(authText("failure.google_link_cancelled")),
-    ).toBeVisible();
     await expect(googleAddButton(page)).toBeVisible();
+    await expect(
+      settingsPanel(page).getByText(authText("failure.google_auth_failed")),
+    ).toHaveCount(0);
     expect(new URL(page.url()).search).toBe("");
     expect(
       (await page.context().cookies()).some(({ name }) => name === AUTH_COOKIE),
     ).toBe(true);
   });
 
-  test("Googleを結び付けたアカウントは、確認して「削除」すると行が「追加」に変わり、メールのコードで再びサインインできる", async ({
+  test("Googleを結び付けたアカウントは、確認して「解除」すると行が「追加」に変わり、メールのコードで再びサインインできる", async ({
     page,
   }) => {
-    // Googleだけのアカウントで設定を開き、確認して「削除」する。
+    // Googleだけのアカウントで設定を開き、確認して「解除」する。
     const user = await createGoogleLinkedUser({
       email: `google-unlink-${randomUUID()}@aims.test`,
       emailIdentity: false,
@@ -238,8 +238,8 @@ test.describe("Googleのアカウント", () => {
       .click();
     await expect(googleAddButton(page)).toBeVisible();
     await expect(
-      settingsPanel(page).getByText(authText("linkGoogleRemoved")),
-    ).toBeVisible();
+      settingsPanel(page).getByText(authText("failure.google_unlink_failed")),
+    ).toHaveCount(0);
 
     // サインアウトして、メールのコードで再びサインインする。
     await signOutButton(page).click();

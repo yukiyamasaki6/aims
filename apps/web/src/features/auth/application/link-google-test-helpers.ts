@@ -9,7 +9,7 @@ import type {
 
 const accepted: CallResult = { kind: "accepted" };
 
-// Googleの追加・削除の認証の偽物。結果は既定で成功し、読み直しは渡した概要を返す。テストが`mockResolvedValue`などで替える。
+// Googleの追加・解除の認証の偽物。結果は既定で成功し、読み直しは渡した概要を返す。テストが`mockResolvedValue`などで替える。
 export function createFakeLinkGoogleAuthenticator(reading: AccountReading) {
   return {
     startGoogleLink: vi.fn(

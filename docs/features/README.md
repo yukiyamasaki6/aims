@@ -61,7 +61,7 @@
 | auth | signin | サインインする | メールOTP認証、Google認証 |
 | auth | signout | サインアウトする | メールOTP認証 |
 | auth | change-email | サインイン後にメールアドレスを変更する | メール変更 |
-| auth | link-google | サインイン後に、Googleアカウントでのサインインを追加・削除する | Google認証 |
+| auth | link-google | サインイン後に、Googleアカウントでのサインインを追加・解除する | Google認証 |
 | auth | delete-account | サインイン後にアカウントと記録を削除する | アカウント削除 |
 | rounds | start | ラウンドを始める | ラウンド・種目管理 |
 | rounds | score-entry | 矢の点数を記録・修正する | 素点テンキー入力、誤入力修正・差し替え |

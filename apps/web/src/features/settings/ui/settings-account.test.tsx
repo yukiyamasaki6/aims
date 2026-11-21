@@ -74,7 +74,8 @@ describe("SettingsAccount", () => {
     const link = screen.getByRole("link", {
       name: settingsText("emailChange"),
     });
-    expect(link.previousElementSibling?.textContent).toBe("");
+    // 「変更」は高さを揃える包みの中にあり、値はその直前の兄弟である。
+    expect(link.parentElement?.previousElementSibling?.textContent).toBe("");
   });
 
   it("本文に分類の見出しを表示しない", () => {

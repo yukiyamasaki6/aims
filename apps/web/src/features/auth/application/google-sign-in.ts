@@ -35,6 +35,9 @@ export type GoogleSignIn = {
   ): Promise<void>;
 };
 
+// 開始・交換・戻りの失敗は、理由によらず同じ種類で示す。
+const GOOGLE_AUTH_FAILED: AuthFailure = { kind: "google_auth_failed" };
+
 export function createGoogleSignIn({
   authenticator,
   address,
@@ -60,7 +63,7 @@ export function createGoogleSignIn({
       const failure = failureOf(
         await authenticator.startGoogleSignIn({ returnPath: input.returnPath }),
       );
-      if (failure) show(view, failure);
+      if (failure) show(view, GOOGLE_AUTH_FAILED);
     },
     async resume(input, view) {
       const search = address.search();
@@ -68,13 +71,11 @@ export function createGoogleSignIn({
       if (googleReturn === null) return;
       // 再読み込みで同じ戻りを繰り返さないよう、先に戻りを外す。
       address.rewrite(withoutGoogleReturn(search));
-      if (googleReturn.kind === "cancelled") {
-        show(view, { kind: "google_cancelled" });
-        return;
-      }
+      // 取り消し・拒否は、何も示さない(失敗の種類も作らない)。
+      if (googleReturn.kind === "cancelled") return;
       // 追加専用の戻り(taken)はサインインでは起こらないため、その他の失敗と同じに扱う。
       if (googleReturn.kind === "failed" || googleReturn.kind === "taken") {
-        show(view, { kind: "other" });
+        show(view, GOOGLE_AUTH_FAILED);
         return;
       }
       if (!view.begin(beginGoogleReturn)) return;
@@ -84,7 +85,7 @@ export function createGoogleSignIn({
       // 画面を離れた後は、表示も遷移もしない。
       if (!view.isMounted()) return;
       if (failure) {
-        view.dispatch({ type: "failed", failure });
+        view.dispatch({ type: "failed", failure: GOOGLE_AUTH_FAILED });
         return;
       }
       // 成功時は実行中を解除しない。遷移が終わるまでの再押下を防ぐため。

@@ -3,8 +3,18 @@ import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
+import { createFakeAccountSummaryStore } from "@/features/auth/application/account-summary-store-test-helpers";
+import { createLinkGoogle } from "@/features/auth/application/link-google";
+import {
+  createFakeEmailIdentityPreparation,
+  createFakeLinkGoogleAuthenticator,
+  readingOf,
+} from "@/features/auth/application/link-google-test-helpers";
+import { LinkGoogleProvider } from "@/features/auth/ui/link-google-context";
+import { LinkGoogleRow } from "@/features/auth/ui/link-google-row";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type { SettingsView } from "../domain/settings-location";
 import { type SettingsItemControls, SettingsPanel } from "./settings-panel";
 
@@ -479,6 +489,88 @@ describe("SettingsPanel", () => {
       // Then
       expect(screen.queryByText("確認の説明")).toBeNull();
       expect(onClose).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Google認証の解除の確認", () => {
+    const WithGoogle = {
+      userId: "user-1",
+      email: EMAIL,
+      google: { id: "identity-1", email: "archer@gmail.example" },
+    };
+
+    // 解除の確認を開いた状態の設定パネル。
+    async function setupConfirming() {
+      const authenticator = createFakeLinkGoogleAuthenticator(
+        readingOf(WithGoogle),
+      );
+      const linkGoogle = createLinkGoogle({
+        authenticator,
+        emailIdentity: createFakeEmailIdentityPreparation(),
+        summaries: createFakeAccountSummaryStore(WithGoogle),
+        connectivity: createFakeConnectivity(false),
+      });
+      const onClose = vi.fn();
+      render(
+        <LinkGoogleProvider linkGoogle={linkGoogle}>
+          <SettingsPanel
+            view="account"
+            onMove={vi.fn()}
+            onClose={onClose}
+            email={EMAIL}
+            renderGoogle={({ onBusyChange }) => (
+              <LinkGoogleRow onBusyChange={onBusyChange} />
+            )}
+            signOut={<button type="button">サインアウトの行</button>}
+            renderItem={renderItem}
+          />
+        </LinkGoogleProvider>,
+        { wrapper: IntlTestProvider },
+      );
+      const user = userEvent.setup();
+      await user.click(
+        screen.getByRole("button", {
+          name: translatorFor("auth")("linkGoogleRemove"),
+        }),
+      );
+      await screen.findByText(translatorFor("auth")("linkGoogleConfirm"));
+      return { authenticator, onClose, user };
+    }
+
+    it("確認が開いているとき、Escで確認だけが閉じ、手続きを呼ばず、設定パネルは開いたままである", async () => {
+      // Given
+      const { authenticator, onClose, user } = await setupConfirming();
+
+      // When
+      await user.keyboard("{Escape}");
+
+      // Then
+      await waitFor(() =>
+        expect(
+          screen.queryByText(translatorFor("auth")("linkGoogleConfirm")),
+        ).toBeNull(),
+      );
+      expect(authenticator.unlinkGoogle).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(panel()).toBeInTheDocument();
+    });
+
+    it("確認が開いているとき、外側の押下で確認だけが閉じ、手続きを呼ばず、設定パネルは開いたままである", async () => {
+      // Given
+      const { authenticator, onClose, user } = await setupConfirming();
+
+      // When
+      await user.click(backdrop());
+
+      // Then
+      await waitFor(() =>
+        expect(
+          screen.queryByText(translatorFor("auth")("linkGoogleConfirm")),
+        ).toBeNull(),
+      );
+      expect(authenticator.unlinkGoogle).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(panel()).toBeInTheDocument();
     });
   });
 

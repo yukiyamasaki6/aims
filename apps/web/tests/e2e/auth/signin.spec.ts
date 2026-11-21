@@ -163,7 +163,7 @@ test("登録済みメールで確認しても、同じ利用者IDと元の記録
   }
 });
 
-test("「Googleで続ける」は、チェックの完了を待たずに押せてGoogleの画面へ移り、取り消して戻ると、サインイン画面で理由が示され、再度押せる", async ({
+test("「Googleで続ける」は、チェックの完了を待たずに押せてGoogleの画面へ移り、取り消して戻ると、何も知らせずにサインイン画面へ戻り、再度押せる", async ({
   page,
 }) => {
   // チェックの完了を待たずに「Googleで続ける」を押して、Googleの画面へ移る。
@@ -177,8 +177,9 @@ test("「Googleで続ける」は、チェックの完了を待たずに押せ�
 
   // Googleの画面で取り消して、サインイン画面へ戻る。
   await returnCancelledFromGoogle(page, authorization);
-  await expect(page.getByText(t("failure.google_cancelled"))).toBeVisible();
   await expect(page).toHaveURL(/\/signin/);
+  await expect(googleButton).toHaveAttribute("aria-disabled", "false");
+  await expect(page.getByText(t("failure.google_auth_failed"))).toHaveCount(0);
   expect(new URL(page.url()).searchParams.has("error")).toBe(false);
   expect(
     (await page.context().cookies()).some(({ name }) => name === AUTH_COOKIE),

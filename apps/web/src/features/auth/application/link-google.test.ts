@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type { AccountSummary } from "../domain/account-summary";
-import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
+import {
+  type AuthFailure,
+  type AuthFailureKind,
+  UNREACHABLE,
+} from "../domain/auth-failure";
 import {
   initialLinkGoogleFlow,
   type LinkGoogleEvent,
@@ -68,7 +72,7 @@ function setup({
   };
 }
 
-describe("Googleアカウントの追加・削除の手続き", () => {
+describe("Googleアカウントの追加・解除の手続き", () => {
   describe("記録", () => {
     it("行の初期表示は、記録の概要を返す", () => {
       // Given
@@ -130,7 +134,7 @@ describe("Googleアカウントの追加・削除の手続き", () => {
       expect(view.observedState).toBe(before);
     });
 
-    it("開始が失敗したら、理由を示して追加中を解く", async () => {
+    it("開始が失敗したら、種類によらずGoogleでの認証の失敗を示して追加中を解く", async () => {
       // Given
       const { linkGoogle, authenticator, viewOf } = setup();
       authenticator.startGoogleLink.mockResolvedValue(failed(UNREACHABLE));
@@ -142,7 +146,7 @@ describe("Googleアカウントの追加・削除の手続き", () => {
       // Then
       expect(view.observedState).toMatchObject({
         pending: null,
-        error: "unreachable",
+        error: "google_auth_failed",
       });
     });
   });
@@ -176,12 +180,12 @@ describe("Googleアカウントの追加・削除の手続き", () => {
 
       // Then
       expect(authenticator.readAccount).toHaveBeenCalledOnce();
-      expect(view.observedState.notice).toBeNull();
+      expect(view.observedState.error).toBeNull();
     });
   });
 
   describe("codeの戻り", () => {
-    it("交換せず、読み直して結び付いていれば追加した旨を示し、記録と行を読み直した内容にする", async () => {
+    it("交換せず、読み直して、知らせも失敗も出さず、記録と行を読み直した内容にする", async () => {
       // Given
       const { linkGoogle, summaries, viewOf } = setup({
         reading: readingOf(linked),
@@ -197,13 +201,12 @@ describe("Googleアカウントの追加・削除の手続き", () => {
         account: linked,
         pending: null,
         confirming: false,
-        notice: "added",
         error: null,
       });
       expect(summaries.write).toHaveBeenCalledExactlyOnceWith(linked);
     });
 
-    it("読み直しでGoogleが無ければ、成功と示さず、読み直した行だけを示す", async () => {
+    it("読み直しでGoogleが無ければ、何も示さず、読み直した行だけを示す", async () => {
       // Given
       const { linkGoogle, viewOf } = setup({
         stored: linked,
@@ -218,12 +221,11 @@ describe("Googleアカウントの追加・削除の手続き", () => {
       // Then
       expect(view.observedState).toMatchObject({
         account: unlinked,
-        notice: null,
         error: null,
       });
     });
 
-    it("読み直せないときは、成功と示さず、記録の行のまま通信エラーを示す", async () => {
+    it("読み直せないときは、何も示さず、記録の行のままにする", async () => {
       // Given
       const { linkGoogle, summaries, viewOf } = setup({
         reading: { kind: "failed", failure: UNREACHABLE },
@@ -235,16 +237,16 @@ describe("Googleアカウントの追加・削除の手続き", () => {
       await linkGoogle.resume(view);
 
       // Then
-      expect(view.observedState).toMatchObject({
+      expect(view.observedState).toEqual({
         account: unlinked,
         pending: null,
-        notice: null,
-        error: "unreachable",
+        confirming: false,
+        error: null,
       });
       expect(summaries.write).not.toHaveBeenCalled();
     });
 
-    it("戻った時点でサインインが切れていれば、知らせも記録の書き換えも無い", async () => {
+    it("戻った時点でサインインが切れていれば、失敗も記録の書き換えも無い", async () => {
       // Given
       const { linkGoogle, summaries, events, viewOf } = setup({
         reading: { kind: "lost" },
@@ -261,20 +263,20 @@ describe("Googleアカウントの追加・削除の手続き", () => {
   });
 
   describe("失敗の戻り", () => {
-    it.each<[string, string, string]>([
+    it.each<[string, string, AuthFailureKind | null]>([
       [
         "取り消し",
         `?${MARK}&error=access_denied&error_description=denied`,
-        "google_link_cancelled",
+        null,
       ],
       [
         "別のアカウントで使用中",
         `?${MARK}&error=server_error&error_code=identity_already_exists`,
         "google_link_taken",
       ],
-      ["その他の失敗", `?${MARK}&error=server_error`, "other"],
+      ["その他の失敗", `?${MARK}&error=server_error`, "google_auth_failed"],
     ])(
-      "%sの戻りは、各理由を示し、読み直さず、行を変えない",
+      "%sの戻りは、各失敗(取り消しは何も示さない)を示し、読み直さず、行を変えない",
       async (_name, search, kind) => {
         // Given
         const { linkGoogle, authenticator, summaries, viewOf } = setup();
@@ -289,7 +291,6 @@ describe("Googleアカウントの追加・削除の手続き", () => {
           account: unlinked,
           pending: null,
           confirming: false,
-          notice: null,
           error: kind,
         });
         expect(authenticator.readAccount).not.toHaveBeenCalled();
@@ -325,7 +326,7 @@ describe("Googleアカウントの追加・削除の手続き", () => {
       expect(authenticator.readAccount).not.toHaveBeenCalled();
     });
 
-    it("読み直せなくても、行も知らせも変えない", async () => {
+    it("読み直せなくても、行も失敗も変えない", async () => {
       // Given
       const { linkGoogle, events, viewOf } = setup({
         reading: { kind: "failed", failure: UNREACHABLE },
@@ -341,8 +342,8 @@ describe("Googleアカウントの追加・削除の手続き", () => {
     });
   });
 
-  describe("削除", () => {
-    it("メールの手段の準備の後に、行に示したGoogleの手段を解除し、読み直した行を記録して削除した旨を示す", async () => {
+  describe("解除", () => {
+    it("メールの手段の準備の後に、行に示したGoogleの手段を解除し、読み直した行を記録する(知らせは出ない)", async () => {
       // Given
       const { linkGoogle, authenticator, emailIdentity, summaries, viewOf } =
         setup({ stored: linked, reading: readingOf(unlinked) });
@@ -370,12 +371,11 @@ describe("Googleアカウントの追加・削除の手続き", () => {
         account: unlinked,
         pending: null,
         confirming: false,
-        notice: "removed",
         error: null,
       });
     });
 
-    it("準備が失敗したら、解除せず、Googleは結び付いたまま、理由を示す", async () => {
+    it("準備が失敗したら、解除せず、Googleは結び付いたまま、解除の失敗を示す", async () => {
       // Given
       const { linkGoogle, authenticator, emailIdentity, viewOf } = setup({
         stored: linked,
@@ -391,12 +391,11 @@ describe("Googleアカウントの追加・削除の手続き", () => {
       expect(view.observedState).toMatchObject({
         account: linked,
         pending: null,
-        notice: null,
-        error: "other",
+        error: "google_unlink_failed",
       });
     });
 
-    it("解除が拒否されたら、結び付いたまま、理由を示す", async () => {
+    it("解除が拒否されたら、結び付いたまま、解除の失敗を示す", async () => {
       // Given
       const { linkGoogle, authenticator, viewOf } = setup({
         stored: linked,
@@ -412,12 +411,31 @@ describe("Googleアカウントの追加・削除の手続き", () => {
       expect(authenticator.readAccount).not.toHaveBeenCalled();
       expect(view.observedState).toMatchObject({
         account: linked,
-        notice: null,
-        error: "other",
+        error: "google_unlink_failed",
       });
     });
 
-    it("解除の結果が分からないときは、成功と示さず、読み直した行と通信エラーを示す", async () => {
+    it("解除の結果が分からず、読み直してまだ結び付いていれば、解除の失敗を示す", async () => {
+      // Given
+      const { linkGoogle, authenticator, summaries, viewOf } = setup({
+        stored: linked,
+        reading: readingOf(linked),
+      });
+      authenticator.unlinkGoogle.mockResolvedValue(failed(UNREACHABLE));
+      const view = viewOf();
+
+      // When
+      await linkGoogle.remove({ identityId: "identity-google" }, view);
+
+      // Then
+      expect(summaries.write).toHaveBeenCalledExactlyOnceWith(linked);
+      expect(view.observedState).toMatchObject({
+        account: linked,
+        error: "google_unlink_failed",
+      });
+    });
+
+    it("解除の結果が分からず、読み直して結び付きが無ければ、何も示さず行が「追加」になる", async () => {
       // Given
       const { linkGoogle, authenticator, summaries, viewOf } = setup({
         stored: linked,
@@ -433,12 +451,11 @@ describe("Googleアカウントの追加・削除の手続き", () => {
       expect(summaries.write).toHaveBeenCalledExactlyOnceWith(unlinked);
       expect(view.observedState).toMatchObject({
         account: unlinked,
-        notice: null,
-        error: "unreachable",
+        error: null,
       });
     });
 
-    it("解除の結果が分からず読み直しも失敗したら、記録の行のまま通信エラーを示す", async () => {
+    it("解除の結果が分からず読み直しも失敗したら、記録の行のまま解除の失敗を示す", async () => {
       // Given
       const { linkGoogle, authenticator, viewOf } = setup({
         stored: linked,
@@ -453,12 +470,32 @@ describe("Googleアカウントの追加・削除の手続き", () => {
       // Then
       expect(view.observedState).toMatchObject({
         account: linked,
-        notice: null,
-        error: "unreachable",
+        error: "google_unlink_failed",
       });
     });
 
-    it("解除の後にサインインが切れていれば、知らせも記録の書き換えも無い", async () => {
+    it("解除が成功した後に読み直せなくても、記録の概要からGoogleを外した行にして記録し、失敗も知らせも出さない", async () => {
+      // Given
+      const { linkGoogle, summaries, viewOf } = setup({
+        stored: linked,
+        reading: { kind: "failed", failure: UNREACHABLE },
+      });
+      const view = viewOf();
+
+      // When
+      await linkGoogle.remove({ identityId: "identity-google" }, view);
+
+      // Then
+      expect(summaries.write).toHaveBeenCalledExactlyOnceWith(unlinked);
+      expect(view.observedState).toEqual({
+        account: unlinked,
+        pending: null,
+        confirming: false,
+        error: null,
+      });
+    });
+
+    it("解除の後にサインインが切れていれば、失敗も記録の書き換えも無い", async () => {
       // Given
       const { linkGoogle, summaries, events, viewOf } = setup({
         stored: linked,
@@ -526,7 +563,7 @@ describe("Googleアカウントの追加・削除の手続き", () => {
       expect(events).toEqual([]);
     });
 
-    it("削除の途中で離脱したら、完了しても表示を変えない", async () => {
+    it("解除の途中で離脱したら、完了しても表示を変えない", async () => {
       // Given
       const { linkGoogle, emailIdentity, screen, events, viewOf } = setup({
         stored: linked,
