@@ -107,7 +107,11 @@ describe("記録の制御", () => {
     await hub.append(STREAM, roundUpdated({ eventId: "a" }));
 
     // When
-    control.signInChanged({ kind: "signed-in", userId: "user-2" });
+    control.signInChanged({
+      kind: "signed-in",
+      userId: "user-2",
+      summary: null,
+    });
     control.signInChanged({ kind: "signed-out" });
     const afterChanges = [
       control.isRecordUser("user-1"),
@@ -132,7 +136,11 @@ describe("記録の制御", () => {
     rig.signIn.reading = { status: "authenticated", userId: "user-1" };
 
     // When
-    rig.control.signInChanged({ kind: "signed-in", userId: "user-1" });
+    rig.control.signInChanged({
+      kind: "signed-in",
+      userId: "user-1",
+      summary: null,
+    });
     await flush();
 
     // Then
@@ -153,7 +161,7 @@ describe("サインインの変化への反応", () => {
       const { calls, control } = createOrderedFakes({ recordUserId });
 
       // When
-      control.signInChanged({ kind, userId: "user-1" });
+      control.signInChanged({ kind, userId: "user-1", summary: null });
 
       // Then
       expect(calls).toEqual(["sender.resumeHeld"]);

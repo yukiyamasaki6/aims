@@ -1,6 +1,6 @@
 begin;
 
-select plan(21);
+select plan(23);
 
 select ok(
   exists (select 1 from auth.users where id = '00000000-0000-4000-8000-000000000001'
@@ -159,6 +159,19 @@ select is(
   (select count(*) from pg_proc where pronamespace = 'public'::regnamespace and proname in ('record_shots', 'clear_shots', 'shot_fits')),
   3::bigint,
   '矢のRPCと範囲の判定関数は新しい署名の1つずつだけが存在する'
+);
+
+select ok(
+  to_regprocedure('public.ensure_email_identity()') is not null
+    and to_regprocedure('public.keep_email_identity()') is not null,
+  'メールの手段を作る関数と、削除を拒否するトリガー関数が存在する'
+);
+
+select is(
+  (select count(*) from pg_trigger where tgrelid = 'auth.identities'::regclass
+    and tgname = 'keep_email_identity' and not tgisinternal and tgenabled = 'O'),
+  1::bigint,
+  'メールの手段の削除を拒否するトリガーがauth.identitiesに1件、有効で存在する'
 );
 
 select * from finish();

@@ -5,6 +5,7 @@ import {
   isAuthRetryableFetchError,
   type Session,
   type SupabaseClient,
+  type User,
 } from "@supabase/supabase-js";
 import type { SignInChange, SignInChanges } from "../application/auth-changes";
 import type { CallResult } from "../application/call-result";
@@ -21,10 +22,19 @@ import type {
   CodeVerification,
   EmailOtpAuthenticator,
 } from "../application/email-otp";
+import type { GoogleSignInAuthenticator } from "../application/google-sign-in";
+import type {
+  AccountReading,
+  LinkGoogleAuthenticator,
+} from "../application/link-google";
 import type {
   SessionAuthenticator,
   SessionReading,
 } from "../application/session";
+import {
+  type AccountSummary,
+  googleIdentityOf,
+} from "../domain/account-summary";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 
 // 認証サービスの語彙(エラーのクラス名とコード、イベントの名前、セッションの形)を知るのは、このファイルだけである。
@@ -36,6 +46,8 @@ export type SupabaseAuth = EmailOtpAuthenticator &
   ChangeEmailAuthenticator &
   DeleteAccountAuthenticator &
   SessionAuthenticator &
+  GoogleSignInAuthenticator &
+  LinkGoogleAuthenticator &
   SignInChanges;
 
 type Auth = SupabaseClient["auth"];
@@ -50,6 +62,7 @@ export function createSupabaseAuth(
       sendEmailCode(auth, { email, captchaToken, shouldCreateUser }),
     verifyCode: ({ email, code }) => verifyEmailCode(auth, email, code),
     readCurrentAccount: () => readCurrentAccount(auth),
+    ...createGoogleAuthenticator(auth),
     ...createChangeEmailAuthenticator(auth),
     // この端末のサインインだけを終える。終えられたかは、呼び出し側が、この後のサインインの状態の読み取りで決める。
     signOutHere: () => revokeAndClear(auth),
@@ -150,10 +163,16 @@ async function read(
   }
 }
 
-// offlineは送信の前に集約が作る種類で、認証サービスの応答からは作らない。
+// offlineと、googleで始まる種類は、集約・手続きが作る種類(google_only_addressは、統合入口の送付だけが写す)で、共通の対応には入れない。
 type RejectionKind = Exclude<
   AuthFailure["kind"],
-  "other" | "unreachable" | "offline"
+  | "other"
+  | "unreachable"
+  | "offline"
+  | "google_auth_failed"
+  | "google_unlink_failed"
+  | "google_only_address"
+  | "google_link_taken"
 >;
 
 // 認証サービスが拒否したときの、エラーコードと失敗の種類の対応。
@@ -209,6 +228,11 @@ async function sendEmailCode(
     const { error } = await auth().signInWithOtp({ email, options });
     if (!error || (!options.shouldCreateUser && error.code === "otp_disabled"))
       return { kind: "accepted" };
+    // 登録を許す送付(サインインの統合入口)で、Googleの手段にだけ残るアドレスは、認証サービスが422 `user_already_exists`を返す。
+    // 削除の再確認(shouldCreateUser: false)とメール変更には足さない。
+    if (options.shouldCreateUser && error.code === "user_already_exists") {
+      return { kind: "failed", failure: { kind: "google_only_address" } };
+    }
     return { kind: "failed", failure: toAuthFailure(error, REJECTION_KINDS) };
   } catch {
     return { kind: "failed", failure: UNREACHABLE };
@@ -248,6 +272,94 @@ async function readCurrentAccount(
     return data.user?.email
       ? { kind: "current", userId: data.user.id, email: data.user.email }
       : { kind: "failed", failure: { kind: "other" } };
+  } catch {
+    return { kind: "failed", failure: UNREACHABLE };
+  }
+}
+
+// Googleでのサインイン(`/signin`)と、Googleアカウントの追加・削除の認証サービスへの頼みごと。
+function createGoogleAuthenticator(
+  auth: () => Auth,
+): GoogleSignInAuthenticator & LinkGoogleAuthenticator {
+  return {
+    // 戻り先は今のオリジンに足す。成功ではSDKがGoogleの画面へ移す。失敗は値で返す(検証子を保存できないなど)。
+    startGoogleSignIn: ({ returnPath }) =>
+      toCallResult(() =>
+        auth().signInWithOAuth({
+          provider: "google",
+          options: { redirectTo: redirectToOf(returnPath) },
+        }),
+      ),
+    exchangeGoogleCode: (code) =>
+      toCallResult(() => auth().exchangeCodeForSession(code)),
+    startGoogleLink: ({ returnPath }) =>
+      toCallResult(() =>
+        auth().linkIdentity({
+          provider: "google",
+          options: { redirectTo: redirectToOf(returnPath) },
+        }),
+      ),
+    readAccount: () => readAccount(auth),
+    unlinkGoogle: (identityId) => unlinkGoogle(auth, identityId),
+  };
+}
+
+// 今のオリジンからの戻り先のURL。
+function redirectToOf(path: string): string {
+  return `${window.location.origin}${path}`;
+}
+
+// 認証サービスの利用者から、アカウントの概要を作る。identitiesを読めないときはnull。
+function summaryOf(user: User): AccountSummary | null {
+  const { identities } = user;
+  if (!identities) return null;
+  return {
+    userId: user.id,
+    email: user.email ?? null,
+    google: googleIdentityOf(
+      identities.map((identity) => ({
+        id: identity.identity_id,
+        provider: identity.provider,
+        email:
+          typeof identity.identity_data?.email === "string"
+            ? identity.identity_data.email
+            : null,
+        createdAt: identity.created_at ?? null,
+      })),
+    ),
+  };
+}
+
+// 現在の利用者を認証サービスで読み直す(401・403の拒否はサインインの喪失)。
+async function readAccount(auth: () => Auth): Promise<AccountReading> {
+  try {
+    const { data, error } = await auth().getUser();
+    if (error) {
+      return error.status === 401 || error.status === 403
+        ? { kind: "lost" }
+        : { kind: "failed", failure: toAuthFailure(error, REJECTION_KINDS) };
+    }
+    const account = summaryOf(data.user);
+    return account
+      ? { kind: "read", account }
+      : { kind: "failed", failure: { kind: "other" } };
+  } catch {
+    return { kind: "failed", failure: UNREACHABLE };
+  }
+}
+
+// Googleの手段を、手段の一覧から探して解除する。見つからないときは、既に解除されているものとして受け付ける。
+async function unlinkGoogle(
+  auth: () => Auth,
+  identityId: string,
+): Promise<CallResult> {
+  try {
+    const { data, error } = await auth().getUserIdentities();
+    if (error) return failedResult(error);
+    const identity = data.identities.find((i) => i.identity_id === identityId);
+    if (!identity) return { kind: "accepted" };
+    const unlinked = await auth().unlinkIdentity(identity);
+    return unlinked.error ? failedResult(unlinked.error) : { kind: "accepted" };
   } catch {
     return { kind: "failed", failure: UNREACHABLE };
   }
@@ -346,8 +458,10 @@ function toSignInChange(
   switch (event) {
     case "SIGNED_IN":
     case "INITIAL_SESSION": {
-      const userId = session?.user.id;
-      return userId ? { kind: "signed-in", userId } : null;
+      const user = session?.user;
+      return user
+        ? { kind: "signed-in", userId: user.id, summary: summaryOf(user) }
+        : null;
     }
     case "SIGNED_OUT":
       return { kind: "signed-out" };

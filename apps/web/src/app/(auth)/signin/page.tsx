@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { createGoogleSignIn } from "@/features/auth/application/google-sign-in";
 import { createSignIn } from "@/features/auth/application/sign-in";
 import {
   RETURN_TO_PARAM,
   returnToWithHash,
 } from "@/features/auth/domain/auth-routes";
+import { createBrowserPageAddress } from "@/features/auth/infrastructure/browser-page-address";
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignInForm } from "@/features/auth/ui/signin-form";
@@ -23,17 +25,29 @@ const readReturnTo = () =>
 
 export default function SignInPage() {
   // 画面を開いている間、同じ手続きを保つ。
-  const [signIn] = useState(() =>
-    createSignIn({
-      authenticator: createSupabaseAuth(createClient),
-      pageReplace: createBrowserPageLoad(),
-      clock: createBrowserClock(),
-      connectivity: createBrowserConnectivity(),
-    }),
-  );
+  const [procedures] = useState(() => {
+    const authenticator = createSupabaseAuth(createClient);
+    const pageReplace = createBrowserPageLoad();
+    const connectivity = createBrowserConnectivity();
+    return {
+      signIn: createSignIn({
+        authenticator,
+        pageReplace,
+        clock: createBrowserClock(),
+        connectivity,
+      }),
+      googleSignIn: createGoogleSignIn({
+        authenticator,
+        address: createBrowserPageAddress(),
+        pageReplace,
+        connectivity,
+      }),
+    };
+  });
   return (
     <SignInForm
-      signIn={signIn}
+      signIn={procedures.signIn}
+      googleSignIn={procedures.googleSignIn}
       siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""}
       readReturnTo={readReturnTo}
     />

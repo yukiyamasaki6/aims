@@ -693,6 +693,7 @@ export type Database = {
         Returns: Json;
       };
       email_otp_access_token_hook: { Args: { event: Json }; Returns: Json };
+      ensure_email_identity: { Args: never; Returns: undefined };
       history_rounds: {
         Args: {
           p_bow_type: string;

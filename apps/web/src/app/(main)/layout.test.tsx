@@ -1,8 +1,16 @@
 import { type ReactNode, useState } from "react";
+import { createFakeAccountSummaryStore } from "@/features/auth/application/account-summary-store-test-helpers";
+import { createLinkGoogle } from "@/features/auth/application/link-google";
+import {
+  createFakeEmailIdentityPreparation,
+  createFakeLinkGoogleAuthenticator,
+  readingOf,
+} from "@/features/auth/application/link-google-test-helpers";
 import { createSession } from "@/features/auth/application/session";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { LinkGoogleProvider } from "@/features/auth/ui/link-google-context";
 import { SessionProvider } from "@/features/auth/ui/session-context";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
@@ -18,6 +26,7 @@ import {
   type FakeViewport,
   installFakeViewport,
 } from "@/lib/viewport/fake-viewport-test-helpers";
+import { SETTINGS_ACCOUNT_HASH } from "@/routes";
 import MainLayout from "./layout";
 
 const settingsText = translatorFor("settings");
@@ -66,6 +75,21 @@ vi.mock("@supabase/ssr", () => ({
   })),
 }));
 
+// Googleアカウントの追加の手続き。戻りの預かりは実物で、認証サービスと記録は偽物にする。
+function createLinkGoogleForTest() {
+  const summary = {
+    userId: "user-1",
+    email: "user@example.com",
+    google: null,
+  };
+  return createLinkGoogle({
+    authenticator: createFakeLinkGoogleAuthenticator(readingOf(summary)),
+    emailIdentity: createFakeEmailIdentityPreparation(),
+    summaries: createFakeAccountSummaryStore(summary),
+    connectivity: createFakeConnectivity(),
+  });
+}
+
 // 入口が渡すセッションの手続きを、実物で組み立てて渡す(識別情報の記録は含まない)。
 function SessionWrapper({ children }: { children: ReactNode }) {
   const [session] = useState(() =>
@@ -78,9 +102,14 @@ function SessionWrapper({ children }: { children: ReactNode }) {
       connectivity: createFakeConnectivity(),
     }),
   );
+  const [linkGoogle] = useState(createLinkGoogleForTest);
   return (
     <IntlTestProvider>
-      <SessionProvider session={session}>{children}</SessionProvider>
+      <SessionProvider session={session}>
+        <LinkGoogleProvider linkGoogle={linkGoogle}>
+          {children}
+        </LinkGoogleProvider>
+      </SessionProvider>
     </IntlTestProvider>
   );
 }
@@ -197,6 +226,56 @@ describe("MainLayout", () => {
 
         // Then
         expect(panel() !== null).toBe(shown);
+      },
+    );
+  });
+
+  describe("Googleアカウントの追加の戻り", () => {
+    it.each([
+      ["codeの戻り", `?link-google=1&code=auth-code`],
+      [
+        "取り消しの戻り",
+        "?link-google=1&error=access_denied&error_description=cancelled",
+      ],
+    ])(
+      "印つきの%sで開くと、戻りを外したURLに書き換え、設定パネルを分類「アカウント」で1回開く",
+      async (_name, search) => {
+        // Given
+        setLocation("/rounds/new", search);
+        const pushState = vi.spyOn(window.history, "pushState");
+
+        // When
+        renderLayout();
+        await flush();
+
+        // Then
+        expect(window.location.search).toBe("");
+        expect(pushState).toHaveBeenCalledTimes(1);
+        expect(window.location.hash).toBe(SETTINGS_ACCOUNT_HASH);
+        expect(
+          screen.getByRole("dialog", { name: settingsText("title") }),
+        ).toBeInTheDocument();
+      },
+    );
+
+    it.each([
+      ["戻りが無い", ""],
+      ["印の無いcodeの", "?code=auth-code"],
+    ])(
+      "%sURLで開くと、URLを変えず、設定パネルを開かない",
+      async (_name, search) => {
+        // Given
+        setLocation("/rounds/new", search);
+        const pushState = vi.spyOn(window.history, "pushState");
+
+        // When
+        renderLayout();
+        await flush();
+
+        // Then
+        expect(window.location.search).toBe(search);
+        expect(pushState).not.toHaveBeenCalled();
+        expect(window.location.hash).toBe("");
       },
     );
   });

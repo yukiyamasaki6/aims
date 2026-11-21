@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import {
   CHANGE_EMAIL_HASH,
@@ -8,15 +9,24 @@ import {
   SETTINGS_ACCOUNT_HASH,
 } from "@/routes";
 import { expect, test } from "../fixtures";
-import { SHARED_AUTH_STATE_PATH, waitForHydration } from "../helpers/auth";
+import {
+  SHARED_AUTH_STATE_PATH,
+  signInWithEmailOtp,
+  signUpAndSignIn,
+  waitForHydration,
+} from "../helpers/auth";
+import { createGoogleLinkedUser } from "../helpers/auth-db";
+import { blockGoogle, returnCancelledFromGoogle } from "../helpers/google-auth";
 import {
   accountCategory,
   closeButton,
+  expectAccountCategory,
   homeHeading,
   openHomeThenSettings,
   openSettingsByItem,
   settingsPanel,
 } from "../helpers/settings";
+import { AUTH_COOKIE } from "../helpers/stored-session";
 
 const authText = translatorFor("auth");
 const settingsText = translatorFor("settings");
@@ -78,15 +88,22 @@ test.describe("認証済み", () => {
   });
 
   test.describe("中を使う", () => {
-    test("分類「アカウント」にメールアドレス変更・アカウント削除・サインアウトがあり、レフトパネルにサインアウトのボタンは無く、本文に分類の見出しは無い", async ({
+    test("分類「アカウント」にメールアドレス・Google認証・アカウント削除の行とサインアウトがあり、レフトパネルにサインアウトのボタンは無く、本文に分類の見出しは無い", async ({
       page,
     }) => {
       await openHomeThenSettings(page);
 
       const panel = settingsPanel(page);
-      for (const item of ["changeEmailItem", "deleteAccountItem"] as const) {
+      for (const row of [
+        "emailRow",
+        "googleRow",
+        "deleteAccountRow",
+      ] as const) {
+        await expect(panel.getByText(settingsText(row))).toBeVisible();
+      }
+      for (const action of ["emailChange", "deleteAccountAction"] as const) {
         await expect(
-          panel.getByRole("link", { name: settingsText(item) }),
+          panel.getByRole("link", { name: settingsText(action), exact: true }),
         ).toBeVisible();
       }
       await expect(signOutButton(page)).toBeVisible();
@@ -104,8 +121,8 @@ test.describe("認証済み", () => {
     });
 
     for (const [item, title, hash] of [
-      ["changeEmailItem", "changeEmailTitle", CHANGE_EMAIL_HASH],
-      ["deleteAccountItem", "deleteAccountTitle", DELETE_ACCOUNT_HASH],
+      ["emailChange", "changeEmailTitle", CHANGE_EMAIL_HASH],
+      ["deleteAccountAction", "deleteAccountTitle", DELETE_ACCOUNT_HASH],
     ] as const) {
       test(`「${settingsText(item)}」項目を押すと、設定パネルの中に項目の画面が出て、URLが${hash}になる`, async ({
         page,
@@ -113,7 +130,7 @@ test.describe("認証済み", () => {
         await openHomeThenSettings(page);
 
         await settingsPanel(page)
-          .getByRole("link", { name: settingsText(item) })
+          .getByRole("link", { name: settingsText(item), exact: true })
           .click();
 
         await expect(
@@ -130,7 +147,7 @@ test.describe("認証済み", () => {
     }) => {
       await openHomeThenSettings(page);
       await settingsPanel(page)
-        .getByRole("link", { name: settingsText("changeEmailItem") })
+        .getByRole("link", { name: settingsText("emailChange"), exact: true })
         .click();
       await expect(page).toHaveURL(new RegExp(`${CHANGE_EMAIL_HASH}$`));
 
@@ -139,6 +156,151 @@ test.describe("認証済み", () => {
       await expect(page).toHaveURL(new RegExp(`${SETTINGS_ACCOUNT_HASH}$`));
       await expect(signOutButton(page)).toBeVisible();
     });
+  });
+});
+
+test.describe("Googleのアカウント", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  function googleRemoveButton(page: Page) {
+    return settingsPanel(page).getByRole("button", {
+      name: authText("linkGoogleRemove"),
+    });
+  }
+
+  function googleAddButton(page: Page) {
+    return settingsPanel(page).getByRole("button", {
+      name: authText("linkGoogleAdd"),
+    });
+  }
+
+  // メールのコードでサインインして、ホームから設定の分類「アカウント」を開いたことの確認で終わる。
+  async function signInByCodeAndOpenSettings(page: Page, email: string) {
+    await signUpAndSignIn(page, { email, password: "unused-password1" });
+    await openHomeThenSettings(page);
+  }
+
+  test("Googleで作ったアカウントは、メールのコードでサインインでき、設定にGoogleのアドレスと「解除」が出る", async ({
+    page,
+  }) => {
+    // Googleで作ったアカウントで、メールのコードでサインインして設定を開く。
+    const user = await createGoogleLinkedUser({
+      email: `google-created-${randomUUID()}@aims.test`,
+      emailIdentity: false,
+      googleEmail: `google-address-${randomUUID()}@aims.test`,
+    });
+    await signInByCodeAndOpenSettings(page, user.email);
+
+    const panel = settingsPanel(page);
+    await expect(panel.getByText(user.email)).toBeVisible();
+    await expect(panel.getByText(user.googleEmail)).toBeVisible();
+    await expect(googleRemoveButton(page)).toBeVisible();
+  });
+
+  test("設定の「追加」は、Googleの画面へ移り、取り消して戻ると、設定の分類「アカウント」が開き、何も知らせず行は「追加」のままである", async ({
+    page,
+  }) => {
+    // メールで作ったアカウントで設定を開き、「追加」を押してGoogleの画面へ移る。
+    const google = await blockGoogle(page);
+    const email = `link-cancel-${randomUUID()}@aims.test`;
+    await signInByCodeAndOpenSettings(page, email);
+    await googleAddButton(page).click();
+    const authorization = await google.authorization();
+    expect(google.requests).toHaveLength(1);
+
+    // Googleの画面で取り消して、設定へ戻る。
+    await returnCancelledFromGoogle(page, authorization);
+    await expectAccountCategory(page);
+    await expect(googleAddButton(page)).toBeVisible();
+    await expect(
+      settingsPanel(page).getByText(authText("failure.google_auth_failed")),
+    ).toHaveCount(0);
+    expect(new URL(page.url()).search).toBe("");
+    expect(
+      (await page.context().cookies()).some(({ name }) => name === AUTH_COOKIE),
+    ).toBe(true);
+  });
+
+  test("Googleを結び付けたアカウントは、確認して「解除」すると行が「追加」に変わり、メールのコードで再びサインインできる", async ({
+    page,
+  }) => {
+    // Googleだけのアカウントで設定を開き、確認して「解除」する。
+    const user = await createGoogleLinkedUser({
+      email: `google-unlink-${randomUUID()}@aims.test`,
+      emailIdentity: false,
+    });
+    await signInByCodeAndOpenSettings(page, user.email);
+    await googleRemoveButton(page).click();
+    await page
+      .getByRole("dialog")
+      .filter({ hasText: authText("linkGoogleConfirm") })
+      .getByRole("button", { name: authText("linkGoogleRemove") })
+      .click();
+    await expect(googleAddButton(page)).toBeVisible();
+    await expect(
+      settingsPanel(page).getByText(authText("failure.google_unlink_failed")),
+    ).toHaveCount(0);
+
+    // サインアウトして、メールのコードで再びサインインする。
+    await signOutButton(page).click();
+    await page
+      .getByRole("button", { name: authText("signOutConfirmLabel") })
+      .click();
+    await expect(page).toHaveURL(/\/signin/);
+    await signUpAndSignIn(page, {
+      email: user.email,
+      password: "unused-password1",
+    });
+    await expect(page).toHaveURL(/\/rounds/);
+  });
+
+  test("メールの手段を直接外そうとしても拒否され、Googleの手段は外せて、メールのコードでのサインインは変わらない", async () => {
+    // メールとGoogleの手段を持つアカウントで、メールのコードでサインインする。
+    const user = await createGoogleLinkedUser({
+      email: `google-direct-${randomUUID()}@aims.test`,
+      emailIdentity: true,
+    });
+    const client = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    );
+    try {
+      const signedIn = await signInWithEmailOtp(client, user.email);
+      expect(signedIn.error).toBeNull();
+      const identities = (await client.auth.getUserIdentities()).data
+        ?.identities;
+      const emailIdentity = identities?.find(
+        ({ provider }) => provider === "email",
+      );
+      const googleIdentity = identities?.find(
+        ({ provider }) => provider === "google",
+      );
+      if (!emailIdentity || !googleIdentity)
+        throw new Error("identities missing");
+
+      // 認証サービスの手段の解除を直接呼ぶと、メールの手段は拒否され、Googleの手段は外せる。
+      const emailUnlinked = await client.auth.unlinkIdentity(emailIdentity);
+      expect(emailUnlinked.error?.status).toBe(500);
+      const googleUnlinked = await client.auth.unlinkIdentity(googleIdentity);
+      expect(googleUnlinked.error).toBeNull();
+
+      // 別のクライアントでも、メールのコードでサインインできる。
+      const other = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+        { auth: { persistSession: false, autoRefreshToken: false } },
+      );
+      try {
+        const again = await signInWithEmailOtp(other, user.email);
+        expect(again.error).toBeNull();
+        expect(again.data.user?.id).toBe(user.id);
+      } finally {
+        await other.auth.stopAutoRefresh();
+      }
+    } finally {
+      await client.auth.stopAutoRefresh();
+    }
   });
 });
 

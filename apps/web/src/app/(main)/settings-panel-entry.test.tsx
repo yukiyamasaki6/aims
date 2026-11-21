@@ -9,12 +9,20 @@ import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-tes
 import { createClient } from "@/lib/supabase/infrastructure/client";
 
 import "fake-indexeddb/auto";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { forwardRef, useImperativeHandle } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createFakeAccountSummaryStore } from "@/features/auth/application/account-summary-store-test-helpers";
 import type { DeleteAccount } from "@/features/auth/application/delete-account";
+import { createLinkGoogle } from "@/features/auth/application/link-google";
+import {
+  createFakeEmailIdentityPreparation,
+  createFakeLinkGoogleAuthenticator,
+  readingOf,
+} from "@/features/auth/application/link-google-test-helpers";
 import { DeleteAccountProvider } from "@/features/auth/ui/delete-account-context";
+import { LinkGoogleProvider } from "@/features/auth/ui/link-google-context";
 import type { SettingsView } from "@/features/settings/domain/settings-location";
 import type { SettingsRoute } from "@/features/settings/ui/use-settings-route";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
@@ -26,6 +34,7 @@ import {
 import { SettingsPanelEntry } from "./settings-panel-entry";
 
 const authText = translatorFor("auth");
+const settingsText = translatorFor("settings");
 
 // 入口のテスト。SDK(@supabase/ssr)と、ブラウザの保存先(localStorage)・場所(location)の境界だけを差し替え、
 // 手続き、実装、画面、確認ダイアログ、設定パネルは実物を通す。
@@ -114,6 +123,7 @@ function SessionWrapper({ children }: { children: ReactNode }) {
 const replace = vi.fn();
 const assign = vi.fn();
 const IDENTITY_KEY = "aims:local-user-id";
+const SUMMARY_KEY = "aims:account-summary";
 
 function setLocation(pathname: string, search = "", hash = "") {
   vi.stubGlobal("location", {
@@ -143,6 +153,15 @@ const deleteAccount: DeleteAccount = {
   tickCooldown: vi.fn(() => () => {}),
 };
 
+// Googleの行の手続き。認証サービスと記録は偽物にする。
+const googleSummary = { userId: "user-1", email: null, google: null };
+const linkGoogle = createLinkGoogle({
+  authenticator: createFakeLinkGoogleAuthenticator(readingOf(googleSummary)),
+  emailIdentity: createFakeEmailIdentityPreparation(),
+  summaries: createFakeAccountSummaryStore(googleSummary),
+  connectivity: createFakeConnectivity(),
+});
+
 function entry(view: SettingsView) {
   return <SettingsPanelEntry route={routeOf(view)} />;
 }
@@ -151,10 +170,18 @@ function entry(view: SettingsView) {
 function renderEntry(view: SettingsView) {
   return render(
     <DeleteAccountProvider deleteAccount={deleteAccount}>
-      {entry(view)}
+      <LinkGoogleProvider linkGoogle={linkGoogle}>
+        {entry(view)}
+      </LinkGoogleProvider>
     </DeleteAccountProvider>,
     { wrapper: SessionWrapper },
   );
+}
+
+// 「メールアドレス」の行の値(変更のリンクの手前の領域)。
+function emailValue() {
+  return screen.getByRole("link", { name: settingsText("emailChange") })
+    .parentElement?.previousElementSibling;
 }
 
 // jsdomにmatchMediaが無いため、入口の表示領域の補償が読む名前を、タブ(補償しない)の偽物で差す。
@@ -219,6 +246,65 @@ describe("SettingsPanelEntry", () => {
         expect(render).not.toThrow();
       },
     );
+
+    it("端末の記録があるとき、記録のメールアドレスを示す", () => {
+      // Given
+      localStorage.setItem(
+        SUMMARY_KEY,
+        JSON.stringify({
+          userId: "user-1",
+          email: "recorded@example.test",
+          google: null,
+        }),
+      );
+
+      // When
+      renderEntry("account");
+
+      // Then
+      expect(emailValue()).toHaveTextContent("recorded@example.test");
+    });
+
+    it("端末の記録が無く、セッションにメールアドレスがあるとき、セッションのメールアドレスを示す", async () => {
+      // Given
+      supabase.getSession.mockResolvedValue({
+        data: {
+          session: { user: { id: "user-1", email: "session@example.test" } },
+        },
+        error: null,
+      });
+
+      // When
+      renderEntry("account");
+
+      // Then
+      await waitFor(() =>
+        expect(emailValue()).toHaveTextContent("session@example.test"),
+      );
+    });
+
+    it("端末の記録もセッションも読めないとき、メールアドレスの値を空にする", async () => {
+      // Given
+      supabase.getSession.mockRejectedValue(new Error("unreadable"));
+
+      // When
+      renderEntry("account");
+
+      // Then
+      await waitFor(() => expect(supabase.getSession).toHaveBeenCalled());
+      expect(emailValue()).toHaveTextContent("");
+    });
+
+    it("分類「アカウント」では、Googleの行の部品を渡して示す", () => {
+      // Given
+      // When
+      renderEntry("account");
+
+      // Then
+      expect(
+        screen.getByRole("button", { name: authText("linkGoogleAdd") }),
+      ).toBeInTheDocument();
+    });
 
     it("Supabaseの環境変数が無くても、描画時に接続を作らず描画できる", () => {
       // Given

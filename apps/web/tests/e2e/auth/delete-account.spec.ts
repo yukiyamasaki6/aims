@@ -8,7 +8,11 @@ import {
   signInWithEmailOtp,
   signUpAndSignIn,
 } from "../helpers/auth";
-import { backdateOtpEvidence, resetOtpSendInterval } from "../helpers/auth-db";
+import {
+  backdateOtpEvidence,
+  createGoogleLinkedUser,
+  resetOtpSendInterval,
+} from "../helpers/auth-db";
 import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
 import { signInOnOtherDevice } from "../helpers/other-browser-device";
 import { addRound, signInFreshUser } from "../helpers/round-fixtures";
@@ -54,7 +58,7 @@ test("OTPでログインした直後の利用者が設定から削除を選ぶ�
     .getByRole("link", { name: navigation("leftPanelSettings"), exact: true })
     .click();
   await settingsPanel(page)
-    .getByRole("link", { name: settings("deleteAccountItem") })
+    .getByRole("link", { name: settings("deleteAccountAction"), exact: true })
     .click();
   await expect(
     settingsPanel(page).getByRole("heading", { name: t("deleteAccountTitle") }),
@@ -73,6 +77,47 @@ test("OTPでログインした直後の利用者が設定から削除を選ぶ�
   await deleteWithNewCode(page, credentials.email);
 
   // 同じメールで再登録し履歴に旧記録がないことを確認する。
+  await signUpAndSignIn(page, credentials);
+  await page.goto("/rounds/history");
+  await expect(page.getByText(rounds("historyEmpty"))).toBeVisible();
+  await expect(page.getByText(name)).toHaveCount(0);
+});
+
+test("Googleで作ったアカウントは、メールのコードの流れで削除でき、削除後は同じアドレスでサインインしても新しいアカウントになる", async ({
+  page,
+}) => {
+  // 実物のチェックは、送信のたびのやり直しで新しい結果を渡す。モックにも同じ取り直しをさせる。
+  await page.addInitScript(() => {
+    Object.assign(window, { e2eTurnstileReissueOnReset: true });
+  });
+  // Googleで作ったアカウントに記録を置き、メールのコードでサインインして削除画面へ進む。
+  const user = await createGoogleLinkedUser({
+    email: `delete-google-${randomUUID()}@aims.test`,
+    emailIdentity: false,
+  });
+  const credentials = { email: user.email, password: "unused-password1" };
+  await signUpAndSignIn(page, credentials);
+  const name = `削除前-${randomUUID()}`;
+  await addRound(credentials, name, "2026-08-24", { completed: true });
+  await page.goto("/rounds/history");
+  await expect(page.getByText(name)).toBeVisible();
+  await page
+    .getByRole("link", { name: navigation("leftPanelSettings"), exact: true })
+    .click();
+  await settingsPanel(page)
+    .getByRole("link", { name: settings("deleteAccountAction"), exact: true })
+    .click();
+  await expect(
+    settingsPanel(page).getByRole("heading", { name: t("deleteAccountTitle") }),
+  ).toBeVisible();
+  await expect(
+    settingsPanel(page).locator('[data-hydrated="true"]'),
+  ).toBeAttached();
+
+  // 新しいコードを確認して削除し、サインインへ移る。
+  await deleteWithNewCode(page, user.email);
+
+  // 同じアドレスで再びサインインすると、旧記録の無い新しいアカウントになる。
   await signUpAndSignIn(page, credentials);
   await page.goto("/rounds/history");
   await expect(page.getByText(rounds("historyEmpty"))).toBeVisible();

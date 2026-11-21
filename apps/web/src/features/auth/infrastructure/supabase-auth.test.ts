@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useNamingConvention: 認証サービスのSDKのメソッド名(signInWithOAuth)に合わせるため。
 import {
   AuthApiError,
   type AuthError,
@@ -19,7 +20,7 @@ const connectionLost = new AuthRetryableFetchError("Failed to fetch", 0);
 
 type Listener = (
   event: string,
-  session: { user: { id: string } } | null,
+  session: { user: { id: string; [key: string]: unknown } } | null,
 ) => void;
 
 // 認証サービスの各呼び出しを差し替えた偽の接続。
@@ -27,6 +28,11 @@ function setup() {
   const listeners: Listener[] = [];
   const unsubscribe = vi.fn();
   const auth = {
+    signInWithOAuth: vi.fn(),
+    exchangeCodeForSession: vi.fn(),
+    linkIdentity: vi.fn(),
+    unlinkIdentity: vi.fn(),
+    getUserIdentities: vi.fn(),
     signInWithOtp: vi.fn(),
     verifyOtp: vi.fn(),
     resend: vi.fn(),
@@ -53,7 +59,10 @@ function setup() {
     auth,
     getClient,
     unsubscribe,
-    emit(event: string, session: { user: { id: string } } | null) {
+    emit(
+      event: string,
+      session: { user: { id: string; [key: string]: unknown } } | null,
+    ) {
       for (const listener of listeners) listener(event, session);
     },
   };
@@ -658,7 +667,7 @@ describe("認証状態の購読(subscribe)", () => {
       emit(event, session);
 
       // Then
-      expect(received).toEqual([{ kind: "signed-in", userId }]);
+      expect(received).toEqual([{ kind: "signed-in", userId, summary: null }]);
     },
   );
 
@@ -1273,4 +1282,456 @@ it.each([401, 403])("現在利用者の%sは認証喪失として返す", async 
   const result = await service.readCurrentAccount();
   // Then
   expect(result).toEqual({ kind: "lost" });
+});
+
+// 認証サービスの手段の形(`identities`の要素)。
+function identityOf(
+  provider: string,
+  id: string,
+  email: string,
+  createdAt = "2026-01-01T00:00:00Z",
+) {
+  return {
+    identity_id: id,
+    provider,
+    identity_data: { email },
+    created_at: createdAt,
+  };
+}
+
+const emailIdentity = identityOf("email", "email-1", "archer@example.test");
+const googleIdentity = identityOf("google", "google-1", "archer@gmail.test");
+
+function userOf(identities?: ReturnType<typeof identityOf>[]) {
+  return { id: "user-1", email: "archer@example.test", identities };
+}
+
+describe("サインインの通知のアカウントの概要", () => {
+  it.each([
+    ["Googleなし", [emailIdentity], null],
+    [
+      "Googleあり",
+      [googleIdentity, emailIdentity],
+      { id: "google-1", email: "archer@gmail.test" },
+    ],
+    [
+      "Googleが複数",
+      [
+        identityOf(
+          "google",
+          "google-new",
+          "new@gmail.test",
+          "2026-03-01T00:00:00Z",
+        ),
+        identityOf(
+          "google",
+          "google-old",
+          "old@gmail.test",
+          "2026-02-01T00:00:00Z",
+        ),
+      ],
+      { id: "google-old", email: "old@gmail.test" },
+    ],
+    [
+      "Google以外の外部提供者",
+      [emailIdentity, identityOf("github", "github-1", "archer@github.test")],
+      null,
+    ],
+  ])(
+    "%sの利用者から、メールアドレスと行に示すGoogleの手段を作る",
+    (_name, identities, google) => {
+      // Given
+      const { service, emit } = setup();
+      const received: SignInChange[] = [];
+      service.subscribe((change) => received.push(change));
+
+      // When
+      emit("SIGNED_IN", { user: userOf(identities) });
+
+      // Then
+      expect(received).toEqual([
+        {
+          kind: "signed-in",
+          userId: "user-1",
+          summary: { userId: "user-1", email: "archer@example.test", google },
+        },
+      ]);
+    },
+  );
+
+  it("identitiesが未定義の利用者は、概要をnullにする", () => {
+    // Given
+    const { service, emit } = setup();
+    const received: SignInChange[] = [];
+    service.subscribe((change) => received.push(change));
+
+    // When
+    emit("SIGNED_IN", { user: userOf(undefined) });
+
+    // Then
+    expect(received).toEqual([
+      { kind: "signed-in", userId: "user-1", summary: null },
+    ]);
+  });
+});
+
+describe("Googleでのサインインの開始(startGoogleSignIn)", () => {
+  it("今のオリジンに戻り先を足して、Googleでの認証を依頼する", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.signInWithOAuth.mockResolvedValue({ error: null });
+
+    // When
+    const result = await service.startGoogleSignIn({
+      returnPath: "/signin?next=%2Frounds",
+    });
+
+    // Then
+    expect(result).toEqual({ kind: "accepted" });
+    expect(auth.signInWithOAuth).toHaveBeenCalledExactlyOnceWith({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/signin?next=%2Frounds`,
+      },
+    });
+  });
+
+  it.each([
+    [
+      "値で返った失敗",
+      { error: new AuthApiError("x", 400, "unknown") },
+      "other",
+    ],
+    ["通信の断", { error: connectionLost }, "unreachable"],
+  ] as const)("%sは、失敗の結果にする", async (_name, response, kind) => {
+    // Given
+    const { service, auth } = setup();
+    auth.signInWithOAuth.mockResolvedValue(response);
+
+    // When
+    const result = await service.startGoogleSignIn({ returnPath: "/signin" });
+
+    // Then
+    expect(result).toEqual({ kind: "failed", failure: { kind } });
+  });
+
+  it("呼び出しが投げたときは、届かなかった失敗にする", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.signInWithOAuth.mockRejectedValue(new Error("storage"));
+
+    // When
+    const result = await service.startGoogleSignIn({ returnPath: "/signin" });
+
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+  });
+});
+
+describe("Googleの戻りのコードの交換(exchangeGoogleCode)", () => {
+  it("コードを渡して交換し、成功を受け付けにする", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.exchangeCodeForSession.mockResolvedValue({ error: null });
+
+    // When
+    const result = await service.exchangeGoogleCode("code-1");
+
+    // Then
+    expect(result).toEqual({ kind: "accepted" });
+    expect(auth.exchangeCodeForSession).toHaveBeenCalledExactlyOnceWith(
+      "code-1",
+    );
+  });
+
+  it.each([
+    ["通信エラー", connectionLost, "unreachable"],
+    ["429", rateLimited, "rate_limited"],
+    ["その他", new AuthApiError("x", 400, "flow_state_not_found"), "other"],
+  ] as const)("%sは、写した失敗にする", async (_name, error, kind) => {
+    // Given
+    const { service, auth } = setup();
+    auth.exchangeCodeForSession.mockResolvedValue({ error });
+
+    // When
+    const result = await service.exchangeGoogleCode("code-1");
+
+    // Then
+    expect(result).toEqual({ kind: "failed", failure: { kind } });
+  });
+});
+
+describe("Googleアカウントの追加の開始(startGoogleLink)", () => {
+  it("今のオリジンに戻り先を足して、追加を依頼する", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.linkIdentity.mockResolvedValue({ error: null });
+
+    // When
+    const result = await service.startGoogleLink({
+      returnPath: "/rounds?link=google",
+    });
+
+    // Then
+    expect(result).toEqual({ kind: "accepted" });
+    expect(auth.linkIdentity).toHaveBeenCalledExactlyOnceWith({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/rounds?link=google` },
+    });
+  });
+
+  it.each([
+    [
+      "値で返った失敗",
+      { error: new AuthApiError("x", 400, "unknown") },
+      "other",
+    ],
+    ["通信の断", { error: connectionLost }, "unreachable"],
+  ] as const)("%sは、失敗の結果にする", async (_name, response, kind) => {
+    // Given
+    const { service, auth } = setup();
+    auth.linkIdentity.mockResolvedValue(response);
+
+    // When
+    const result = await service.startGoogleLink({ returnPath: "/rounds" });
+
+    // Then
+    expect(result).toEqual({ kind: "failed", failure: { kind } });
+  });
+});
+
+describe("アカウントの読み直し(readAccount)", () => {
+  it.each([
+    ["Googleなし", [emailIdentity], null],
+    [
+      "Googleあり",
+      [emailIdentity, googleIdentity],
+      { id: "google-1", email: "archer@gmail.test" },
+    ],
+    [
+      "Googleが複数",
+      [
+        identityOf(
+          "google",
+          "google-new",
+          "new@gmail.test",
+          "2026-03-01T00:00:00Z",
+        ),
+        identityOf(
+          "google",
+          "google-old",
+          "old@gmail.test",
+          "2026-02-01T00:00:00Z",
+        ),
+      ],
+      { id: "google-old", email: "old@gmail.test" },
+    ],
+  ])(
+    "getUserの%sの利用者から、概要を作る",
+    async (_name, identities, google) => {
+      // Given
+      const { service, auth } = setup();
+      auth.getUser.mockResolvedValue({
+        data: { user: userOf(identities) },
+        error: null,
+      });
+
+      // When
+      const result = await service.readAccount();
+
+      // Then
+      expect(result).toEqual({
+        kind: "read",
+        account: { userId: "user-1", email: "archer@example.test", google },
+      });
+    },
+  );
+
+  it.each([401, 403])("%sの拒否は、サインインの喪失にする", async (status) => {
+    // Given
+    const { service, auth } = setup();
+    auth.getUser.mockResolvedValue({
+      data: { user: null },
+      error: new AuthApiError("rejected", status, "bad_jwt"),
+    });
+
+    // When
+    const result = await service.readAccount();
+
+    // Then
+    expect(result).toEqual({ kind: "lost" });
+  });
+
+  it("通信エラーは、届かなかった失敗にする", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.getUser.mockResolvedValue({
+      data: { user: null },
+      error: connectionLost,
+    });
+
+    // When
+    const result = await service.readAccount();
+
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+  });
+
+  it("identitiesを読めない利用者は、その他の失敗にする", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.getUser.mockResolvedValue({
+      data: { user: userOf(undefined) },
+      error: null,
+    });
+
+    // When
+    const result = await service.readAccount();
+
+    // Then
+    expect(result).toEqual({ kind: "failed", failure: { kind: "other" } });
+  });
+});
+
+describe("Googleアカウントの結び付きの解除(unlinkGoogle)", () => {
+  it("手段のIDに一致する手段を、unlinkIdentityへ渡して解除する", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.getUserIdentities.mockResolvedValue({
+      data: { identities: [emailIdentity, googleIdentity] },
+      error: null,
+    });
+    auth.unlinkIdentity.mockResolvedValue({ error: null });
+
+    // When
+    const result = await service.unlinkGoogle("google-1");
+
+    // Then
+    expect(result).toEqual({ kind: "accepted" });
+    expect(auth.unlinkIdentity).toHaveBeenCalledExactlyOnceWith(googleIdentity);
+  });
+
+  it("手段が既に無いときは、解除を呼ばず受け付けにする", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.getUserIdentities.mockResolvedValue({
+      data: { identities: [emailIdentity] },
+      error: null,
+    });
+
+    // When
+    const result = await service.unlinkGoogle("google-1");
+
+    // Then
+    expect(result).toEqual({ kind: "accepted" });
+    expect(auth.unlinkIdentity).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "拒否(500、本文に例外)",
+      new AuthApiError("trigger rejected", 500, "unexpected_failure"),
+      "other",
+    ],
+    ["通信エラー", connectionLost, "unreachable"],
+  ] as const)("解除の%sは、失敗の結果にする", async (_name, error, kind) => {
+    // Given
+    const { service, auth } = setup();
+    auth.getUserIdentities.mockResolvedValue({
+      data: { identities: [googleIdentity] },
+      error: null,
+    });
+    auth.unlinkIdentity.mockResolvedValue({ error });
+
+    // When
+    const result = await service.unlinkGoogle("google-1");
+
+    // Then
+    expect(result).toEqual({ kind: "failed", failure: { kind } });
+  });
+
+  it("手段の一覧を読めないときは、解除を呼ばず失敗にする", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.getUserIdentities.mockResolvedValue({
+      data: null,
+      error: connectionLost,
+    });
+
+    // When
+    const result = await service.unlinkGoogle("google-1");
+
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+    expect(auth.unlinkIdentity).not.toHaveBeenCalled();
+  });
+});
+
+describe("コードの送付のuser_already_exists", () => {
+  const userAlreadyExists = new AuthApiError(
+    "exists",
+    422,
+    "user_already_exists",
+  );
+
+  it("統合入口(登録を許す送付)のときだけ、google_only_addressに写す", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.signInWithOtp.mockResolvedValue({ error: userAlreadyExists });
+
+    // When
+    const result = await service.sendCode({
+      email: "archer@example.test",
+      captchaToken: "check",
+      shouldCreateUser: true,
+    });
+
+    // Then
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "google_only_address" },
+    });
+  });
+
+  it("削除の再確認(登録を許さない送付)では、写さずその他にする", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.signInWithOtp.mockResolvedValue({ error: userAlreadyExists });
+
+    // When
+    const result = await service.sendCode({
+      email: "archer@example.test",
+      captchaToken: "check",
+      shouldCreateUser: false,
+    });
+
+    // Then
+    expect(result).toEqual({ kind: "failed", failure: { kind: "other" } });
+  });
+
+  it("メールアドレスの変更の要求でも、写さずその他にする", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.updateUser.mockResolvedValue({
+      data: { user: null },
+      error: userAlreadyExists,
+    });
+
+    // When
+    const result = await service.requestEmailChange({
+      newEmail: "new@example.test",
+    });
+
+    // Then
+    expect(result).toEqual({ kind: "failed", failure: { kind: "other" } });
+  });
 });

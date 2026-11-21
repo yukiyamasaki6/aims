@@ -4,7 +4,10 @@ export const settingsMessages = {
     title: "設定",
     close: "閉じる",
     accountTitle: "アカウント",
-    changeEmailItem: "メールアドレス変更",
-    deleteAccountItem: "アカウント削除",
+    emailRow: "メールアドレス",
+    emailChange: "変更",
+    googleRow: "Google認証",
+    deleteAccountRow: "アカウント削除",
+    deleteAccountAction: "削除",
   },
 } as const;

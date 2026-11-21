@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { EmailOtp } from "../application/email-otp";
 import { emailOtpReducer, initialEmailOtpFlow } from "../domain/email-otp-flow";
@@ -19,11 +19,14 @@ export function EmailOtpForm({
   idPrefix,
   siteKey,
   readReturnTo,
+  emailStepLeading,
 }: {
   procedure: EmailOtp;
   idPrefix: string;
   siteKey: string;
   readReturnTo: () => string | null;
+  // メール入力の段階のフォームの上に差し込む部品(サインインのGoogleの操作)。コード入力の段階には出さない。
+  emailStepLeading?: ReactNode;
 }) {
   const screen = useScreenView(emailOtpReducer, initialEmailOtpFlow);
   const { state: flow, view, checkRef: check } = screen;
@@ -71,6 +74,7 @@ export function EmailOtpForm({
       }}
       checkRef={check}
       onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
+      leading={emailStepLeading}
       {...checkProps}
     />
   );
