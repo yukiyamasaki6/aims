@@ -7,6 +7,7 @@ import type { RoundScreen } from "../application/round-window";
 import { completionConfirmation } from "../domain/round-progress";
 import type { RoundState } from "../domain/round-tables";
 import { summarizeRound } from "../domain/scorecard-scoring";
+import { shotAt } from "../domain/shot-cell";
 import type { SyncOperation } from "../domain/sync-events";
 import { BottomFrame } from "./bottom-frame";
 import { CompleteRoundBar } from "./complete-round-bar";
@@ -34,12 +35,14 @@ export function ScorecardClient({
   const model = useScorecard({ roundId, screen, append });
   const { sync, keypad, targetFaces } = model;
   const { roundConfig, distances, shots, status } = sync.state;
-  // テンキーは指す矢があるか、格納の待ち(直近の距離を保持)のときだけ付く。一度も指していないときは距離が無く、付かない。
+  // テンキーは指すマスがあるか、格納の待ち(直近の距離を保持)のときだけ付く。一度も指していないときは距離が無く、付かない。
   const keypadButtons = keypad.keypadDistance && (
     <KeypadButtons
       keypadDistance={keypad.keypadDistance}
       targetFaces={targetFaces}
-      pointer={model.pointer}
+      clearable={
+        model.pointer !== null && shotAt(shots, model.pointer) !== undefined
+      }
       history={model.history}
       input={model.input}
     />
@@ -132,7 +135,7 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
         roundSummary={summarizeRound(distances, targetFaces, shots)}
       />
 
-      <div ref={model.scorecardRef} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4">
         {distances.map((d) => (
           <DistanceSection
             key={d.id}
@@ -146,11 +149,10 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
             pointer={model.pointer}
             onToggleEditing={() => editing.toggleDistanceEditing(d.id)}
             onSaved={editing.handleDistanceSaved}
-            // 削除は追記の直後に画面へ反映され、距離のカードが消えて編集のダイアログも閉じる。削除した距離を指していた矢は、reconcilePointerが外す。
+            // 削除は追記の直後に画面へ反映され、距離のカードが消えて編集のダイアログも閉じる。削除した距離を指していたマスは、reconcilePointerが外す。
             onDeleted={() => model.history.discardDistance(d.id)}
             enqueue={sync.append}
-            onSelectShot={input.selectShot}
-            onSelectEnd={input.selectEnd}
+            onSelectCell={input.selectCell}
             onLinesChange={model.keypad.follow}
           />
         ))}

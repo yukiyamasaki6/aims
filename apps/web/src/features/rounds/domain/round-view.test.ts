@@ -63,9 +63,9 @@ describe("deriveRoundState", () => {
   const shot: SyncOperation = {
     type: "shot.recorded",
     eventId: "s1",
-    shotId: "shot-1",
     distanceId: "d1",
     endNumber: 1,
+    shotNumber: 1,
     scoreStr: "10",
     scoreInt: 10,
   };
@@ -198,7 +198,6 @@ describe("roundScreenState", () => {
     // Then
     expect(withBase.state.roundConfig.name).toBe("端末");
     expect(withoutBase.state.roundConfig.name).toBe("更新後");
-    expect(withBase.needsRefetch).toBe(false);
   });
 
   it("起点(ベースか作成の操作)が無いとき、ベースが削除済み(null)のときは、起点を返さない", () => {
@@ -221,9 +220,9 @@ describe("roundScreenState", () => {
     expect(deleted).toBeUndefined();
   });
 
-  it("確定済みの操作をベースに重ねられないときは、取り直しが要る", () => {
+  it("確定済みの操作は、構成の範囲外のマスでも重ね、取り直しの印を返さない", () => {
     // Given
-    const full = roundBase({
+    const narrow = roundBase({
       distances: [
         {
           id: "d-1",
@@ -237,25 +236,24 @@ describe("roundScreenState", () => {
       ],
       shots: [
         {
-          id: "s-0",
           distance_id: "d-1",
           end_number: 1,
           score_str: "10",
           score_int: 10,
-          shot_number: null,
+          shot_number: 1,
         },
       ],
     });
     const confirmed = {
-      operation: shotRecorded({ shotId: "s-1", endNumber: 1 }),
+      operation: shotRecorded({ endNumber: 1, shotNumber: 2 }),
       confirmedFields: null,
     };
 
     // When
-    const screen = roundScreenState(full.tables, [confirmed], faces);
+    const screen = roundScreenState(narrow.tables, [confirmed], faces);
 
     // Then
-    expect(screen.needsRefetch).toBe(true);
-    expect(screen.tables.shots.map((shot) => shot.id)).toEqual(["s-0"]);
+    expect(screen.tables.shots.map((s) => s.shot_number)).toEqual([1, 2]);
+    expect(Object.keys(screen)).toEqual(["state", "tables"]);
   });
 });

@@ -93,13 +93,12 @@ const distanceA = {
   is_marked: true,
 };
 const shotA = {
-  id: "s-a",
   distance_id: "d-a",
   end_number: 1,
   shooter_id: "user-1",
   score_str: "X",
   score_int: 10,
-  shot_number: null,
+  shot_number: 1,
 };
 
 const round = {
@@ -145,7 +144,7 @@ describe("roundDetail", () => {
       {
         table: "rounds",
         columns:
-          "id, name, round_date, format, bow_type, status, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(id, distance_id, end_number, shooter_id, score_str, score_int, shot_number, revision, disabled_at))",
+          "id, name, round_date, format, bow_type, status, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(distance_id, end_number, shooter_id, score_str, score_int, shot_number, revision, disabled_at))",
         filters: [
           { op: "eq", column: "id", value: "round-1" },
           { op: "is", column: "disabled_at", value: null },

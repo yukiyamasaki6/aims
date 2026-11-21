@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useMountedRef } from "@/hooks/use-mounted-ref";
 import type { RoundScreen } from "../application/round-window";
@@ -9,7 +8,6 @@ import { useRoundProcedures } from "./rounds-context";
 import { useDistanceEditing } from "./use-distance-editing";
 import { useKeypad } from "./use-keypad";
 import { useReconciledPointer } from "./use-reconciled-pointer";
-import { useReorderAnimation } from "./use-reorder-animation";
 import { useScoreHistory } from "./use-score-history";
 import { useShotInput } from "./use-shot-input";
 
@@ -19,7 +17,7 @@ type ScorecardSync = {
   append: (operation: SyncOperation) => RoundState;
 };
 
-// 矢の入力に関わる状態(未確定の矢、ポインタ、テンキー、履歴、入力)。
+// 矢の入力に関わる状態(ポインタ、テンキー、履歴、入力)。
 function useScorecardInput(sync: ScorecardSync, inProgress: boolean) {
   const { distances, shots } = sync.state;
   const [pointer, setPointer] = useReconciledPointer(
@@ -54,8 +52,6 @@ export function useScorecard(options: ScorecardOptions) {
   const sync = { state: screen.state, append };
   const { distances } = sync.state;
   const inProgress = isRoundInProgress(sync.state);
-  const scorecardRef = useRef<HTMLDivElement>(null);
-  useReorderAnimation(scorecardRef);
 
   const { pointer, keypad, history, input } = useScorecardInput(
     sync,
@@ -75,7 +71,6 @@ export function useScorecard(options: ScorecardOptions) {
     sync,
     initiallyEmpty: screen.initiallyEmpty,
     inProgress,
-    scorecardRef,
     pointer,
     keypad,
     history,

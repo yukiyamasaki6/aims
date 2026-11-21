@@ -1,8 +1,9 @@
--- 項目ごとの記録、射順（shot_number）、射数/エンドの上限を確認する。
---   - record_shotsは要素に含まれる項目だけを変え、効いた属性をset_fieldsとapplied_fieldsに残す
---   - 射順は1〜射数/エンドで、同じエンドの生きている矢で重ならない。重なる書き込みは射順だけが効かない
---   - 消した矢を戻すとき、射順が他の生きている矢に使われていれば射順だけが外れる
---   - エンドの生きている矢は射数/エンドを超えない（RPCの判定。書き込みはRPCだけである）
+-- 矢のマス(distance_id, end_number, shot_number)による記録を確認する。
+--   - record_shotsはマスの行を足す・置き換える・生き返らせ、効いた属性をset_fieldsとapplied_fieldsに残す
+--   - 同じマスへの記録は、別のevent_idでも1行に置き換わり、2本の矢にならない
+--   - 範囲外のマス・的に無い点数の記録は効かない（UNFIT）。射数/エンドの上限は、この範囲と主キーで守る
+--   - マスの無い要素と旧い形（shot_id）の要素は契約の不一致（PT422）で拒否する
+--   - 構成の変更は、生きている矢が全て新しい範囲に収まるときだけ効く
 -- RPC × 観点（権限、入力検証、冪等性）はrpc_matrix.sqlで固定している。
 
 begin;
@@ -16,7 +17,8 @@ insert into si_id (alias, id) values
   ('R',  'f1000000-0000-0000-0000-000000000010'),
   ('D',  'f1000000-0000-0000-0000-000000000020'),
   ('DC', 'f1000000-0000-0000-0000-000000000021'),
-  ('DS', 'f1000000-0000-0000-0000-000000000022');
+  ('DS', 'f1000000-0000-0000-0000-000000000022'),
+  ('DB', 'f1000000-0000-0000-0000-000000000023');
 
 grant select on si_id to authenticated;
 
@@ -28,32 +30,28 @@ create function pg_temp.id(p_alias text) returns uuid
 language sql stable
 as $$ select id from si_id where alias = p_alias $$;
 
--- イベントIDと矢のIDは番号から作る。
+-- イベントIDは番号から作る。
 create function pg_temp.ev(p_n int) returns uuid
 language sql immutable
 as $$ select ('f1000000-0000-0000-0000-0000000e' || lpad(p_n::text, 4, '0'))::uuid $$;
-
-create function pg_temp.sh(p_n int) returns uuid
-language sql immutable
-as $$ select ('f1000000-0000-0000-0000-0000000a' || lpad(p_n::text, 4, '0'))::uuid $$;
 
 create function pg_temp.face() returns uuid
 language sql stable
 as $$ select id from public.target_faces order by id limit 1 $$;
 
--- 記録の要素。p_extraで射手・射順のキーを足す。
-create function pg_temp.rec(p_event int, p_shot int, p_distance text, p_end int, p_score int, p_extra jsonb default '{}') returns jsonb
+-- 記録の要素。p_extraで射手などのキーを足す。
+create function pg_temp.rec(p_event int, p_distance text, p_end int, p_number int, p_score int, p_extra jsonb default '{}') returns jsonb
 language sql stable
 as $$
   select jsonb_build_object(
-    'shot_event_id', pg_temp.ev(p_event), 'shot_id', pg_temp.sh(p_shot), 'distance_id', pg_temp.id(p_distance),
-    'end_number', p_end, 'score_str', p_score::text, 'score_int', p_score
+    'shot_event_id', pg_temp.ev(p_event), 'distance_id', pg_temp.id(p_distance),
+    'end_number', p_end, 'shot_number', p_number, 'score_str', p_score::text, 'score_int', p_score
   ) || p_extra
 $$;
 
-create function pg_temp.clr(p_event int, p_shot int, p_distance text) returns jsonb
+create function pg_temp.clr(p_event int, p_distance text, p_end int, p_number int) returns jsonb
 language sql stable
-as $$ select jsonb_build_object('shot_event_id', pg_temp.ev(p_event), 'shot_id', pg_temp.sh(p_shot), 'distance_id', pg_temp.id(p_distance)) $$;
+as $$ select jsonb_build_object('shot_event_id', pg_temp.ev(p_event), 'distance_id', pg_temp.id(p_distance), 'end_number', p_end, 'shot_number', p_number) $$;
 
 -- 1要素の結果を 理由または効いた{効いた属性}!効かなかった属性:理由 で表す。
 create function pg_temp.res(p_results jsonb) returns text
@@ -65,38 +63,67 @@ as $$
   from (select p_results -> 0 as e) t
 $$;
 
--- 矢の行を 点数/射手/#射順/生死 で表す。
-create function pg_temp.st(p_shot int) returns text
+-- 全要素の結果を、理由またはappliedの列で表す。
+create function pg_temp.reasons(p_results jsonb) returns text
+language sql immutable
+as $$
+  select string_agg(coalesce(e ->> 'reason', 'applied'), ',' order by o)
+  from jsonb_array_elements(p_results) with ordinality as t(e, o)
+$$;
+
+-- RPCを呼び、拒否されたときはSQLSTATE、受け付けたときはokを返す。
+create function pg_temp.code(p_fn text, p_shots jsonb) returns text
+language plpgsql
+as $$
+begin
+  execute format('select public.%I($1)', p_fn) using p_shots;
+  return 'ok';
+exception when others then
+  return sqlstate;
+end;
+$$;
+
+-- マスの行を 点数/射手/revision/生死 で表す。
+create function pg_temp.st(p_distance text, p_end int, p_number int) returns text
 language sql stable
 as $$
   select coalesce((
-    select s.score_str || '/' || coalesce(u.alias, '?') || '/#' || coalesce(s.shot_number::text, '-')
+    select s.score_str || '/' || coalesce(u.alias, '?') || '/r' || s.revision
       || case when s.disabled_at is null then '/live' else '/cleared' end
     from public.shots s
     left join si_id u on u.id = s.shooter_id
-    where s.id = pg_temp.sh(p_shot)
+    where s.distance_id = pg_temp.id(p_distance) and s.end_number = p_end and s.shot_number = p_number
   ), 'absent')
 $$;
 
--- イベントを set_fields/射手/#射順 で表す。
+-- イベントを 種別/set_fields/射手/マス/revision で表す。
 create function pg_temp.evst(p_event int) returns text
 language sql stable
 as $$
   select coalesce((
-    select coalesce(array_to_string(e.set_fields, ','), '-') || '/' || coalesce(u.alias, '-') || '/#' || coalesce(e.shot_number::text, '-')
+    select e.type || '/' || coalesce(array_to_string(e.set_fields, ','), '-') || '/' || coalesce(u.alias, '-')
+      || '/' || e.end_number || '#' || e.shot_number || '/r' || e.revision
     from public.shot_events e
     left join si_id u on u.id = e.shooter_id
     where e.event_id = pg_temp.ev(p_event)
   ), 'absent')
 $$;
 
+create function pg_temp.rows(p_distance text, p_end int) returns bigint
+language sql stable
+as $$ select count(*) from public.shots where distance_id = pg_temp.id(p_distance) and end_number = p_end $$;
+
 create function pg_temp.live(p_distance text, p_end int) returns bigint
 language sql stable
 as $$ select count(*) from public.shots where distance_id = pg_temp.id(p_distance) and end_number = p_end and disabled_at is null $$;
 
+create function pg_temp.events(p_distance text) returns bigint
+language sql stable
+as $$ select count(*) from public.shot_events where distance_id = pg_temp.id(p_distance) $$;
+
 insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('V'));
 
--- D: 6エンド×6射。DC: 6エンド×3射（射数/エンドの上限）。DS: 6エンド×6射（構成の変更と射順）。
+-- D: 6エンド×6射。DC: 6エンド×3射。DS: 6エンド×6射（構成の変更）。DB: 6エンド×6射（範囲の境界）。
 insert into public.rounds (id, name, round_date, format, bow_type) values
   (pg_temp.id('R'), 'Shot Identity', '2026-01-01', 'outdoor', 'recurve');
 insert into public.round_users (round_id, user_id, role) values
@@ -105,228 +132,254 @@ insert into public.round_users (round_id, user_id, role) values
 insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked) values
   (pg_temp.id('D'), pg_temp.id('R'), 'a', 70, 6, 6, pg_temp.face(), true),
   (pg_temp.id('DC'), pg_temp.id('R'), 'b', 50, 6, 3, pg_temp.face(), true),
-  (pg_temp.id('DS'), pg_temp.id('R'), 'c', 30, 6, 6, pg_temp.face(), true);
+  (pg_temp.id('DS'), pg_temp.id('R'), 'c', 30, 6, 6, pg_temp.face(), true),
+  (pg_temp.id('DB'), pg_temp.id('R'), 'd', 20, 6, 6, pg_temp.face(), true);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
 
 -- ============================================================
--- 項目: 要素に含まれる項目だけを変える
+-- 記録: 空のマス・記録済みのマス・取り消したマス
 -- ============================================================
 
--- When: 射手・射順を省いて新しい矢を記録する
+-- When: 射手を省いて空のマスへ記録する
 select is(
-  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(1, 1, 'D', 1, 9)))),
+  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(1, 'D', 1, 1, 9)))),
   'applied{score,shooter_id}',
-  '新しい矢は、射手を省くと実行者を射手として記録し、射手を効いた属性に含める'
+  '空のマスへの記録は、射手を省くと実行者を射手として記録し、射手を効いた属性に含める'
 );
-select is(pg_temp.st(1), '9/E/#-/live', '新しい矢は射順不明（null）で記録される');
-select is(pg_temp.evst(1), 'score,shooter_id/E/#-', 'イベントのset_fieldsは効いた属性を挙げる');
+select is(pg_temp.st('D', 1, 1), '9/E/r1/live', '空のマスへの記録は、そのマスに行を1つ作る');
+select is(pg_temp.evst(1), 'RECORDED/score,shooter_id/E/1#1/r1', '履歴はマスと点数・射手を持ち、revisionはマスごとに1から始まる');
 
--- When: 射手を指定して点数を変える
+-- When: 射手を指定して、記録済みのマスへ重ねる
 select is(
-  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(2, 1, 'D', 1, 8, jsonb_build_object('shooter_id', pg_temp.id('V')))))),
+  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(2, 'D', 1, 1, 8, jsonb_build_object('shooter_id', pg_temp.id('V')))))),
   'applied{score,shooter_id}',
   '射手を指定した記録は、射手を効いた属性に含める'
 );
-select is(pg_temp.st(1), '8/V/#-/live', '射手を指定すると射手が変わる');
+select is(pg_temp.st('D', 1, 1) || ' ' || pg_temp.rows('D', 1), '8/V/r2/live 1', '記録済みのマスへの記録は、同じ行を置き換えてrevisionを進める');
 
 -- When: 射手を省いて点数だけを変える
 select is(
-  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(3, 1, 'D', 1, 7)))),
+  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(3, 'D', 1, 1, 7)))),
   'applied{score}',
-  '射手を省いた更新は、点数だけを効いた属性にする'
+  '射手を省いた記録は、点数だけを効いた属性にする'
 );
-select is(pg_temp.st(1) || ' ' || pg_temp.evst(3), '7/V/#-/live score/V/#-', '射手を省いた更新は射手を変えず、イベントには行の射手を写す');
+select is(pg_temp.st('D', 1, 1) || ' ' || pg_temp.evst(3), '7/V/r3/live RECORDED/score/V/1#1/r3', '射手を省いた記録は行の射手を変えず、履歴には点数だけを残す');
 
--- When: 射順を書き、点数だけを変え、射順をnullで外す
-select is(
-  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(4, 1, 'D', 1, 7, '{"shot_number":2}')))),
-  'applied{score,shot_number}',
-  '射順を指定した記録は、射順を効いた属性に含める'
-);
-select public.record_shots(jsonb_build_array(pg_temp.rec(5, 1, 'D', 1, 6)));
-select is(pg_temp.st(1), '6/V/#2/live', '射順を省いた更新は射順を変えない');
-insert into si_r (n, r) values (1, public.record_shots(jsonb_build_array(pg_temp.rec(6, 1, 'D', 1, 6, '{"shot_number":null}'))));
-select is(
-  pg_temp.res((select r from si_r where n = 1)) || ' ' || pg_temp.st(1) || ' ' || pg_temp.evst(6),
-  'applied{score,shot_number} 6/V/#-/live score,shot_number/V/#-',
-  '射順のnullは射順を外し、イベントにはnullを記録する'
-);
+-- Given: 別の利用者が射手の矢。When: 射手を省いて記録する
+select public.record_shots(jsonb_build_array(pg_temp.rec(4, 'D', 1, 2, 10, jsonb_build_object('shooter_id', pg_temp.id('V')))));
+select public.record_shots(jsonb_build_array(pg_temp.rec(5, 'D', 1, 2, 6)));
+select is(pg_temp.st('D', 1, 2), '6/V/r2/live', '別の利用者を射手にした矢を、射手を含まない記録が書き換えても射手は保たれる');
 
--- When: 射手・射順を持つ矢を消し、点数だけの記録で戻す
-select public.record_shots(jsonb_build_array(pg_temp.rec(7, 1, 'D', 1, 6, '{"shot_number":3}')));
-select public.clear_shots(jsonb_build_array(pg_temp.clr(8, 1, 'D')));
-select is(pg_temp.st(1), '6/V/#3/cleared', '消すときは射手・射順を変えない');
-insert into si_r (n, r) values (2, public.record_shots(jsonb_build_array(pg_temp.rec(9, 1, 'D', 1, 10))));
+-- Given: 同じマスへ別のevent_idで後から記録する
+select public.record_shots(jsonb_build_array(pg_temp.rec(6, 'D', 2, 1, 9)));
+select public.record_shots(jsonb_build_array(pg_temp.rec(7, 'D', 2, 1, 5)));
 select is(
-  pg_temp.res((select r from si_r where n = 2)) || ' ' || pg_temp.st(1),
-  'applied{score} 10/V/#3/live',
-  '消した矢を点数だけの記録で戻すと、射手・射順も戻る'
+  pg_temp.st('D', 2, 1) || ' rows=' || pg_temp.rows('D', 2) || ' events=' || (select count(*) from public.shot_events where distance_id = pg_temp.id('D') and end_number = 2),
+  '5/E/r2/live rows=1 events=2',
+  '同じマスへ別のevent_idで後から記録すると、後の点数だけが1行に残り、履歴は2件になる'
 );
 
--- ============================================================
--- 射順: 範囲と重複
--- ============================================================
-
+-- Given: 記録したマスを消す。When: 射手を省いて記録する
+select public.record_shots(jsonb_build_array(pg_temp.rec(8, 'D', 3, 1, 9, jsonb_build_object('shooter_id', pg_temp.id('V')))));
+select public.clear_shots(jsonb_build_array(pg_temp.clr(9, 'D', 3, 1)));
+select is(pg_temp.st('D', 3, 1), '9/V/r2/cleared', '消したマスは、行を残したまま取り消し済みにする');
+insert into si_r (n, r) values (1, public.record_shots(jsonb_build_array(pg_temp.rec(10, 'D', 3, 1, 10))));
 select is(
-  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(10, 2, 'D', 1, 9, '{"shot_number":0}')))),
-  'UNFIT',
-  '射順0の記録は効かない'
+  pg_temp.res((select r from si_r where n = 1)) || ' ' || pg_temp.st('D', 3, 1),
+  'applied{score} 10/V/r3/live',
+  '取り消したマスへの記録は、行を生き返らせ、射手を省けば行の射手を引き継ぐ'
 );
 select is(
-  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(11, 2, 'D', 1, 9, '{"shot_number":7}')))),
-  'UNFIT',
-  '射順が射数/エンドを超える記録は効かない'
-);
-insert into si_r (n, r) values (3, public.record_shots(jsonb_build_array(pg_temp.rec(12, 2, 'D', 1, 9, '{"shot_number":6}'))));
-select is(
-  pg_temp.res((select r from si_r where n = 3)) || ' ' || pg_temp.st(2),
-  'applied{score,shooter_id,shot_number} 9/E/#6/live',
-  '射順が射数/エンドと同じ記録は効く'
-);
-
--- Given: 矢1が射順3を持つ。When: 同じエンドの矢2に射順3と新しい点数・射手を書く
-select is(
-  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(13, 2, 'D', 1, 5, jsonb_build_object('shot_number', 3, 'shooter_id', pg_temp.id('V')))))),
-  'applied{score,shooter_id}!shot_number:UNFIT',
-  '同じエンドの他の生きている矢と重なる射順は、射順だけが効かない'
-);
-select is(pg_temp.st(2), '5/V/#6/live', '射順が効かなかった記録でも、点数と射手は効く');
-select is(
-  public.record_shots(jsonb_build_array(pg_temp.rec(13, 2, 'D', 1, 5, jsonb_build_object('shot_number', 3, 'shooter_id', pg_temp.id('V'))))) -> 0,
-  jsonb_build_object('revision', 2, 'applied', true, 'applied_fields', jsonb_build_array('score', 'shooter_id'), 'rejected_fields', jsonb_build_array(jsonb_build_object('field', 'shot_number', 'reason', 'REJECTED')), 'reason', null),
-  '確定済みの記録の再送は、記録した属性を効いた項目として返し、記録に無い属性をREJECTEDで返す'
-);
-select is(
-  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(14, 3, 'D', 2, 9, '{"shot_number":3}')))),
-  'applied{score,shooter_id,shot_number}',
-  '別のエンドなら同じ射順を書ける'
-);
-
--- When: 射順3の矢1を消し、矢2に射順3を書く
-select public.clear_shots(jsonb_build_array(pg_temp.clr(15, 1, 'D')));
-insert into si_r (n, r) values (4, public.record_shots(jsonb_build_array(pg_temp.rec(16, 2, 'D', 1, 5, '{"shot_number":3}'))));
-select is(
-  pg_temp.res((select r from si_r where n = 4)) || ' ' || pg_temp.st(2),
-  'applied{score,shot_number} 5/V/#3/live',
-  '消した矢の射順は、同じエンドの別の矢に書ける'
+  (select disabled_at is null from public.shots where distance_id = pg_temp.id('D') and end_number = 3 and shot_number = 1),
+  true,
+  '生き返ったマスの取り消しの印は外れる'
 );
 
 -- ============================================================
--- 射順: 消した矢を戻す
+-- 上限: マスの範囲と1マス1行
 -- ============================================================
 
--- Given: 射順3の矢1を消し、矢2が射順3を持つ。When: 矢1の消去を点数の記録で戻す
+-- When: 射数/エンド3のエンドの全てのマスを埋め、さらに同じマスへ記録する
+select public.record_shots(jsonb_build_array(
+  pg_temp.rec(20, 'DC', 1, 1, 9), pg_temp.rec(21, 'DC', 1, 2, 9), pg_temp.rec(22, 'DC', 1, 3, 9),
+  pg_temp.rec(23, 'DC', 1, 1, 7), pg_temp.rec(24, 'DC', 1, 3, 7)
+));
 select is(
-  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(17, 1, 'D', 1, 10)))),
-  'applied{score,shot_number}',
-  '戻す矢の射順が他の矢に使われていれば、射順を外したことを効いた属性に含める'
-);
-select is(
-  pg_temp.st(1) || ' ' || pg_temp.st(2) || ' ' || pg_temp.evst(17),
-  '10/V/#-/live 5/V/#3/live score,shot_number/V/#-',
-  '戻した矢は点数・射手とともに射順不明で戻り、他の矢の射順は残る'
-);
-
--- Given: 射順4の矢4を消し、射順4は使われていない。When: 矢4を戻す
-select public.record_shots(jsonb_build_array(pg_temp.rec(18, 4, 'D', 1, 8, '{"shot_number":4}')));
-select public.clear_shots(jsonb_build_array(pg_temp.clr(19, 4, 'D')));
-insert into si_r (n, r) values (5, public.record_shots(jsonb_build_array(pg_temp.rec(20, 4, 'D', 1, 7))));
-select is(
-  pg_temp.res((select r from si_r where n = 5)) || ' ' || pg_temp.st(4),
-  'applied{score} 7/E/#4/live',
-  '戻す矢の射順が使われていなければ、射順ごと戻る'
+  pg_temp.live('DC', 1) || ' ' || pg_temp.st('DC', 1, 1) || ' ' || pg_temp.st('DC', 1, 3),
+  '3 7/E/r2/live 7/E/r2/live',
+  '同じエンドの全てのマスを埋めて重ねて記録しても、生きている矢は射数/エンドの個数を超えず、後の点数に置き換わる'
 );
 
--- Given: 射順5の矢5を消し、矢6が射順5を持つ。When: 矢5を射順5の指定つきで戻す
-select public.record_shots(jsonb_build_array(pg_temp.rec(21, 5, 'D', 3, 8, '{"shot_number":5}')));
-select public.clear_shots(jsonb_build_array(pg_temp.clr(22, 5, 'D')));
-select public.record_shots(jsonb_build_array(pg_temp.rec(23, 6, 'D', 3, 8, '{"shot_number":5}')));
-insert into si_r (n, r) values (6, public.record_shots(jsonb_build_array(pg_temp.rec(24, 5, 'D', 3, 9, '{"shot_number":5}'))));
+-- When: マスの範囲の境界と的に無い点数を、1つの要求で記録する
+insert into si_r (n, r) values (2, public.record_shots(jsonb_build_array(
+  pg_temp.rec(30, 'DB', 1, 1, 9),
+  pg_temp.rec(31, 'DB', 6, 6, 9),
+  pg_temp.rec(32, 'DB', 7, 1, 9),
+  pg_temp.rec(33, 'DB', 1, 7, 9),
+  pg_temp.rec(34, 'DB', 1, 2, 99)
+)));
 select is(
-  pg_temp.res((select r from si_r where n = 6)) || ' ' || pg_temp.st(5) || ' ' || pg_temp.st(6),
-  'applied{score,shot_number}!shot_number:UNFIT 9/E/#-/live 8/E/#5/live',
-  '重なる射順を指定して戻すと、指定の射順は効かず、射順不明で戻る'
+  pg_temp.reasons((select r from si_r where n = 2)),
+  'applied,applied,UNFIT,UNFIT,UNFIT',
+  'エンドが1とエンド数の記録は効き、エンド数+1・番号が射数/エンド+1・的に無い点数の記録は効かない'
+);
+select is(
+  (select count(*) from public.shots where distance_id = pg_temp.id('DB')) || ' ' || pg_temp.events('DB'),
+  '2 2',
+  '効かなかった記録は、行も履歴も作らない'
+);
+insert into si_r (n, r) values (3, public.record_shots(jsonb_build_array(pg_temp.rec(35, 'DB', 1, 6, 9), pg_temp.rec(36, 'DB', 6, 1, 9))));
+select is(
+  pg_temp.reasons((select r from si_r where n = 3)),
+  'applied,applied',
+  '番号が射数/エンドと同じマスと、エンド数と同じエンドの先頭のマスの記録は効く'
 );
 
 -- ============================================================
--- 射順: 構成の変更とDBの制約
+-- 契約の不一致
 -- ============================================================
 
--- Given: 射数/エンド6の距離に射順6の矢がある。When: 記録を知らない端末から射数/エンド4への変更が届く
-select public.record_shots(jsonb_build_array(pg_temp.rec(25, 7, 'DS', 1, 9, '{"shot_number":6}')));
 select is(
-  public.update_distance(pg_temp.ev(26), pg_temp.id('DS'), jsonb_build_object('config', jsonb_build_object('total_ends', 6, 'arrows_per_end', 4, 'target_face_id', pg_temp.face())))
+  pg_temp.code('record_shots', jsonb_build_array(pg_temp.rec(40, 'DB', 1, 1, 9) - 'shot_number')),
+  'PT422',
+  'shot_numberの無い記録は契約の不一致で拒否する'
+);
+select is(
+  pg_temp.code('record_shots', jsonb_build_array(pg_temp.rec(41, 'DB', 1, 1, 9) - 'end_number')),
+  'PT422',
+  'end_numberの無い記録は契約の不一致で拒否する'
+);
+select is(
+  pg_temp.code('record_shots', jsonb_build_array(pg_temp.rec(42, 'DB', 1, 1, 9, '{"shot_number":0}'))) || ','
+    || pg_temp.code('record_shots', jsonb_build_array(pg_temp.rec(43, 'DB', 1, 1, 9, '{"shot_number":-1}'))) || ','
+    || pg_temp.code('record_shots', jsonb_build_array(pg_temp.rec(44, 'DB', 1, 1, 9, '{"shot_number":1.5}'))) || ','
+    || pg_temp.code('record_shots', jsonb_build_array(pg_temp.rec(45, 'DB', 1, 1, 9, '{"shot_number":"1"}'))),
+  'PT422,PT422,PT422,PT422',
+  '0・負・整数でない・数値でないshot_numberの記録は契約の不一致で拒否する'
+);
+select is(
+  pg_temp.code('record_shots', jsonb_build_array(
+    jsonb_build_object('shot_event_id', pg_temp.ev(46), 'shot_id', pg_temp.ev(46), 'distance_id', pg_temp.id('DB'), 'end_number', 1, 'score_str', '9', 'score_int', 9)))
+    || ',' || pg_temp.code('clear_shots', jsonb_build_array(
+    jsonb_build_object('shot_event_id', pg_temp.ev(47), 'shot_id', pg_temp.ev(46), 'distance_id', pg_temp.id('DB')))),
+  'PT422,PT422',
+  '旧い形（shot_idで矢を指し、shot_numberが無い）の記録と取り消しは契約の不一致で拒否する'
+);
+select is(
+  (select count(*) from public.shots where distance_id = pg_temp.id('DB')) || ' ' || pg_temp.events('DB'),
+  '4 4',
+  '拒否された要求は、行も履歴も増やさない'
+);
+
+-- ============================================================
+-- 冪等性
+-- ============================================================
+
+insert into si_r (n, r) values (4, public.record_shots(jsonb_build_array(pg_temp.rec(50, 'DS', 1, 1, 9))));
+select is(
+  public.record_shots(jsonb_build_array(pg_temp.rec(50, 'DS', 1, 1, 9))) -> 0,
+  (select r -> 0 from si_r where n = 4),
+  '同じevent_idの再送は、最初と同じ応答を返す'
+);
+select is(
+  pg_temp.events('DS') || ' ' || pg_temp.st('DS', 1, 1),
+  '1 9/E/r1/live',
+  '同じevent_idの再送は、履歴もrevisionも増やさない'
+);
+
+-- ============================================================
+-- クリア
+-- ============================================================
+
+select public.record_shots(jsonb_build_array(pg_temp.rec(60, 'DS', 2, 1, 9), pg_temp.rec(61, 'DS', 2, 2, 8)));
+select public.clear_shots(jsonb_build_array(pg_temp.clr(62, 'DS', 2, 1)));
+select is(
+  pg_temp.st('DS', 2, 1) || ' ' || pg_temp.st('DS', 2, 2) || ' ' || pg_temp.evst(62),
+  '9/E/r2/cleared 8/E/r1/live CLEARED/-/-/2#1/r2',
+  'クリアは、記録済みのマスだけを取り消し済みにして履歴を足し、同じエンドの別のマスは変えない'
+);
+select is(
+  pg_temp.reasons(public.clear_shots(jsonb_build_array(pg_temp.clr(63, 'DS', 3, 1), pg_temp.clr(64, 'DS', 2, 1))))
+    || ' ' || pg_temp.events('DS'),
+  'MISSING,DISABLED 4',
+  '行の無いマスのクリアはMISSING、取り消し済みのマスのクリアはDISABLEDで、履歴を足さない'
+);
+
+-- ============================================================
+-- 距離の構成の変更
+-- ============================================================
+
+-- Given: DSのエンド2のマス2に生きている矢がある。他に、エンド6のマス6にも矢を置く
+select public.record_shots(jsonb_build_array(pg_temp.rec(70, 'DS', 6, 6, 9)));
+
+-- When: 全ての矢が収まる構成へ変える
+select is(
+  public.update_distance(pg_temp.ev(71), pg_temp.id('DS'), jsonb_build_object('config', jsonb_build_object('total_ends', 6, 'arrows_per_end', 6, 'target_face_id', pg_temp.face()))) -> 'applied_fields',
+  '["config"]'::jsonb,
+  '生きている矢が全て新しい範囲に収まる構成の変更は効く'
+);
+select is(
+  pg_temp.st('DS', 6, 6) || ' ' || pg_temp.st('DS', 2, 2) || ' ' || pg_temp.st('DS', 1, 1),
+  '9/E/r1/live 8/E/r1/live 9/E/r1/live',
+  '効いた構成の変更の後も、矢はマスも値も変わらない'
+);
+
+-- When: 範囲外のマスの生きている矢があるまま、距離(m)と構成を同時に変える
+select is(
+  public.update_distance(pg_temp.ev(72), pg_temp.id('DS'), jsonb_build_object('distance', 25, 'config', jsonb_build_object('total_ends', 6, 'arrows_per_end', 4, 'target_face_id', pg_temp.face())))
     -> 'rejected_fields',
   '[{"field":"config","reason":"UNFIT"}]'::jsonb,
-  '射順が新しい射数/エンドを超える矢があれば、構成の変更は効かない'
+  '範囲外のマスの生きている矢があれば、構成の変更は効かない'
 );
 select is(
-  (select arrows_per_end from public.distances where id = pg_temp.id('DS')) || ' ' || pg_temp.st(7),
-  '6 9/E/#6/live',
-  '効かなかった構成の変更の後も、射数/エンドと射順・点数は残る'
+  (select arrows_per_end || ' ' || distance from public.distances where id = pg_temp.id('DS')),
+  '6 25',
+  '構成が効かなくても、同じ保存の距離(m)は効く'
+);
+
+-- When: 射数/エンドを減らしても、全マスが埋まった距離の範囲外のマスの矢は、数でなくマスで判定される
+select is(
+  public.update_distance(pg_temp.ev(73), pg_temp.id('DC'), jsonb_build_object('config', jsonb_build_object('total_ends', 6, 'arrows_per_end', 2, 'target_face_id', pg_temp.face())))
+    -> 'rejected_fields',
+  '[{"field":"config","reason":"UNFIT"}]'::jsonb,
+  '全てのマスが埋まった距離の射数/エンドを減らすと、範囲外のマスの生きている矢があるため効かない'
+);
+
+-- Given: 範囲外のマスの矢が取り消し済み。When: 構成を狭める
+select public.clear_shots(jsonb_build_array(pg_temp.clr(74, 'DS', 6, 6)));
+select is(
+  public.update_distance(pg_temp.ev(75), pg_temp.id('DS'), jsonb_build_object('config', jsonb_build_object('total_ends', 5, 'arrows_per_end', 6, 'target_face_id', pg_temp.face())))
+    -> 'applied_fields',
+  '["config"]'::jsonb,
+  '範囲外のマスの矢が取り消し済みだけなら、構成の変更は効く'
 );
 
 reset role;
 
+-- ============================================================
+-- DBの制約
+-- ============================================================
+
 select throws_ok(
-  format($$insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int, shot_number) values (%L, 4, %L, '9', 9, 0)$$, pg_temp.id('D'), pg_temp.id('E')),
+  format($$insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int) values (%L, 4, 0, %L, '9', 9)$$, pg_temp.id('D'), pg_temp.id('E')),
   '23514',
   null,
-  'RPCを通らない射順0の挿入はCHECK制約で止まる'
+  'RPCを通らないマスの番号0の挿入はCHECK制約で止まる'
 );
 select throws_ok(
-  format($$insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int, shot_number) values (%L, 1, %L, '9', 9, 3)$$, pg_temp.id('D'), pg_temp.id('E')),
+  format($$insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int, disabled_at) values (%L, 1, 1, %L, '9', 9, now())$$, pg_temp.id('D'), pg_temp.id('E')),
   '23505',
   null,
-  'RPCを通らない、同じエンドの生きている矢と重なる射順の挿入は一意索引で止まる'
+  'RPCを通らない挿入でも、取り消し済みを含めて同じマスの2行目は主キーで止まる'
 );
-select lives_ok(
-  format($$insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int, shot_number, disabled_at) values (%L, 1, %L, '9', 9, 3, now())$$, pg_temp.id('D'), pg_temp.id('E')),
-  '消した矢どうしは同じ射順を持てる'
-);
-
--- ============================================================
--- 射数/エンドの上限
--- ============================================================
-
-set local role authenticated;
-select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
-
--- When: 射数/エンド3のエンドへ、同じ要求で4本を記録する
-insert into si_r (n, r) values (8, public.record_shots(jsonb_build_array(
-  pg_temp.rec(30, 30, 'DC', 1, 9), pg_temp.rec(31, 31, 'DC', 1, 9), pg_temp.rec(32, 32, 'DC', 1, 9), pg_temp.rec(33, 33, 'DC', 1, 9)
-)));
-select is(
-  (select string_agg(coalesce(e ->> 'reason', 'applied'), ',' order by o)
-    from jsonb_array_elements((select r from si_r where n = 8)) with ordinality as t(e, o)) || ' live=' || pg_temp.live('DC', 1),
-  'applied,applied,applied,UNFIT live=3',
-  '同じ要求で射数/エンドを超える本目の新しい矢は効かない'
-);
-select is(pg_temp.st(33), 'absent', '効かなかった新しい矢は記録されない');
-
--- Given: 他の端末が矢30を消し、別の端末がそのエンドを満杯にした。When: 矢30の点数を変える記録が届く
-select public.clear_shots(jsonb_build_array(pg_temp.clr(34, 30, 'DC')));
-select public.record_shots(jsonb_build_array(pg_temp.rec(35, 34, 'DC', 1, 7)));
-insert into si_r (n, r) values (7, public.record_shots(jsonb_build_array(pg_temp.rec(36, 30, 'DC', 1, 10))));
-select is(
-  pg_temp.res((select r from si_r where n = 7)) || ' ' || pg_temp.st(30) || ' live=' || pg_temp.live('DC', 1),
-  'UNFIT 9/E/#-/cleared live=3',
-  '消された矢の復活は、エンドが満杯になっていれば効かない'
-);
-select is(
-  pg_temp.res(public.record_shots(jsonb_build_array(pg_temp.rec(37, 31, 'DC', 1, 10)))),
-  'applied{score}',
-  '射数/エンドに達したエンドでも、生きている矢の点数は変えられる'
-);
-
--- When: 3本のエンドがある距離の射数/エンドを2に変える
-select is(
-  public.update_distance(pg_temp.ev(38), pg_temp.id('DC'), jsonb_build_object('config', jsonb_build_object('total_ends', 6, 'arrows_per_end', 2, 'target_face_id', pg_temp.face())))
-    -> 'rejected_fields',
-  '[{"field":"config","reason":"UNFIT"}]'::jsonb,
-  '生きている矢の数が新しい射数/エンドを超えるエンドがあれば、構成の変更は効かない'
+select throws_ok(
+  format($$insert into public.shot_events (event_id, distance_id, type, author_id, revision, end_number, shot_number)
+    values (gen_random_uuid(), %L, 'CLEARED', %L, 1, 1, 1)$$, pg_temp.id('D'), pg_temp.id('E')),
+  '23505',
+  null,
+  '同じマスの履歴に、同じrevisionは入れられない'
 );
 
 select * from finish();

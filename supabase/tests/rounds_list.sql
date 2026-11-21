@@ -81,8 +81,8 @@ begin
     v_distance := gen_random_uuid();
     insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
     values (v_distance, v_round, v_n::text, 30 * v_n, v_ends, 3, 'a1000000-0000-0000-0000-000000000001');
-    insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int)
-    select v_distance, (i - 1) / 3 + 1, pg_temp.id(p_owner),
+    insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
+    select v_distance, (i - 1) / 3 + 1, (i - 1) % 3 + 1, pg_temp.id(p_owner),
       case s when 10 then 'X' when 0 then 'M' else s::text end, s
     from generate_series(1, v_shots_per_distance) as i,
       lateral (select case
@@ -197,8 +197,8 @@ begin
   from jsonb_array_elements(p_rows) with ordinality as e(v, ord)
   order by e.ord;
   select id into v_first from public.distances where round_id = v_round order by position_key, id limit 1;
-  insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int)
-  select v_first, (i - 1) / 3 + 1, pg_temp.id(p_owner), 'X', 10 from generate_series(1, p_tens) as i;
+  insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
+  select v_first, (i - 1) / 3 + 1, (i - 1) % 3 + 1, pg_temp.id(p_owner), 'X', 10 from generate_series(1, p_tens) as i;
 end;
 $$;
 
@@ -239,10 +239,12 @@ with disabled_distance as (
   values ('c0000000-0000-0000-0000-0000000001d1', pg_temp.id('S'), '3', 90, 12, 3, 'a1000000-0000-0000-0000-000000000001', now())
   returning id
 )
-insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int)
-select id, (i - 1) / 3 + 1, pg_temp.id('U'), 'X', 10 from disabled_distance, generate_series(1, 36) as i;
-insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int, disabled_at)
-select id, 1, pg_temp.id('U'), 'X', 10, now() from public.distances where round_id = pg_temp.id('S') and position_key = '1';
+insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
+select id, (i - 1) / 3 + 1, (i - 1) % 3 + 1, pg_temp.id('U'), 'X', 10 from disabled_distance, generate_series(1, 36) as i;
+-- 全てのマスが埋まっているため、取り消し済みの10点の矢は、0点のマスを取り消し済みの10点に替えて作る。
+update public.shots set score_str = 'X', score_int = 10, disabled_at = now()
+where end_number = 12 and shot_number = 3
+  and distance_id = (select id from public.distances where round_id = pg_temp.id('S') and position_key = '1');
 
 -- Fixture（距離の構成）: 利用者Vが見える完了のラウンドと、Vに見えない（別の利用者W、入力中、削除済み）ラウンド。
 --   実施日は全ラウンドで違う値にして、既定の並び（実施日の新しい順）を一意にする。

@@ -384,7 +384,7 @@
 | `features/rounds/application/round-fetching.ts` | application(取得の順序)と約束(`RoundQueries`) |
 | `features/rounds/infrastructure/round-queries.ts` | infrastructure(履歴の問い合わせ) |
 | `supabase/migrations/20261117000005_history.sql` | DB(履歴の関数、ラウンドの条件の関数、距離単位の履歴の関数と、その索引) |
-| `features/rounds/infrastructure/browser-unique-ids.ts` | infrastructure(新しいIDと、IDに混ぜる乱数(`randomBytes`)の払い出し) |
+| `features/rounds/infrastructure/browser-unique-ids.ts` | infrastructure(新しいIDの払い出し) |
 | `features/rounds/infrastructure/rounds-db-schema.ts` | infrastructure(ラウンドが使うスキーマの部分の型) |
 | `features/rounds/index.ts` | 機能の入口(型だけを公開) |
 | `components/screen-frame.tsx` | 共有の画面部品(画面の枠。変更しない。点数一覧の知識は持たない) |

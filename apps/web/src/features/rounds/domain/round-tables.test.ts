@@ -5,6 +5,7 @@ import {
   type ServerRound,
   selectRoundState,
 } from "./round-tables";
+import { cellOfShot, shotCellKey } from "./shot-cell";
 
 const distance = (id: string, key: string) => ({
   id,
@@ -16,10 +17,9 @@ const distance = (id: string, key: string) => ({
   is_marked: true,
 });
 const shot = (distanceId: string, end: number) => ({
-  id: `${distanceId}-${end}`,
   distance_id: distanceId,
   end_number: end,
-  shot_number: null,
+  shot_number: 1,
   score_str: "10",
   score_int: 10,
 });
@@ -119,7 +119,7 @@ describe("baseOfServerRound", () => {
     ],
   };
 
-  it("取り消した矢と無効化した距離(その矢を含む)を表に入れず、全ての行のrevisionを集める", () => {
+  it("取り消したマスの矢と無効化した距離(その矢を含む)を表に入れず、全ての行のrevisionをマスの鍵で集める", () => {
     // Given
 
     // When
@@ -127,11 +127,13 @@ describe("baseOfServerRound", () => {
 
     // Then
     expect(result.tables.distances.map((d) => d.id)).toEqual(["d-1"]);
-    expect(result.tables.shots.map((s) => s.id)).toEqual(["d-1-1"]);
+    expect(result.tables.shots.map((s) => shotCellKey(cellOfShot(s)))).toEqual([
+      "d-1:1:1",
+    ]);
     expect(result.revisions).toEqual({
       round: 3,
       distances: { "d-1": 2, "d-2": 4 },
-      shots: { "d-1-1": 5, "d-1-2": 6, "d-2-1": 7 },
+      shots: { "d-1:1:1": 5, "d-1:2:1": 6, "d-2:1:1": 7 },
     });
   });
 

@@ -180,7 +180,7 @@ export const roundsMessages = {
     keypadRedo: "一つ進む",
     keypadClear: "クリア",
     keypadClearKey: "C",
-    endBlankAdd: "エンド{end}に追加",
+    emptyCell: "{number}射目、空",
     topScores: "{firstLabel}: {firstCount} / {secondLabel}: {secondCount}",
     roundTotal: "合計{total}",
     distanceSubtotal: "小計{total}",

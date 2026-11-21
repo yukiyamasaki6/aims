@@ -72,19 +72,19 @@ export type SyncOperation =
   | {
       type: "shot.recorded";
       eventId: string;
-      // 矢のID。新しい矢は端末が無作為のUUIDで作る。
-      shotId: string;
+      // 矢はマスで指す。
       distanceId: string;
       endNumber: number;
+      shotNumber: number;
       scoreStr: string;
       scoreInt: number;
     }
   | {
       type: "shot.cleared";
       eventId: string;
-      shotId: string;
       distanceId: string;
       endNumber: number;
+      shotNumber: number;
     };
 
 export type ShotOperation = Extract<

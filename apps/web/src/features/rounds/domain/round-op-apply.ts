@@ -1,12 +1,12 @@
 import type { RoundConfig } from "./round-config";
 import type { DistanceRow, RoundTables, ShotRow } from "./round-tables";
 import {
-  endHasRoom,
   type ScoringTargetFace,
   shotFitsDistance,
   shotsFitDistance,
 } from "./scorecard-scoring";
 import type { Distance } from "./scorecard-types";
+import { shotAt } from "./shot-cell";
 import type { DistanceChanges, SyncOperation } from "./sync-events";
 
 type Op<T extends SyncOperation["type"]> = Extract<SyncOperation, { type: T }>;
@@ -32,23 +32,6 @@ function appliedFields(
 
 function liveShots(tables: RoundTables): ShotRow[] {
   return tables.shots.filter((s) => !s.disabled);
-}
-
-// 同じエンドの、他の生きている矢が使う射順か。
-function shotNumberTaken(
-  tables: RoundTables,
-  shot: Pick<ShotRow, "id" | "distance_id" | "end_number">,
-  shotNumber: number | null,
-): boolean {
-  if (shotNumber === null) return false;
-  return tables.shots.some(
-    (s) =>
-      !s.disabled &&
-      s.id !== shot.id &&
-      s.distance_id === shot.distance_id &&
-      s.end_number === shot.end_number &&
-      s.shot_number === shotNumber,
-  );
 }
 
 function replaceDistance(tables: RoundTables, next: DistanceRow): RoundTables {
@@ -129,7 +112,7 @@ function createDistance(
   };
 }
 
-// 構成を変えるとき、新しい構成で無効な表示中の矢があるか。生きている矢の数が新しい射数/エンドを超えるエンドも無効とする。
+// 構成を変えるとき、新しい構成で無効な表示中の矢(範囲外のマス、的に無い点数)があるか。
 function hasShotInvalidUnder(
   tables: RoundTables,
   distance: DistanceRow,
@@ -207,15 +190,6 @@ function disableDistance(
   return replaceDistance(tables, { ...target, disabled: true });
 }
 
-// 操作を重ねた結果。`refetch`は、確定済みの操作をベースに重ねられなかった(ベースが古い)ことの印。
-type Step = { tables: RoundTables; refetch: boolean };
-
-function unchanged(tables: RoundTables): Step {
-  return { tables, refetch: false };
-}
-
-type ShotTarget = Pick<ShotRow, "id" | "distance_id" | "end_number">;
-
 // record_shotsで端末が送る項目(点数だけ)。
 const SHOT_FIELDS = ["score"];
 
@@ -223,19 +197,15 @@ const SHOT_FIELDS = ["score"];
 function effectiveShotFields(
   distance: DistanceRow,
   operation: Op<"shot.recorded">,
-  existing: ShotRow | undefined,
   confirmedFields: Confirmed,
   faces: ScoringTargetFace[],
 ): Set<string> | null {
   if (confirmedFields !== undefined)
     return appliedFields(confirmedFields, SHOT_FIELDS);
-  // 決定1: 行の射順で、現在の構成で無効な矢は効かない。
+  // 現在の構成で無効なマス・点数は効かない。
   const fits = shotFitsDistance(
     distance,
-    {
-      endNumber: operation.endNumber,
-      shotNumber: existing?.shot_number ?? null,
-    },
+    { endNumber: operation.endNumber, shotNumber: operation.shotNumber },
     { scoreStr: operation.scoreStr, scoreInt: operation.scoreInt },
     faces,
   );
@@ -245,16 +215,15 @@ function effectiveShotFields(
 // 効く項目だけを変えた、矢の行。
 function buildShotRow(
   existing: ShotRow | undefined,
-  target: ShotTarget,
   operation: Op<"shot.recorded">,
   fields: Set<string>,
-  tables: RoundTables,
 ): ShotRow {
   const row: ShotRow = existing
     ? { ...existing, disabled: false }
     : {
-        ...target,
-        shot_number: null,
+        distance_id: operation.distanceId,
+        end_number: operation.endNumber,
+        shot_number: operation.shotNumber,
         score_str: "",
         score_int: 0,
         disabled: false,
@@ -263,105 +232,50 @@ function buildShotRow(
     row.score_str = operation.scoreStr;
     row.score_int = operation.scoreInt;
   }
-  // 復活で射順が同じエンドの他の生きている矢と重なるときは、射順を外して戻す。
-  if (existing?.disabled && shotNumberTaken(tables, row, row.shot_number)) {
-    row.shot_number = null;
-  }
   return row;
 }
 
-// record_shots。要素に含まれる項目だけを変える。消した矢の行は、記録で復活させる。
+// record_shots。要素に含まれる項目だけを変える。同じマスの行は上書きし、消した矢の行は記録で復活させる。
 function recordShot(
   tables: RoundTables,
   operation: Op<"shot.recorded">,
   confirmedFields: Confirmed,
   faces: ScoringTargetFace[],
-): Step {
+): RoundTables {
   const distance = tables.distances.find((d) => d.id === operation.distanceId);
-  if (!distance || distance.disabled) return unchanged(tables);
-  const existing = tables.shots.find((s) => s.id === operation.shotId);
-  // 同じIDの矢が別の距離・別のエンドにある要求は、サーバーが拒否する。
-  if (
-    existing &&
-    (existing.distance_id !== operation.distanceId ||
-      existing.end_number !== operation.endNumber)
-  ) {
-    return unchanged(tables);
-  }
-  const target = existing ?? {
-    id: operation.shotId,
-    distance_id: operation.distanceId,
-    end_number: operation.endNumber,
-  };
+  if (!distance || distance.disabled) return tables;
   const fields = effectiveShotFields(
     distance,
     operation,
-    existing,
     confirmedFields,
     faces,
   );
-  if (!fields) return unchanged(tables);
-  // 生きている矢を増やす記録(新しい矢、復活)は、確定の有無によらず、エンドに空きがあるときだけ重ねる。
-  const adds = !existing || existing.disabled;
-  if (adds && !endHasRoom(distance, liveShots(tables), operation.endNumber)) {
-    return { tables, refetch: confirmedFields !== undefined };
-  }
-  const row = buildShotRow(existing, target, operation, fields, tables);
+  if (!fields) return tables;
+  const existing = shotAt(tables.shots, operation);
+  const row = buildShotRow(existing, operation, fields);
   return {
-    tables: {
-      ...tables,
-      shots: existing
-        ? tables.shots.map((s) => (s.id === row.id ? row : s))
-        : [...tables.shots, row],
-    },
-    refetch: false,
+    ...tables,
+    shots: existing
+      ? tables.shots.map((s) => (s === existing ? row : s))
+      : [...tables.shots, row],
   };
 }
 
-// clear_shots。行は残して削除済みにする。射順は変えない。
+// clear_shots。行は残して削除済みにする。行の無いマスと、消えているマスは何もしない。
 function clearShot(
   tables: RoundTables,
   operation: Op<"shot.cleared">,
 ): RoundTables {
   const distance = tables.distances.find((d) => d.id === operation.distanceId);
   if (!distance || distance.disabled) return tables;
-  const existing = tables.shots.find((s) => s.id === operation.shotId);
-  if (!existing || existing.distance_id !== operation.distanceId) return tables;
+  const existing = shotAt(tables.shots, operation);
+  if (!existing || existing.disabled) return tables;
   return {
     ...tables,
     shots: tables.shots.map((s) =>
-      s.id === operation.shotId ? { ...s, disabled: true } : s,
+      s === existing ? { ...s, disabled: true } : s,
     ),
   };
-}
-
-function step(
-  tables: RoundTables,
-  { operation, confirmedFields }: AppliedOperation,
-  faces: ScoringTargetFace[],
-): Step {
-  if (tables.round.disabled) return unchanged(tables);
-  switch (operation.type) {
-    case "round.created":
-      // 作成は基準(`roundTablesFromCreated`)が表す。
-      return unchanged(tables);
-    case "round.updated":
-      return unchanged(updateRound(tables, operation, confirmedFields));
-    case "round.disabled":
-      return unchanged(disableRound(tables));
-    case "distance.created":
-      return unchanged(createDistance(tables, operation));
-    case "distance.updated":
-      return unchanged(
-        updateDistance(tables, operation, confirmedFields, faces),
-      );
-    case "distance.disabled":
-      return unchanged(disableDistance(tables, operation));
-    case "shot.recorded":
-      return recordShot(tables, operation, confirmedFields, faces);
-    case "shot.cleared":
-      return unchanged(clearShot(tables, operation));
-  }
 }
 
 // 1つの操作を、サーバーの対応するRPCと同じ判定の順序でテーブルへ反映する。
@@ -369,36 +283,39 @@ function step(
 // 同じ操作を重ねて適用しても結果は変わらない。ラウンドの削除以降の操作は、削除済みのラウンドに対するものとして反映しない。
 export function applyOperation(
   tables: RoundTables,
-  applied: AppliedOperation,
+  { operation, confirmedFields }: AppliedOperation,
   faces: ScoringTargetFace[],
 ): RoundTables {
-  return step(tables, applied, faces).tables;
+  if (tables.round.disabled) return tables;
+  switch (operation.type) {
+    case "round.created":
+      // 作成は基準(`roundTablesFromCreated`)が表す。
+      return tables;
+    case "round.updated":
+      return updateRound(tables, operation, confirmedFields);
+    case "round.disabled":
+      return disableRound(tables);
+    case "distance.created":
+      return createDistance(tables, operation);
+    case "distance.updated":
+      return updateDistance(tables, operation, confirmedFields, faces);
+    case "distance.disabled":
+      return disableDistance(tables, operation);
+    case "shot.recorded":
+      return recordShot(tables, operation, confirmedFields, faces);
+    case "shot.cleared":
+      return clearShot(tables, operation);
+  }
 }
 
 // 操作を列の順（`seq`順）にテーブルへ反映する。読み込み時も操作時も、この関数が唯一の導出である。
-// `refetch`は、確定済みの操作を重ねられなかったとき(ベースが古く、エンドに空きが無いとき)に真で、ベースを取り直す印である。
-export function deriveTables(
-  base: RoundTables,
-  operations: AppliedOperation[],
-  faces: ScoringTargetFace[],
-): Step {
-  return operations.reduce<Step>(
-    (current, applied) => {
-      const next = step(current.tables, applied, faces);
-      return {
-        tables: next.tables,
-        refetch: current.refetch || next.refetch,
-      };
-    },
-    { tables: base, refetch: false },
-  );
-}
-
-// `deriveTables`のテーブルだけを返す。
 export function applyOperations(
   base: RoundTables,
   operations: AppliedOperation[],
   faces: ScoringTargetFace[],
 ): RoundTables {
-  return deriveTables(base, operations, faces).tables;
+  return operations.reduce(
+    (tables, applied) => applyOperation(tables, applied, faces),
+    base,
+  );
 }

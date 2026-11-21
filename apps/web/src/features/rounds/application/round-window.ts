@@ -87,16 +87,16 @@ export function createRoundWindow(
   },
 ) {
   const localList = createLocalListWatch(deps.hub);
-  // 準備完了の詳細と、取り直しが要るか。送信後の取り直しの対象になる。
-  const ready = new Map<string, boolean>();
+  // 準備完了の詳細。送信後の取り直しの対象になる。
+  const ready = new Set<string>();
   const readyListeners = new Set<() => void>();
   const marks = {
-    set(roundId: string, overlay: boolean | null) {
-      if (overlay === null) {
-        if (!ready.delete(roundId)) return;
-      } else {
-        if (ready.get(roundId) === overlay) return;
-        ready.set(roundId, overlay);
+    set(roundId: string, isReady: boolean) {
+      if (isReady) {
+        if (ready.has(roundId)) return;
+        ready.add(roundId);
+      } else if (!ready.delete(roundId)) {
+        return;
       }
       for (const listener of [...readyListeners]) listener();
     },
@@ -141,10 +141,10 @@ export function createRoundWindow(
       if (!found) throw new Error("購読していないラウンドへは追記できません。");
       return found.entry.append(operation);
     },
-    // 準備完了の詳細(送信後の取り直しの対象)と、確定済みの操作を重ねられず取り直しが要るか。取り直しの制御だけが使う。
-    readyRounds: (): { roundId: string; overlay: boolean }[] =>
-      [...ready].map(([roundId, overlay]) => ({ roundId, overlay })),
-    // 準備完了の詳細が増減したとき、または取り直しの要否が変わったときに呼ぶ。返す関数で解除する。
+    // 準備完了の詳細(送信後の取り直しの対象)。取り直しの制御だけが使う。
+    readyRounds: (): { roundId: string }[] =>
+      [...ready].map((roundId) => ({ roundId })),
+    // 準備完了の詳細が増減したときに呼ぶ。返す関数で解除する。
     onReadyChange(listener: () => void): () => void {
       readyListeners.add(listener);
       return () => {

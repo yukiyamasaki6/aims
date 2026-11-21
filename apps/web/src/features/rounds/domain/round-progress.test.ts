@@ -43,11 +43,10 @@ const distance = {
   target_face_id: "face-1",
   is_marked: true,
 };
-const shot = (n: number, scoreStr = "10", endNumber = 1) => ({
-  id: `s-${n}`,
+const shot = (shotNumber: number, scoreStr = "10", endNumber = 1) => ({
   distance_id: "d-1",
   end_number: endNumber,
-  shot_number: null,
+  shot_number: shotNumber,
   // 取得した行は、DBのNOT NULL列のため必ず射手のIDを持つ。
   shooter_id: "user-1",
   score_str: scoreStr,
@@ -56,7 +55,7 @@ const shot = (n: number, scoreStr = "10", endNumber = 1) => ({
 // 全てのエンドを射数/エンドまで満たす記録。
 const allShots = () =>
   Array.from({ length: 36 }, (_, i) =>
-    shot(i + 1, "10", Math.floor(i / 3) + 1),
+    shot((i % 3) + 1, "10", Math.floor(i / 3) + 1),
   );
 
 function tables(
@@ -84,7 +83,7 @@ describe("completionConfirmation", () => {
   const confirmationOf = (t: RoundTables) =>
     completionConfirmation(t.distances as never, t.shots as never);
 
-  it("満杯でないエンドがあれば未入力の旨を返し、全てのエンドが満杯になっていればnullを返す", () => {
+  it("空のマスが1つでもあれば未入力の旨を返し、全てのマスが埋まっていればnullを返す", () => {
     // Given
     // When
     const partial = confirmationOf(
@@ -143,14 +142,14 @@ describe("reopeningRequired", () => {
   describe("完了のラウンドで表示が変わる編集", () => {
     it.each<[string, SyncOperation]>([
       [
-        "新しい矢の記録",
-        shotRecorded({ shotId: "s-2", scoreStr: "9", scoreInt: 9 }),
+        "空のマスへの記録",
+        shotRecorded({ shotNumber: 2, scoreStr: "9", scoreInt: 9 }),
       ],
       [
         "別の点数への変更",
-        shotRecorded({ shotId: "s-1", scoreStr: "9", scoreInt: 9 }),
+        shotRecorded({ shotNumber: 1, scoreStr: "9", scoreInt: 9 }),
       ],
-      ["記録済みの矢のクリア", shotCleared({ shotId: "s-1" })],
+      ["記録済みのマスのクリア", shotCleared({ shotNumber: 1 })],
       ["距離の追加", distanceCreated({ id: "d-2", positionKey: "b" })],
       ["距離の変更", distanceUpdated({ changes: { distance: 50 } })],
       ["距離の削除", distanceDisabled("d-1")],
@@ -170,16 +169,16 @@ describe("reopeningRequired", () => {
     it.each<[string, SyncOperation]>([
       [
         "同じ点数の上書き",
-        shotRecorded({ shotId: "s-1", scoreStr: "10", scoreInt: 10 }),
+        shotRecorded({ shotNumber: 1, scoreStr: "10", scoreInt: 10 }),
       ],
-      ["存在しない矢のクリア", shotCleared({ shotId: "s-2" })],
+      ["空のマスのクリア", shotCleared({ shotNumber: 2 })],
       [
         "的にない点数の記録",
-        shotRecorded({ shotId: "s-2", scoreStr: "7", scoreInt: 7 }),
+        shotRecorded({ shotNumber: 2, scoreStr: "7", scoreInt: 7 }),
       ],
       [
         "存在しない距離への記録",
-        shotRecorded({ distanceId: "d-x", shotId: "s-2" }),
+        shotRecorded({ distanceId: "d-x", shotNumber: 2 }),
       ],
       [
         "削除済みでない距離の同じ値への変更",
@@ -205,19 +204,19 @@ describe("reopeningRequired", () => {
       // When
       const result = required(
         t,
-        shotRecorded({ shotId: "s-2", scoreStr: "9", scoreInt: 9 }),
+        shotRecorded({ shotNumber: 2, scoreStr: "9", scoreInt: 9 }),
       );
 
       // Then
       expect(result).toBe(false);
     });
 
-    it("完了で、満杯になったエンドへの新しい矢の記録は戻す必要がない", () => {
+    it("完了で、射数/エンドの外のマスへの記録は戻す必要がない", () => {
       // Given
       const full = tables("completed", [shot(1), shot(2), shot(3)]);
 
       // When
-      const result = required(full, shotRecorded({ shotId: "s-4" }));
+      const result = required(full, shotRecorded({ shotNumber: 4 }));
 
       // Then
       expect(result).toBe(false);

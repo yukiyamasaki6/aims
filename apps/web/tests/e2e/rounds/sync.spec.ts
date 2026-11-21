@@ -18,10 +18,12 @@ import { resetOtpSendInterval } from "../helpers/auth-db";
 import { expectKeypadSettled } from "../helpers/keypad";
 import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
 import {
+  clearShotAs,
   getDistanceIds,
   getRoundRow,
   goOnline,
   openOtherDevice,
+  recordShotAs,
   savedRoundCount,
   updateRound,
 } from "../helpers/other-device";
@@ -32,6 +34,7 @@ import {
   expectNoSyncStatus,
   signInAsTestUser,
 } from "../helpers/rounds";
+import { cell, expectCells } from "../helpers/score-cells";
 import {
   comeBackOnline,
   goOffline,
@@ -68,13 +71,6 @@ async function openRound(page: Page) {
   await waitForHydration(page);
 }
 
-// エンドの記録済みの玉(点数の高い順)。
-function endBalls(page: Page, distance: number, end: number) {
-  return page
-    .getByTestId(`end-row-${distance}-${end}`)
-    .locator("[data-shot-id]");
-}
-
 // ラウンド名を変更して保存する。保存は操作の列に積まれ、update_round RPCで送信される。
 async function saveRoundName(page: Page, name: string) {
   await editRoundName(page, name);
@@ -85,15 +81,17 @@ async function reloadRound(page: Page) {
   await waitForHydration(page);
 }
 
-// 保存された生きている矢を「エンド:点数」の配列で、文字列の順に返す。
+// 保存された生きている矢を「エンド-マスの番号:点数」の配列で、文字列の順に返す。
 async function savedShots(supabase: SupabaseClient, distanceId: string) {
   const { data, error } = await supabase
     .from("shots")
-    .select("end_number, score_str")
+    .select("end_number, shot_number, score_str")
     .eq("distance_id", distanceId)
     .is("disabled_at", null);
   if (error) throw error;
-  return data.map((shot) => `${shot.end_number}:${shot.score_str}`).sort();
+  return data
+    .map((shot) => `${shot.end_number}-${shot.shot_number}:${shot.score_str}`)
+    .sort();
 }
 
 async function expectSavedShots(
@@ -207,12 +205,12 @@ test("ラウンドの詳細で点数を記録すると、送信中も保存の�
   await expectNoSyncStatus(page);
   await page.getByTestId("score-button-10").click();
   await expect.poll(() => requested).toBe(true);
-  await expect(endBalls(page, 1, 1)).toHaveText(["10"]);
+  await expectCells(page, 1, 1, ["10", null, null]);
   await expectNoSyncStatus(page);
 
   // 送信を通し、点数が保存された後も同期の状態が表示されないことを確かめる。
   releaseRequest();
-  await expectSavedShots(device.supabase, distanceId, ["1:10"]);
+  await expectSavedShots(device.supabase, distanceId, ["1-1:10"]);
   await expectNoSyncStatus(page);
 });
 
@@ -225,12 +223,12 @@ test("オフラインで点数を記録してその矢を消し、別の点数�
   await openRound(page);
   await page.context().setOffline(true);
   await page.getByTestId("score-button-10").click();
-  await page.getByTestId("shot-ball-1-1-1").click();
+  await cell(page, 1, 1, 1).click();
   // 閉じたテンキーを開き直す動きが終わってから押す。
   await expectKeypadSettled(page);
   await page.getByTestId("score-button-clear").click();
   await page.getByTestId("score-button-9").click();
-  await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
+  await expectCells(page, 1, 1, ["9", null, null]);
   await saveRoundName(page, "オンライン復帰テスト");
   await expect(roundName(page)).toContainText("オンライン復帰テスト");
 
@@ -242,11 +240,129 @@ test("オフラインで点数を記録してその矢を消し、別の点数�
       timeout: 15_000,
     })
     .toBe("オンライン復帰テスト");
-  await expectSavedShots(device.supabase, distanceId, ["1:9"]);
+  await expectSavedShots(device.supabase, distanceId, ["1-1:9"]);
 
   // 再読み込みし、最後の点数だけが表示されることを確かめる。
   await reloadRound(page);
-  await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
+  await expectCells(page, 1, 1, ["9", null, null]);
+});
+
+test("他の端末が同じマスへ先に記録した後でオンラインに戻ると、この端末の点数だけがそのマスに残り、再読み込みしても2本の矢にならない", async ({
+  page,
+}) => {
+  // オフラインで先頭のマスに10を記録し、他の端末が同じマスへ先に9を記録する。
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const [distanceId] = await getDistanceIds(device.supabase, roundId);
+  await openRound(page);
+  await page.context().setOffline(true);
+  await page.getByTestId("score-button-10").click();
+  await expectCells(page, 1, 1, ["10", null, null]);
+  await recordShotAs(
+    device.supabase,
+    { distanceId, endNumber: 1, shotNumber: 1 },
+    { scoreStr: "9", scoreInt: 9 },
+  );
+
+  // オンラインに戻り、後から保存されたこの端末の点数だけがそのマスに残ることを確かめる。
+  await goOnline(page);
+  await expectSavedShots(device.supabase, distanceId, ["1-1:10"]);
+
+  // 再読み込みして、そのマスに1つだけ表示されることを確かめる。
+  await reloadRound(page);
+  await expectCells(page, 1, 1, ["10", null, null]);
+});
+
+test("他の端末が同じエンドの別のマスへ記録した後でオンラインに戻ると、両方の矢が保存され、再読み込みしてどちらも表示される", async ({
+  page,
+}) => {
+  // オフラインで先頭のマスに10を記録し、他の端末が2番目のマスへ8を記録する。
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const [distanceId] = await getDistanceIds(device.supabase, roundId);
+  await openRound(page);
+  await page.context().setOffline(true);
+  await page.getByTestId("score-button-10").click();
+  await expectCells(page, 1, 1, ["10", null, null]);
+  await recordShotAs(
+    device.supabase,
+    { distanceId, endNumber: 1, shotNumber: 2 },
+    { scoreStr: "8", scoreInt: 8 },
+  );
+
+  // オンラインに戻り、両方の矢が保存されることを確かめる。
+  await goOnline(page);
+  await expectSavedShots(device.supabase, distanceId, ["1-1:10", "1-2:8"]);
+
+  // 再読み込みして、どちらも表示されることを確かめる。
+  await reloadRound(page);
+  await expectCells(page, 1, 1, ["10", "8", null]);
+});
+
+test("一つ戻るは、他の端末が同じエンドの別のマスへ記録した矢を消さない", async ({
+  page,
+}) => {
+  // オフラインで先頭のマスに10を記録し、他の端末が2番目のマスへ8を記録した後、オンラインに戻る。
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const [distanceId] = await getDistanceIds(device.supabase, roundId);
+  await openRound(page);
+  await page.context().setOffline(true);
+  await page.getByTestId("score-button-10").click();
+  await expectCells(page, 1, 1, ["10", null, null]);
+  await recordShotAs(
+    device.supabase,
+    { distanceId, endNumber: 1, shotNumber: 2 },
+    { scoreStr: "8", scoreInt: 8 },
+  );
+  await goOnline(page);
+  await expectSavedShots(device.supabase, distanceId, ["1-1:10", "1-2:8"]);
+
+  // 一つ戻り、この端末の矢だけが消えることを確かめる。
+  await page.getByTestId("score-button-undo").click();
+  await expectSavedShots(device.supabase, distanceId, ["1-2:8"]);
+  await reloadRound(page);
+  await expectCells(page, 1, 1, [null, "8", null]);
+});
+
+test("他の端末が消したマスを知らずに直すと、直した点数で再び表示され、直したマスを他の端末が後で消すと空になる", async ({
+  page,
+}) => {
+  // 先頭のマスに10を記録済みのラウンドを開き、オフラインにして、他の端末にそのマスを消させる。
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "他端末の消去テスト",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+    shots: [
+      {
+        distanceIndex: 0,
+        endNumber: 1,
+        shotNumber: 1,
+        scoreStr: "10",
+        scoreInt: 10,
+      },
+    ],
+  });
+  const [distanceId] = await getDistanceIds(device.supabase, roundId);
+  const cellOnServer = { distanceId, endNumber: 1, shotNumber: 1 };
+  await openRound(page);
+  await expectCells(page, 1, 1, ["10", null, null]);
+  await page.context().setOffline(true);
+  await clearShotAs(device.supabase, cellOnServer);
+
+  // 消されたと知らずにそのマスを7に直し、オンラインに戻ると、7で保存される。
+  await cell(page, 1, 1, 1).click();
+  await page.getByTestId("score-button-7").click();
+  await goOnline(page);
+  await expectSavedShots(device.supabase, distanceId, ["1-1:7"]);
+  await reloadRound(page);
+  await expectCells(page, 1, 1, ["7", null, null]);
+
+  // 他の端末が直したマスを後で消すと、再読み込みで空になる。
+  await clearShotAs(device.supabase, cellOnServer);
+  await expectSavedShots(device.supabase, distanceId, []);
+  await reloadRound(page);
+  await expectCells(page, 1, 1, [null, null, null]);
 });
 
 test("オフラインで入力を完了にした後に、他の端末がラウンドの名前を変えると、オンラインに戻った後、他の端末でも完了と他の端末の名前の両方が保存され、開き直しても完了のままである", async ({
@@ -292,13 +408,13 @@ test("オフラインで点数を記録してラウンド一覧へ移り、オ�
   await page.context().setOffline(true);
   await page.getByTestId("score-button-10").click();
   // 点数は保存の完了後に表示されるため、一覧へ移る前に端末へ保存済みである。
-  await expect(endBalls(page, 1, 1)).toHaveText(["10"]);
+  await expectCells(page, 1, 1, ["10", null, null]);
 
   await backToList(page);
 
   // オンラインに戻り、そのラウンドを開き直さずに点数が保存されることを確かめる。
   await goOnline(page);
-  await expectSavedShots(supabase, distanceIds[0], ["1:10"]);
+  await expectSavedShots(supabase, distanceIds[0], ["1-1:10"]);
 });
 
 test("送信に失敗した点数を残してアプリを閉じ、通信のある状態でラウンド一覧を開くと、そのラウンドを開かずに点数が保存される", async ({
@@ -323,7 +439,7 @@ test("送信に失敗した点数を残してアプリを閉じ、通信のあ�
   const reopened = await context.newPage();
   await reopened.goto("/rounds");
   await waitForHydration(reopened);
-  await expectSavedShots(supabase, distanceIds[0], ["1:10"]);
+  await expectSavedShots(supabase, distanceIds[0], ["1-1:10"]);
 });
 
 test("オフラインで開始したラウンドの詳細からラウンド一覧へ移り、オンラインに戻ると、そのラウンドを開き直さずに保存され、一覧にそのラウンドが1件だけ表示される", async ({
@@ -410,7 +526,7 @@ test.describe("サインインが切れた後の再送", () => {
     // サインインし直してラウンド一覧へ戻り、そのラウンドを開き直さずに点数が保存されることを確かめる。
     await signInOnPage(page, credentials);
     await expect(page).toHaveURL(/\/rounds$/);
-    await expectSavedShots(device.supabase, distanceId, ["1:10"]);
+    await expectSavedShots(device.supabase, distanceId, ["1-1:10"]);
   });
 });
 
@@ -477,7 +593,7 @@ test("別の利用者の未送信の点数が残る端末でサインインし�
 
   // 利用者Bのラウンドで点数を記録して保存されるのを確かめ、利用者Aの点数が送られず、保存されていないことを確かめる。
   await page.getByTestId("score-button-9").click();
-  await expectSavedShots(roundB.supabase, roundB.distanceId, ["1:9"]);
+  await expectSavedShots(roundB.supabase, roundB.distanceId, ["1-1:9"]);
   expect(attemptsOfA).toBe(attemptsBeforeB);
   expect(await savedShots(roundA.supabase, roundA.distanceId)).toEqual([]);
 

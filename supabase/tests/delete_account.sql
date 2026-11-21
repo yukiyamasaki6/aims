@@ -63,14 +63,12 @@ as $$ insert into public.round_users (round_id, user_id, role) values (pg_temp.u
 create function pg_temp.mk_shot(p_round text, p_n int, p_shooter text, p_author text) returns void
 language plpgsql
 as $$
-declare
-  v_id uuid := pg_temp.uid(p_round || '.s' || p_n);
 begin
-  insert into public.shots (id, distance_id, end_number, shooter_id, score_str, score_int, shot_number)
-  values (v_id, pg_temp.uid(p_round || '.d'), 1, pg_temp.uid(p_shooter), '9', 9, p_n);
-  insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, shot_number, set_fields)
-  values (pg_temp.uid(p_round || '.se' || p_n), pg_temp.uid(p_round || '.d'), v_id, 'RECORDED', pg_temp.uid(p_author), 1, 1,
-    pg_temp.uid(p_shooter), '9', 9, p_n, array['score', 'shooter_id', 'shot_number']);
+  insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
+  values (pg_temp.uid(p_round || '.d'), 1, p_n, pg_temp.uid(p_shooter), '9', 9);
+  insert into public.shot_events (event_id, distance_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, shot_number, set_fields)
+  values (pg_temp.uid(p_round || '.se' || p_n), pg_temp.uid(p_round || '.d'), 'RECORDED', pg_temp.uid(p_author), 1, 1,
+    pg_temp.uid(p_shooter), '9', 9, p_n, array['score', 'shooter_id']);
 end;
 $$;
 
@@ -443,19 +441,19 @@ create temp table da_a_call as select pg_temp.call_as(pg_temp.uid('A'), pg_temp.
 select is((select r from da_a_call), 'ok', '他の編集者が残るラウンドに矢と履歴を持つ利用者が、削除できる');
 
 select results_eq(
-  $$select id, distance_id, end_number, shooter_id, score_str, score_int, revision, disabled_at, shot_number, created_at
-    from public.shots where distance_id in (select pg_temp.uid(a || '.d') from unnest(array['R1','R2','R3']) a) order by id$$,
-  $$select id, distance_id, end_number,
+  $$select distance_id, end_number, shooter_id, score_str, score_int, revision, disabled_at, shot_number, created_at
+    from public.shots where distance_id in (select pg_temp.uid(a || '.d') from unnest(array['R1','R2','R3']) a) order by distance_id, end_number, shot_number$$,
+  $$select distance_id, end_number,
       case when shooter_id = pg_temp.uid('A') then pg_temp.deleted_user() else shooter_id end,
       score_str, score_int, revision, disabled_at, shot_number, created_at
-    from bef_shots where distance_id in (select pg_temp.uid(a || '.d') from unnest(array['R1','R2','R3']) a) order by id$$,
-  '利用者が射手の矢は残り、射手だけが削除済みの利用者になり、点数・射順・revisionなどは変わらない'
+    from bef_shots where distance_id in (select pg_temp.uid(a || '.d') from unnest(array['R1','R2','R3']) a) order by distance_id, end_number, shot_number$$,
+  '利用者が射手の矢は残り、射手だけが削除済みの利用者になり、点数・マスの番号・revisionなどは変わらない'
 );
 
 select results_eq(
-  $$select event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, shot_number, set_fields, created_at
+  $$select event_id, distance_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, shot_number, set_fields, created_at
     from public.shot_events where distance_id in (select pg_temp.uid(a || '.d') from unnest(array['R1','R2','R3']) a) order by event_id$$,
-  $$select event_id, distance_id, shot_id, type,
+  $$select event_id, distance_id, type,
       case when author_id = pg_temp.uid('A') then pg_temp.deleted_user() else author_id end,
       revision, end_number,
       case when shooter_id = pg_temp.uid('A') then pg_temp.deleted_user() else shooter_id end,
@@ -539,8 +537,8 @@ select ok(
 
 select is(
   (select (public.record_shots(jsonb_build_array(jsonb_build_object(
-    'shot_event_id', pg_temp.uid('new.se'), 'shot_id', pg_temp.uid('new.s'), 'distance_id', pg_temp.uid('R1.d'),
-    'end_number', 2, 'score_str', '10', 'score_int', 10)))) -> 0 ->> 'applied'),
+    'shot_event_id', pg_temp.uid('new.se'), 'distance_id', pg_temp.uid('R1.d'),
+    'end_number', 2, 'shot_number', 1, 'score_str', '10', 'score_int', 10)))) -> 0 ->> 'applied'),
   'true',
   '残る編集者は、匿名化されたラウンドに矢を記録できる'
 );
@@ -567,8 +565,8 @@ select set_config('request.jwt.claims', jsonb_build_object('sub', pg_temp.uid('A
 
 select throws_ok(
   $$select public.record_shots(jsonb_build_array(jsonb_build_object(
-    'shot_event_id', pg_temp.uid('old.se'), 'shot_id', pg_temp.uid('old.s'), 'distance_id', pg_temp.uid('R1.d'),
-    'end_number', 3, 'score_str', '9', 'score_int', 9)))$$,
+    'shot_event_id', pg_temp.uid('old.se'), 'distance_id', pg_temp.uid('R1.d'),
+    'end_number', 3, 'shot_number', 1, 'score_str', '9', 'score_int', 9)))$$,
   'PT403',
   null,
   '旧IDのJWTでの矢の記録は、参加の確認でPT403になる'

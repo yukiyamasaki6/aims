@@ -40,7 +40,6 @@ export function createTestRounds(
     offline?: boolean;
     savedFaces?: TargetFaceOption[] | null;
     clockStart?: number;
-    randomBytes?: (length: number) => Uint8Array;
     // falseのとき、記録のハブを起動しない(テストが起動する)。
     start?: boolean;
   } = {},
@@ -56,10 +55,7 @@ export function createTestRounds(
     fetchPresets: vi.fn(),
     savedTargetFaces: vi.fn(() => options.savedFaces ?? null),
   };
-  const { ids } = createFakeUniqueIds({
-    prefix: "event",
-    randomBytes: options.randomBytes,
-  });
+  const { ids } = createFakeUniqueIds({ prefix: "event" });
   const editing = createRoundEditing({ hub, ids });
   const refreshing = createRoundBaseRefreshing({
     hub,

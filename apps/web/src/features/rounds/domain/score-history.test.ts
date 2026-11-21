@@ -8,10 +8,11 @@ import {
 } from "@/features/rounds/domain/score-history";
 
 describe("取り消しの列", () => {
-  const e = (shotId: string, distanceId = "d-a"): HistoryEntry => ({
-    shotId,
+  // 1件はマス(距離、エンド、番号)1つへの1回の書き込み。
+  const e = (shotNumber: number, distanceId = "d-a"): HistoryEntry => ({
     distanceId,
     endNumber: 1,
+    shotNumber,
     before: { alive: false },
     after: { alive: true, scoreStr: "9", scoreInt: 9 },
   });
@@ -20,25 +21,22 @@ describe("取り消しの列", () => {
     // Given
 
     // When
-    const history = pushHistory(
-      { undoStack: [e("a")], redoStack: [e("b")] },
-      e("c"),
-    );
+    const history = pushHistory({ undoStack: [e(1)], redoStack: [e(2)] }, e(3));
 
     // Then
-    expect(history).toEqual({ undoStack: [e("a"), e("c")], redoStack: [] });
+    expect(history).toEqual({ undoStack: [e(1), e(3)], redoStack: [] });
   });
 
   it("戻ると、直近の1件をやり直しの列へ移す", () => {
     // Given
 
     // When
-    const undone = undoHistory({ undoStack: [e("a"), e("b")], redoStack: [] });
+    const undone = undoHistory({ undoStack: [e(1), e(2)], redoStack: [] });
 
     // Then
     expect(undone).toEqual({
-      entry: e("b"),
-      history: { undoStack: [e("a")], redoStack: [e("b")] },
+      entry: e(2),
+      history: { undoStack: [e(1)], redoStack: [e(2)] },
     });
   });
 
@@ -46,12 +44,12 @@ describe("取り消しの列", () => {
     // Given
 
     // When
-    const redone = redoHistory({ undoStack: [e("a")], redoStack: [e("b")] });
+    const redone = redoHistory({ undoStack: [e(1)], redoStack: [e(2)] });
 
     // Then
     expect(redone).toEqual({
-      entry: e("b"),
-      history: { undoStack: [e("a"), e("b")], redoStack: [] },
+      entry: e(2),
+      history: { undoStack: [e(1), e(2)], redoStack: [] },
     });
   });
 
@@ -59,12 +57,9 @@ describe("取り消しの列", () => {
     // Given
 
     // When
-    const result = discardDistanceEntries(
-      [e("a"), e("b", "d-b"), e("c")],
-      "d-a",
-    );
+    const result = discardDistanceEntries([e(1), e(2, "d-b"), e(3)], "d-a");
 
     // Then
-    expect(result).toEqual([e("b", "d-b")]);
+    expect(result).toEqual([e(2, "d-b")]);
   });
 });

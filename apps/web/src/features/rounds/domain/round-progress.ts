@@ -2,16 +2,17 @@ import { applyOperation } from "./round-op-apply";
 import { type RoundTables, selectRoundState } from "./round-tables";
 import type { ScoringTargetFace } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
-import { firstOpenEnd } from "./shot-pointer";
+import { cellOfShot, shotCellKey } from "./shot-cell";
+import { firstEmptyCell } from "./shot-pointer";
 import type { RoundStatus, SyncOperation } from "./sync-events";
 
-// 入力を完了にする前の確認の種類。noRecords: 記録が無い。unfilledCells: 未入力のマスがある。確認が要らない(全てのエンドが満杯である)ときはnull。
+// 入力を完了にする前の確認の種類。noRecords: 記録が無い。unfilledCells: 未入力のマスがある。確認が要らない(全てのマスが埋まっている)ときはnull。
 export function completionConfirmation(
   distances: Distance[],
   shots: Shot[],
 ): "noRecords" | "unfilledCells" | null {
   if (distances.length === 0) return "noRecords";
-  if (firstOpenEnd(distances, shots) !== null) return "unfilledCells";
+  if (firstEmptyCell(distances, shots) !== null) return "unfilledCells";
   return null;
 }
 
@@ -54,11 +55,15 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return [...keys].every((key) => deepEqual(left[key], right[key]));
 }
 
-// 矢のIDと点数だけを、IDの順に取り出す。射手などは、同じ点数の上書きの判定に使わない。
+// マスと点数だけを、マスの鍵の順に取り出す。射手などは、同じ点数の上書きの判定に使わない。
 function shotScores(shots: Shot[]) {
   return shots
-    .map((s) => ({ id: s.id, score_str: s.score_str, score_int: s.score_int }))
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    .map((s) => ({
+      cell: shotCellKey(cellOfShot(s)),
+      score_str: s.score_str,
+      score_int: s.score_int,
+    }))
+    .sort((a, b) => (a.cell < b.cell ? -1 : a.cell > b.cell ? 1 : 0));
 }
 
 // 完了のラウンドで、表示中の距離か矢が変わる編集の操作を積むとき、続けて入力中へ戻す必要があるか。

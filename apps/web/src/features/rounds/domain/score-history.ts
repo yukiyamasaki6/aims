@@ -1,13 +1,13 @@
-// 取り消しの列の1件が持つ、矢の状態。変えた属性(今は点数)と生死だけを持つ。
+// 取り消しの列の1件が持つ、マスの矢の状態。変えた属性(今は点数)と生死だけを持つ。
 export type ShotState =
   | { alive: false }
   | { alive: true; scoreStr: string; scoreInt: number };
 
-// 矢1本への1回の書き込み。戻るは`before`、進むは`after`で上書きする。
+// マス1つへの1回の書き込み。戻るは`before`、進むは`after`で上書きする。
 export type HistoryEntry = {
-  shotId: string;
   distanceId: string;
   endNumber: number;
+  shotNumber: number;
   before: ShotState;
   after: ShotState;
 };
@@ -55,7 +55,7 @@ export function redoHistory(history: HistoryStacks): {
   };
 }
 
-// 距離の構成の変更・削除で、その距離の矢への書き込みだけを捨てる。他の距離の書き込みは残す。
+// 距離の構成の変更・削除で、その距離のマスへの書き込みだけを捨てる。他の距離の書き込みは残す。
 export function discardDistanceEntries(
   entries: HistoryEntry[],
   distanceId: string,

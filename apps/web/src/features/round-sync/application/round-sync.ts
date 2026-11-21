@@ -26,8 +26,6 @@ export function createRoundSync(deps: {
   let residentGate: FlightGate = IDLE_GATE;
   // ラウンドごとの取り直しの扉と、完了後にやり直す予約(ラウンドのIDの集合)。
   const refetchGates = new Map<string, FlightGate>();
-  // 前回の見直しで、重ねられなかった確定済みの操作(overlay)が当たっていたラウンド。新しく当たったときだけ取り直す。
-  let lastOverlay = new Set<string>();
 
   // 常駐の前段。サインイン済みで、記録の利用者と同じときだけ通る。
   async function residentPass(): Promise<boolean> {
@@ -85,18 +83,11 @@ export function createRoundSync(deps: {
 
   // 窓口と記録の変化から、取り直しの要否を見直す。
   // 効かなかった結果(diverged)は通知ごとに(オフラインでなければ)取り直す。
-  // 重ねられなかった操作(overlay)は新しく当たったときだけ取り直す。どちらも当たるときは、取り直しは1回で足りる。
   function evaluate() {
-    const nextOverlay = new Set<string>();
     const online = !connectivity.isOffline();
     for (const need of refresh.refreshNeeds().rounds) {
-      if (need.overlay) nextOverlay.add(need.roundId);
-      const isNewOverlay = need.overlay && !lastOverlay.has(need.roundId);
-      if (online && (need.diverged || isNewOverlay)) {
-        void refetchRound(need.roundId);
-      }
+      if (online && need.diverged) void refetchRound(need.roundId);
     }
-    lastOverlay = nextOverlay;
   }
 
   return {

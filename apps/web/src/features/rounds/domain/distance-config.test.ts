@@ -277,13 +277,11 @@ describe("validateDistanceDraft", () => {
       arrows_per_end: 3,
     };
     const shot = (
-      id: string,
       endNumber: number,
-      scoreStr: string,
-      scoreInt: number,
-      shotNumber: number | null = null,
+      shotNumber: number,
+      scoreStr = "10",
+      scoreInt = 10,
     ): Shot => ({
-      id,
       distance_id: "distance-1",
       end_number: endNumber,
       score_str: scoreStr,
@@ -291,9 +289,9 @@ describe("validateDistanceDraft", () => {
       shot_number: shotNumber,
     });
     const shots = [
-      shot("s-1", 3, "10", 10),
-      shot("s-2", 3, "9", 9),
-      shot("s-3", 3, "8", 8),
+      shot(3, 1, "10", 10),
+      shot(3, 2, "9", 9),
+      shot(3, 3, "8", 8),
     ];
     const faces: ScoringTargetFace[] = [
       {
@@ -326,7 +324,7 @@ describe("validateDistanceDraft", () => {
       expect(results[2]).toEqual(unfit);
     });
 
-    it("射数/エンドは、1エンドの記録済みの矢の数と同じ値までは保存でき、それより小さいと収まらない", () => {
+    it("射数/エンドは、記録済みの最大のマスの番号と同じ値までは保存でき、それより小さいと収まらない", () => {
       // Given
       // When
       const results = [6, 3, 2].map((arrowsPerEnd) =>
@@ -338,15 +336,17 @@ describe("validateDistanceDraft", () => {
       expect(results[2]).toEqual(unfit);
     });
 
-    it("射順が新しい射数/エンドを超える矢があると、矢の数が収まっていても収まらない", () => {
+    it("記録済みのマスの番号が新しい射数/エンドを超えるときだけ収まらず、矢の数が少なくても同じである", () => {
       // Given
-      const numbered = [shot("s-1", 3, "10", 10, 3)];
+      const lastCell = [shot(3, 3, "10", 10)];
 
       // When
-      const result = change({ arrows_per_end: 2 }, numbered);
+      const result = change({ arrows_per_end: 2 }, lastCell);
+      const fits = change({ arrows_per_end: 3 }, lastCell);
 
       // Then
       expect(result).toEqual(unfit);
+      expect(fits.type).toBe("valid");
     });
 
     it("他の距離の矢は、収まるかの判定に入れない", () => {
@@ -377,7 +377,7 @@ describe("validateDistanceDraft", () => {
     it("総エンド数も射数/エンドも変わらない保存は、矢が収まらない状態でも判定しない", () => {
       // Given
       // 他の端末の操作で、総エンド数を超えるエンドの矢が届いた状態。
-      const beyond = [shot("s-9", 14, "10", 10)];
+      const beyond = [shot(14, 1, "10", 10)];
 
       // When
       const result = change({ distance: 50 }, beyond);

@@ -68,18 +68,15 @@ export function distanceNumber(
 }
 
 // 矢が、距離の構成(エンド数・射数/エンド・的)で有効か。サーバーの`shot_fits`と同じ判定にする。
-// 射順はnull(射順不明)か1〜射数/エンド。Mは的によらず有効。的のリングが手元に無い場合は、点数を判定せず有効とする(サーバーに委ねる)。
+// マスの番号は1〜射数/エンド。Mは的によらず有効。的のリングが手元に無い場合は、点数を判定せず有効とする(サーバーに委ねる)。
 export function shotFitsDistance(
   distance: Pick<Distance, "total_ends" | "arrows_per_end" | "target_face_id">,
-  shot: { endNumber: number; shotNumber: number | null },
+  shot: { endNumber: number; shotNumber: number },
   score: { scoreStr: string; scoreInt: number },
   targetFaces: ScoringTargetFace[],
 ): boolean {
   if (shot.endNumber < 1 || shot.endNumber > distance.total_ends) return false;
-  if (
-    shot.shotNumber !== null &&
-    (shot.shotNumber < 1 || shot.shotNumber > distance.arrows_per_end)
-  ) {
+  if (shot.shotNumber < 1 || shot.shotNumber > distance.arrows_per_end) {
     return false;
   }
   if (score.scoreStr === "M" && score.scoreInt === 0) return true;
@@ -91,7 +88,8 @@ export function shotFitsDistance(
   );
 }
 
-// 距離の生きている矢が全て、距離の構成(エンド数・射数/エンド・的)に収まるか。サーバーの`update_distance`が構成の変更を拒否する条件(`shot_fits`を満たさない矢がある、またはエンドの生きている矢の数が射数/エンドを超える)の否定である。
+// 距離の生きている矢が全て、距離の構成(エンド数・射数/エンド・的)に収まるか。サーバーの`update_distance`が構成の変更を拒否する条件(`shot_fits`を満たさない矢がある)の否定である。
+// 射数/エンドの上限は、マスの番号の範囲で守られる(マスごとに1本)。
 // 渡す矢は生きている矢だけとし、他の距離の矢は無視する。
 export function shotsFitDistance(
   distance: Pick<
@@ -104,55 +102,16 @@ export function shotsFitDistance(
   >[],
   targetFaces: ScoringTargetFace[],
 ): boolean {
-  const own = shots.filter((s) => s.distance_id === distance.id);
-  return own.every(
-    (shot) =>
+  return shots
+    .filter((s) => s.distance_id === distance.id)
+    .every((shot) =>
       shotFitsDistance(
         distance,
         { endNumber: shot.end_number, shotNumber: shot.shot_number },
         { scoreStr: shot.score_str, scoreInt: shot.score_int },
         targetFaces,
-      ) &&
-      liveCountOf(own, distance.id, shot.end_number) <= distance.arrows_per_end,
-  );
-}
-
-// エンドの生きている矢の数。渡す矢は生きている矢だけとする。
-function liveCountOf(
-  shots: Pick<Shot, "distance_id" | "end_number">[],
-  distanceId: string,
-  endNumber: number,
-): number {
-  return shots.filter(
-    (s) => s.distance_id === distanceId && s.end_number === endNumber,
-  ).length;
-}
-
-// エンドに、矢をもう1本足せるか。
-export function endHasRoom(
-  distance: Pick<Distance, "id" | "arrows_per_end">,
-  shots: Pick<Shot, "distance_id" | "end_number">[],
-  endNumber: number,
-): boolean {
-  return liveCountOf(shots, distance.id, endNumber) < distance.arrows_per_end;
-}
-
-// 点数の順位。Xを10より上、Mを最下位にする。
-function scoreRank(shot: Pick<Shot, "score_str" | "score_int">): number {
-  if (shot.score_str === "X") return shot.score_int + 0.5;
-  if (shot.score_str === "M") return -1;
-  return shot.score_int;
-}
-
-// 射順不明の矢を、点数の高い順(X、10、9、…、1、M)に並べる。同点はIDの昇順。新しい矢のIDは既にある矢より大きいため、足した矢は同点の後ろに入る。
-export function sortEndShots<
-  T extends Pick<Shot, "id" | "score_str" | "score_int">,
->(shots: T[]): T[] {
-  return [...shots].sort((a, b) => {
-    const rank = scoreRank(b) - scoreRank(a);
-    if (rank !== 0) return rank;
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-  });
+      ),
+    );
 }
 
 // 距離の的に実在する点数のリングだけを、点数ごとに1つに重複排除して返す。

@@ -1,23 +1,23 @@
 import { useState } from "react";
 import type { Distance, Shot } from "../domain/scorecard-types";
 import {
-  firstOpenEnd,
+  firstEmptyCell,
   isSamePointer,
   type Pointer,
   reconcilePointer,
 } from "../domain/shot-pointer";
 
-// 指している矢。完了のラウンドは、新しい矢を指さない。
-// 指している矢が他端末で消えた、エンドが満杯になった、距離が無効になったときは、いまの状態に合わせる。
+// 指しているマス。開いたときは、入力中のラウンドなら最初の空のマス、完了のラウンドなら何も指さない。
+// 他端末の矢の変化では動かさず、距離が無い、またはマスが距離の範囲の外になったときだけ、何も指さない。
 export function useReconciledPointer(
   inProgress: boolean,
   distances: Distance[],
   shots: Shot[],
 ) {
   const [storedPointer, setPointer] = useState<Pointer>(() =>
-    inProgress ? firstOpenEnd(distances, shots) : null,
+    inProgress ? firstEmptyCell(distances, shots) : null,
   );
-  const pointer = reconcilePointer(distances, shots, storedPointer);
+  const pointer = reconcilePointer(distances, storedPointer);
   if (!isSamePointer(pointer, storedPointer)) setPointer(pointer);
   return [pointer, setPointer] as const;
 }

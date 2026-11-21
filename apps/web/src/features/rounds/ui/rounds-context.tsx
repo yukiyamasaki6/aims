@@ -29,8 +29,6 @@ type RoundProcedures = {
   whenOnline: WhenOnline;
   historyViewMemory: HistoryViewMemory;
   historyPagesMemory: HistoryPagesMemory;
-  // そのエンドの既にある矢のIDより後ろに並ぶ、時刻順の矢のIDの払い出し。
-  newShotId: (endShotIds: readonly string[]) => string;
 };
 
 const RoundWindowContext = createContext<RoundWindow | null>(null);

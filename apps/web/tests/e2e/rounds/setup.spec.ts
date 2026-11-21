@@ -174,9 +174,27 @@ test("スコアが記録済みの距離は、記録済みのスコアに収ま�
   // エンド3に3本を記録した距離を開き、総エンド数を収まらない値にして保存すると、理由が出て保存されないことを確かめる。
   await openRound(page, {
     shots: [
-      { distanceIndex: 0, endNumber: 3, scoreStr: "10", scoreInt: 10 },
-      { distanceIndex: 0, endNumber: 3, scoreStr: "9", scoreInt: 9 },
-      { distanceIndex: 0, endNumber: 3, scoreStr: "8", scoreInt: 8 },
+      {
+        distanceIndex: 0,
+        endNumber: 3,
+        shotNumber: 1,
+        scoreStr: "10",
+        scoreInt: 10,
+      },
+      {
+        distanceIndex: 0,
+        endNumber: 3,
+        shotNumber: 2,
+        scoreStr: "9",
+        scoreInt: 9,
+      },
+      {
+        distanceIndex: 0,
+        endNumber: 3,
+        shotNumber: 3,
+        scoreStr: "8",
+        scoreInt: 8,
+      },
     ],
   });
   await page.getByTestId("distance-config-toggle-1").click();

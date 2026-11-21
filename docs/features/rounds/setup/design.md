@@ -31,14 +31,14 @@
 | 種別 | フィールド以外を選び、Unmarkedの距離が残っている |
 | 距離 | Markedで未入力。値を入れたときは、1以上の整数で上限(100)以下でない(Unmarkedも同じ) |
 | 射数/エンド・エンド数 | 1以上の整数で、それぞれの上限(射数/エンド12、エンド数60)以下でない。範囲外は、1以上の整数でないとき「1以上の整数を入力してください。」、上限を超えるとき項目ごとの上限値を示す文言 |
-| 総エンド数・射数/エンドが記録済みの矢に収まらない | 総エンド数か射数/エンドが開いたときから変わり、距離の生きている矢のどれかが新しい構成(開いたときの的)に収まらない(エンドが総エンド数を超える、エンドの矢の数か射順が射数/エンドを超える。サーバーの`shot_fits`と同じ判定、`shotsFitDistance`)。射数/エンド・エンド数の行の下に「記録済みのスコアが失われるため、変更できません。先にスコアを削除してください。」を`role="alert"`で表示し、射数/エンドとエンド数の両方から`aria-describedby`で参照する。総エンド数・射数/エンドが変わらない保存では判定しない |
+| 総エンド数・射数/エンドが記録済みの矢に収まらない | 総エンド数か射数/エンドが開いたときから変わり、距離の生きている矢のどれかが新しい構成(開いたときの的)に収まらない(エンドが総エンド数を超える、マスの番号が射数/エンドを超える、的に無い点数。サーバーの`shot_fits`と同じ判定、`shotsFitDistance`)。射数/エンド・エンド数の行の下に「記録済みのスコアが失われるため、変更できません。先にスコアを削除してください。」を`role="alert"`で表示し、射数/エンドとエンド数の両方から`aria-describedby`で参照する。総エンド数・射数/エンドが変わらない保存では判定しない |
 
 ## 構成とデータの流れ
 
 - `page.tsx`: 静的な枠。ラウンド・距離・的の取得は`rounds/detail`が扱う。
 - `features/rounds/ui/use-scorecard.ts`: ラウンド・距離・矢は、操作の列から導いた状態を使う。
 - `features/rounds/ui/use-score-history.ts`: 取り消し/やり直しの履歴を状態に持つ。
-- `features/rounds/ui/use-distance-editing.ts`: 距離の編集の開閉(編集を開く距離は1つだけで、同じ距離なら閉じ、違う距離なら替える。距離を追加すると、追加した距離の編集を開く)と、距離の追加、保存。構成が変わる保存で、その距離の履歴を捨てる。削除での履歴の破棄は`scorecard-client.tsx`が`discardDistance`を直接呼ぶ。削除は追記の直後に状態から距離が無くなり、距離のカードの消滅が編集のダイアログを同じ描画で閉じる。削除した距離を指していた矢は、指す矢の合わせ直しが外す。距離のIDとイベントIDは手続きの入れ物の`ids.next`から受ける。
+- `features/rounds/ui/use-distance-editing.ts`: 距離の編集の開閉(編集を開く距離は1つだけで、同じ距離なら閉じ、違う距離なら替える。距離を追加すると、追加した距離の編集を開く)と、距離の追加、保存。構成が変わる保存で、その距離の履歴を捨てる。削除での履歴の破棄は`scorecard-client.tsx`が`discardDistance`を直接呼ぶ。削除は追記の直後に状態から距離が無くなり、距離のカードの消滅が編集のダイアログを同じ描画で閉じる。削除した距離のマスを指していたときは、指すマスの合わせ直しが外す。距離のIDとイベントIDは手続きの入れ物の`ids.next`から受ける。
 - `features/rounds/ui/round-config-panel.tsx`: ラウンド概要(実施日・種別・弓種)と編集ダイアログ。`features/rounds/domain/round-config.ts`の`validateRoundConfig`で実施日・種別を検証し、イベントIDは手続きの入れ物の`ids.next`から受ける。種別・弓種は、ボタンの組でなく共通の`Select`(`components/ui/select.tsx`)で選ぶ。
 - `features/rounds/ui/round-name-editor.tsx`: ヘッダーのラウンド名(表示と、その場の編集)。名前の表示用のボタン、編集用の入力欄(共通の`Input`。`maxLength`に`NAME_MAX_LENGTH`を渡す)を持つ。2つは同じ箱(高さ、内側の余白、枠線(表示は透明)、字体)を共有し、幅は、同じ文字(入力値、空のときはプレースホルダー)を測る見えない要素の幅から決める(`field-sizing`に頼らず、ブラウザによらず同じ幅にする)。編集を始めたときの名前を起点に持ち、`buildRoundUpdatedOperation`で起点との差から操作を作って追記する。変えていなければ操作を積まない。イベントIDは手続きの入れ物の`ids.next`から受ける。`scorecard-client.tsx`が`RoundDetailFrame`のタイトルとして渡す。
 - `features/rounds/ui/distance-edit-fields.tsx`(ダイアログと操作)、`distance-fields.tsx`(欄の描画。Marked/Unmarkedは共通の`Select`で、真偽値との写しはここの1か所に置く)、`use-distance-draft.ts`(下書き、検証、保存、削除): 距離編集と削除確認。`features/rounds/domain/distance-config.ts`の`validateDistanceDraft`で検証し、操作は`distance-operations.ts`で組み立て、イベントIDは手続きの入れ物の`ids.next`から受ける。

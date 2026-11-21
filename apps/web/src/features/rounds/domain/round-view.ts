@@ -1,9 +1,5 @@
 import type { RecordBase } from "./round-base";
-import {
-  type AppliedOperation,
-  applyOperations,
-  deriveTables,
-} from "./round-op-apply";
+import { type AppliedOperation, applyOperations } from "./round-op-apply";
 import {
   type RoundState,
   type RoundTables,
@@ -48,12 +44,7 @@ export function roundScreenState(
 ): {
   state: RoundState;
   tables: RoundTables;
-  needsRefetch: boolean;
 } {
-  const derived = deriveTables(origin, [...operations], faces);
-  return {
-    state: selectRoundState(derived.tables),
-    tables: derived.tables,
-    needsRefetch: derived.refetch,
-  };
+  const tables = applyOperations(origin, [...operations], faces);
+  return { state: selectRoundState(tables), tables };
 }

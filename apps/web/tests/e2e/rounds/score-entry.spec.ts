@@ -6,8 +6,9 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
-import { getDistanceIds } from "../helpers/other-device";
+import { updateRound } from "../helpers/other-device";
 import { createRound, signInAsTestUser } from "../helpers/rounds";
+import { cell, expectCells, expectPointedCell } from "../helpers/score-cells";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -16,7 +17,7 @@ const CLEAR_SHOTS_RPC = "**/rest/v1/rpc/clear_shots";
 
 type RoundInput = Omit<Parameters<typeof createRound>[0], "email" | "password">;
 
-// 既定は、1距離・12エンド・3射のラウンド。満杯でないエンドがあれば、最初のそのエンドの新しい矢を指してテンキーを展開した状態で開く。
+// 既定は、1距離・12エンド・3射のラウンド。空のマスがあれば、最初の空のマスを指してテンキーを展開した状態で開く。
 async function openRound(
   page: Page,
   overrides: Partial<RoundInput> = {},
@@ -38,35 +39,6 @@ async function openRound(
   return roundId;
 }
 
-// エンドの記録済みの玉の、表示の順のi本目(1始まり)。
-function ball(page: Page, distance: number, end: number, index: number) {
-  return page.getByTestId(`shot-ball-${distance}-${end}-${index}`);
-}
-
-function endRow(page: Page, distance: number, end: number) {
-  return page.getByTestId(`end-row-${distance}-${end}`);
-}
-
-// エンドの記録済みの玉の点数を、表示の順に確かめる。
-async function expectBalls(
-  page: Page,
-  distance: number,
-  end: number,
-  scores: string[],
-) {
-  await expect(
-    endRow(page, distance, end).locator("[data-shot-id]"),
-  ).toHaveText(scores);
-}
-
-// 仮の矢が、指定したエンドに1つだけ表示されていることを確かめる。
-async function expectProvisionalIn(page: Page, distance: number, end: number) {
-  await expect(page.getByTestId("provisional-shot")).toHaveCount(1);
-  await expect(
-    endRow(page, distance, end).getByTestId("provisional-shot"),
-  ).toBeVisible();
-}
-
 async function reloadAfter(page: Page, response: Promise<unknown>) {
   await response;
   await page.reload();
@@ -80,29 +52,15 @@ async function recordScore(page: Page, key: string) {
   await sent;
 }
 
-test("点数を書くと記録され、点数の高い順に並び、再読み込みしても同じ並びと小計で表示される", async ({
+test("点数を順不同に書くと、書いたマスに記録され、点数の高い順に並び替わらず、再読み込みしても同じマスと小計で表示される", async ({
   page,
 }) => {
-  // 新しい矢にXを書き、玉と仮の矢を確かめる。
-  const roundId = await openRound(page, {
+  // 6エンド×6射のラウンドで、点数を順不同に書く。
+  await openRound(page, {
     distances: [{ distance: 18, totalEnds: 6, arrowsPerEnd: 6 }],
   });
-  const { supabase } = await signInAsTestUser(
-    getSharedEmail(),
-    SHARED_PASSWORD,
-  );
-  let distanceId: string;
-  try {
-    [distanceId] = await getDistanceIds(supabase, roundId);
-  } finally {
-    await supabase.auth.stopAutoRefresh();
-  }
-  await page.getByTestId("score-button-X").click();
-  await expect(ball(page, 1, 1, 1)).toHaveText("X");
-  await expectProvisionalIn(page, 1, 1);
-
-  // 残りの5本を順不同に書き、点数の高い順に並ぶことを確かめる。
-  for (const key of ["7", "10", "9", "M"]) {
+  await expectPointedCell(page, 1, 1, 1);
+  for (const key of ["7", "10", "9", "M", "8"]) {
     await page.getByTestId(`score-button-${key}`).click();
   }
   const sent = page.waitForResponse(
@@ -113,56 +71,180 @@ test("点数を書くと記録され、点数の高い順に並び、再読み�
         .request()
         .postDataJSON()
         .p_shots.some(
-          (shot: {
-            distance_id: string;
-            end_number: number;
-            score_str: string;
-            score_int: number;
-          }) =>
-            shot.distance_id === distanceId &&
-            shot.end_number === 1 &&
-            shot.score_str === "8" &&
-            shot.score_int === 8,
+          (shot: { shot_number: number }) => shot.shot_number === 6,
         ),
   );
-  await page.getByTestId("score-button-8").click();
-  const expected = ["X", "10", "9", "8", "7", "M"];
-  await expectBalls(page, 1, 1, expected);
+  await page.getByTestId("score-button-X").click();
+  const expected = ["7", "10", "9", "M", "8", "X"];
+  await expectCells(page, 1, 1, expected);
   await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("44");
 
-  // 再読み込みして、同じ並びと小計が残ることを確かめる。
+  // 再読み込みして、同じマスと小計が残ることを確かめる。
   const response = await sent;
-  const shotId = await ball(page, 1, 1, 4).getAttribute("data-shot-id");
   expect(response.request().postDataJSON().p_shots).toContainEqual(
     expect.objectContaining({
-      shot_id: shotId,
-      distance_id: distanceId,
       end_number: 1,
-      score_str: "8",
-      score_int: 8,
+      shot_number: 6,
+      score_str: "X",
+      score_int: 10,
     }),
   );
+  expect(response.request().postData()).not.toContain("shot_id");
   await reloadAfter(page, sent);
-  await expectBalls(page, 1, 1, expected);
+  await expectCells(page, 1, 1, expected);
   await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("44");
 });
 
-test("点数を書いた直後に一つ戻ると、記録した矢が消え、再読み込みしても消えたままになる", async ({
+test("飛ばして空けたマスを押して点数を書くと、そのマスに記録され、他のマスは動かず、再読み込みしても同じである", async ({
+  page,
+}) => {
+  // 先頭のマスに書いた後、2番目を飛ばして3番目のマスへ書く。
+  await openRound(page);
+  await recordScore(page, "10");
+  await cell(page, 1, 1, 3).click();
+  await recordScore(page, "8");
+  await expectCells(page, 1, 1, ["10", null, "8"]);
+
+  // 空けたマスを押して書く。
+  await cell(page, 1, 1, 2).click();
+  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
+  await page.getByTestId("score-button-9").click();
+  await expectCells(page, 1, 1, ["10", "9", "8"]);
+
+  // 再読み込みして、同じマスに表示されることを確かめる。
+  await reloadAfter(page, sent);
+  await expectCells(page, 1, 1, ["10", "9", "8"]);
+});
+
+test("記録済みのマスを押して別の点数を書くと、そのマスの点数だけが変わり、再読み込みしても直した点数で表示される", async ({
+  page,
+}) => {
+  // 2つのマスに記録する。
+  await openRound(page);
+  await recordScore(page, "10");
+  await recordScore(page, "9");
+
+  // 先頭のマスを押して直す。
+  await cell(page, 1, 1, 1).click();
+  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
+  await page.getByTestId("score-button-7").click();
+  await expectCells(page, 1, 1, ["7", "9", null]);
+  await expectPointedCell(page, 1, 1, 1);
+
+  // 再読み込みして、直した点数が残ることを確かめる。
+  await reloadAfter(page, sent);
+  await expectCells(page, 1, 1, ["7", "9", null]);
+});
+
+test("記録済みのマスをクリアすると、そのマスだけが空になり、再読み込みしても空のままになる", async ({
+  page,
+}) => {
+  // 2つのマスに記録する。
+  await openRound(page);
+  await recordScore(page, "10");
+  await recordScore(page, "9");
+
+  // 先頭のマスを押してクリアする。
+  await cell(page, 1, 1, 1).click();
+  const sent = page.waitForResponse(CLEAR_SHOTS_RPC);
+  await page.getByTestId("score-button-clear").click();
+  await expectCells(page, 1, 1, [null, "9", null]);
+
+  // 再読み込みして、そのマスだけが空のままであることを確かめる。
+  await reloadAfter(page, sent);
+  await expectCells(page, 1, 1, [null, "9", null]);
+});
+
+test("点数を書いた直後に一つ戻ると、そのマスが空に戻り、再読み込みしても空のままになる", async ({
   page,
 }) => {
   // 点数を書いて記録する。
   // 取り消しの列は画面の状態にだけ持つため、記録は画面の操作で作る。
   await openRound(page);
   await recordScore(page, "X");
-  await expectBalls(page, 1, 1, ["X"]);
+  await expectCells(page, 1, 1, ["X", null, null]);
 
-  // 一つ戻って、記録した矢を消す。
+  // 一つ戻って、そのマスを空に戻す。
   const sent = page.waitForResponse(CLEAR_SHOTS_RPC);
   await page.getByTestId("score-button-undo").click();
-  await expectBalls(page, 1, 1, []);
-  await expectProvisionalIn(page, 1, 1);
+  await expectCells(page, 1, 1, [null, null, null]);
+  await expectPointedCell(page, 1, 1, 1);
 
-  // 再読み込みして、消えたままであることを確かめる。
+  // 再読み込みして、空のままであることを確かめる。
   await reloadAfter(page, sent);
-  await expectBalls(page, 1, 1, []);
+  await expectCells(page, 1, 1, [null, null, null]);
+});
+
+test("一つ戻った後に一つ進むと、同じマスに同じ点数が戻り、再読み込みしても表示される", async ({
+  page,
+}) => {
+  // 点数を書いて一つ戻す。
+  await openRound(page);
+  await recordScore(page, "X");
+  const cleared = page.waitForResponse(CLEAR_SHOTS_RPC);
+  await page.getByTestId("score-button-undo").click();
+  await cleared;
+  await expectCells(page, 1, 1, [null, null, null]);
+
+  // 一つ進めて、同じ点数がそのマスに戻る。
+  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
+  await page.getByTestId("score-button-redo").click();
+  await expectCells(page, 1, 1, ["X", null, null]);
+
+  // 再読み込みして、同じ点数が残ることを確かめる。
+  await reloadAfter(page, sent);
+  await expectCells(page, 1, 1, ["X", null, null]);
+});
+
+test("途中まで記録した入力中のラウンドを開くと、最初の空のマスが指されてテンキーが展開される", async ({
+  page,
+}) => {
+  await openRound(page, {
+    shots: [
+      {
+        distanceIndex: 0,
+        endNumber: 1,
+        shotNumber: 1,
+        scoreStr: "10",
+        scoreInt: 10,
+      },
+      {
+        distanceIndex: 0,
+        endNumber: 1,
+        shotNumber: 3,
+        scoreStr: "8",
+        scoreInt: 8,
+      },
+    ],
+  });
+
+  await expectPointedCell(page, 1, 1, 2);
+  await expect(page.getByTestId("score-button-X")).toBeVisible();
+});
+
+test("完了のラウンドを開くと、どのマスも指されず、テンキーは展開されない", async ({
+  page,
+}) => {
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "完了のラウンド",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+  });
+  const { supabase } = await signInAsTestUser(
+    getSharedEmail(),
+    SHARED_PASSWORD,
+  );
+  try {
+    await updateRound(supabase, roundId, { status: "completed" });
+  } finally {
+    await supabase.auth.stopAutoRefresh();
+  }
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  await expect(cell(page, 1, 1, 1)).toBeVisible();
+  await expect(page.locator('[data-ring="cell"]')).toHaveCount(0);
+  await expect(page.getByTestId("score-button-X")).toBeHidden();
 });

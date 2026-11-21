@@ -202,15 +202,15 @@ async function sendDistanceOperation(
   }
 }
 
-// 矢の記録の要素。射手と射順は送らない(サーバーが射手を埋め、射順は付けない)。
+// 矢の記録の要素。矢はマス(エンド、射順)で指す。射手は送らない(サーバーが埋める)。
 function recordedShotToJson(
   operation: Extract<SyncOperation, { type: "shot.recorded" }>,
 ): Json {
   return {
     shot_event_id: operation.eventId,
-    shot_id: operation.shotId,
     distance_id: operation.distanceId,
     end_number: operation.endNumber,
+    shot_number: operation.shotNumber,
     score_str: operation.scoreStr,
     score_int: operation.scoreInt,
   };
@@ -234,8 +234,9 @@ async function sendShots(
     await database.rpc("clear_shots", {
       p_shots: operations.map((operation) => ({
         shot_event_id: operation.eventId,
-        shot_id: operation.shotId,
         distance_id: operation.distanceId,
+        end_number: operation.endNumber,
+        shot_number: operation.shotNumber,
       })),
     }),
     (data) => many(data, operations.length),

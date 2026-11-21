@@ -27,7 +27,7 @@ describe("KeypadButtons", () => {
       <KeypadButtons
         keypadDistance={distance}
         targetFaces={[]}
-        pointer={null}
+        clearable={false}
         history={history}
         input={input}
       />,
@@ -38,5 +38,25 @@ describe("KeypadButtons", () => {
     expect(screen.getByTestId("score-button-undo")).toBeDisabled();
     expect(screen.getByTestId("score-button-redo")).toBeDisabled();
     expect(screen.getByTestId("score-button-clear")).toBeDisabled();
+  });
+
+  it("指しているマスに矢があるときだけ、クリアのボタンを押せる", () => {
+    // Given
+    const distance = { id: "d1", target_face_id: "f1" } as Distance;
+
+    // When
+    render(
+      <KeypadButtons
+        keypadDistance={distance}
+        targetFaces={[]}
+        clearable
+        history={history}
+        input={input}
+      />,
+      { wrapper: IntlTestProvider },
+    );
+
+    // Then
+    expect(screen.getByTestId("score-button-clear")).toBeEnabled();
   });
 });
