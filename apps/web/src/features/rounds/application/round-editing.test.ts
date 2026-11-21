@@ -45,12 +45,20 @@ function tables(status: "in_progress" | "completed"): RoundTables {
       bowType: "recurve",
     },
     distances: [distance],
-    shots: [],
-  } as never);
+    shots: [
+      {
+        distance_id: "d-1",
+        end_number: 1,
+        shot_number: 1,
+        score_str: "7",
+        score_int: 7,
+      },
+    ],
+  });
 }
 
-// 完了のラウンドで、空きのあるエンドへ新しい矢を記録する(表示が変わる)。
-const displayChanging = shotRecorded({ shotId: "s-2" });
+// 完了のラウンドで、空のマスへ記録する(表示が変わる)。
+const displayChanging = shotRecorded({ shotNumber: 2 });
 
 function setup(options: { state?: "completed" | "in_progress" } = {}) {
   const appended: { streamId: string; operation: SyncOperation }[] = [];
@@ -106,9 +114,14 @@ describe("createRoundEditing", () => {
       roundUpdated({ changes: { name: "新" } }),
     ],
     [
-      "完了のラウンドの変化の無い記録",
+      "完了のラウンドの、記録済みのマスへの同じ点数の記録",
       "completed",
-      shotRecorded({ shotId: "s-9", scoreStr: "7", scoreInt: 7 }),
+      shotRecorded({ shotNumber: 1, scoreStr: "7", scoreInt: 7 }),
+    ],
+    [
+      "完了のラウンドの、削除済みの距離への記録",
+      "completed",
+      shotRecorded({ distanceId: "d-gone", shotNumber: 2 }),
     ],
   ])(
     "再開が要らないとき(%s)は、元の操作だけを追記し、ids.next()を消費しない",

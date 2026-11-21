@@ -92,6 +92,46 @@ export function updateRound(
   });
 }
 
+type ShotCellInput = {
+  distanceId: string;
+  endNumber: number;
+  shotNumber: number;
+};
+
+// 他端末が、マスへ点数を記録する。
+export function recordShotAs(
+  supabase: SupabaseClient,
+  cell: ShotCellInput,
+  score: { scoreStr: string; scoreInt: number },
+) {
+  return call(supabase, "record_shots", {
+    p_shots: [
+      {
+        shot_event_id: randomUUID(),
+        distance_id: cell.distanceId,
+        end_number: cell.endNumber,
+        shot_number: cell.shotNumber,
+        score_str: score.scoreStr,
+        score_int: score.scoreInt,
+      },
+    ],
+  });
+}
+
+// 他端末が、マスの矢を消す。
+export function clearShotAs(supabase: SupabaseClient, cell: ShotCellInput) {
+  return call(supabase, "clear_shots", {
+    p_shots: [
+      {
+        shot_event_id: randomUUID(),
+        distance_id: cell.distanceId,
+        end_number: cell.endNumber,
+        shot_number: cell.shotNumber,
+      },
+    ],
+  });
+}
+
 export function disableRound(supabase: SupabaseClient, roundId: string) {
   return call(supabase, "disable_round", {
     p_round_event_id: randomUUID(),

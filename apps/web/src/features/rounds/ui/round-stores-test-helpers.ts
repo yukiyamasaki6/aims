@@ -120,7 +120,7 @@ export function createFakeRoundWindow() {
 
 // 詳細の画面のテストが使う、偽の手続きの入れ物。`RoundProceduresProvider`へ渡す。
 export function createFakeRoundProcedures() {
-  const issued = { ids: 0, shots: 0 };
+  const issued = { ids: 0 };
   const { whenOnline, ...waiting } = createFakeWaiting();
   return {
     leaving: {
@@ -149,16 +149,10 @@ export function createFakeRoundProcedures() {
     },
     ids: {
       next: vi.fn(() => `id-${++issued.ids}`),
-      // 画面は乱数を使わない。呼び手の無い既定の関数が関数カバレッジの閾値を割るため、関数ではなく戻り値で指定する。
-      randomBytes: vi.fn().mockReturnValue(new Uint8Array(10)),
     },
     whenOnline,
     historyViewMemory: createFakeHistoryViewMemory().memory,
     historyPagesMemory: createHistoryPagesMemory(),
-    newShotId: vi.fn(
-      () =>
-        `00000000-0000-7000-8000-${String(++issued.shots).padStart(12, "0")}`,
-    ),
     ...waiting,
   } satisfies ComponentProps<typeof RoundProceduresProvider>["procedures"];
 }

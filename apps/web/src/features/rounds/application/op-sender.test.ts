@@ -14,17 +14,22 @@ import {
 
 const STREAM = roundStreamId("round-1");
 
-// 送信の規則(順序、衝突、リトライ、保留)が検証対象で、矢の点数は問わないため、矢は識別子と位置だけで表す。
-// 同じエンドの矢は互いに衝突し、別のエンドの矢は衝突しない。
-const shot = (id: string, end = 1, distance = "d-1") =>
+// 送信の規則(順序、衝突、リトライ、保留)が検証対象で、矢の点数は問わないため、矢は識別子とマスだけで表す。
+// 同じマスの矢は互いに衝突し、同じエンドの別のマスや別の距離の矢は衝突しない。
+const shot = (id: string, cell = 1, distance = "d-1") =>
   shotRecorded({
     eventId: id,
-    shotId: id,
     distanceId: distance,
-    endNumber: end,
+    endNumber: 1,
+    shotNumber: cell,
   });
-const clear = (id: string, shotId: string, end = 1, distance = "d-1") =>
-  shotCleared({ eventId: id, shotId, distanceId: distance, endNumber: end });
+const clear = (id: string, cell = 1, distance = "d-1") =>
+  shotCleared({
+    eventId: id,
+    distanceId: distance,
+    endNumber: 1,
+    shotNumber: cell,
+  });
 
 const rpcFailure = (code?: string): SendOutcome => ({
   ok: false,
@@ -111,11 +116,11 @@ describe("送信の順序", () => {
     expect(sentIds(rig)).toEqual([["a"], ["b", "c", "d"]]);
   });
 
-  it("同じ矢の記録と取り消しは、前の確定を待って順に送る", async () => {
+  it("同じマスの記録と取り消しは、前の確定を待って順に送る", async () => {
     // Given
     const rig = await started();
     await rig.hub.append(STREAM, shot("rec"));
-    await rig.hub.append(STREAM, clear("clr", "rec"));
+    await rig.hub.append(STREAM, clear("clr", 1));
     await flush();
     const beforeAck = sentIds(rig);
 
@@ -217,7 +222,7 @@ describe("送る候補と衝突の判定", () => {
     expect(sentIds(rig)).toEqual([["shot"]]);
   });
 
-  it("同じ矢の記録と取り消しは衝突として、記録の送信が終わるまで取り消しを送らない", async () => {
+  it("同じマスの記録と取り消しは衝突として、記録の送信が終わるまで取り消しを送らない", async () => {
     // Given
     const rig = await started();
     await rig.hub.append(STREAM, shotRecorded({ eventId: "rec" }));
@@ -323,14 +328,14 @@ describe("失敗の扱い", () => {
     const rig = await started();
     await rig.hub.append(STREAM, shot("a", 1));
     await flush();
-    await rig.hub.append(STREAM, shot("same-end", 1));
-    await rig.hub.append(STREAM, shot("other-end", 2));
+    await rig.hub.append(STREAM, shot("same-cell", 1));
+    await rig.hub.append(STREAM, shot("other-cell", 2));
 
     // When
     await respond(rig, 0, rpcFailure());
 
     // Then
-    expect(sentIds(rig)).toEqual([["a"], ["other-end"]]);
+    expect(sentIds(rig)).toEqual([["a"], ["other-cell"]]);
   });
 
   it("待機時間が経つと同じ要求を再送し、確定すると止めていた衝突する後続を送る", async () => {

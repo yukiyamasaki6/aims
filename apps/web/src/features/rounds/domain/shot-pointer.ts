@@ -1,91 +1,87 @@
-import { endHasRoom } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
+import { isSameCell, type ShotCell, shotAt } from "./shot-cell";
 
-// 指している矢。まだ記録していない新しい矢(エンドで決まる)か、記録済みの矢。何も指していないときはnull。
-export type Pointer =
-  | { kind: "new"; distanceId: string; endNumber: number }
-  | { kind: "shot"; shotId: string; distanceId: string; endNumber: number }
-  | null;
-
-export function newShotPointer(distanceId: string, endNumber: number): Pointer {
-  return { kind: "new", distanceId, endNumber };
-}
-
-export function shotPointer(shot: Shot): Pointer {
-  return {
-    kind: "shot",
-    shotId: shot.id,
-    distanceId: shot.distance_id,
-    endNumber: shot.end_number,
-  };
-}
+// 指しているマス。何も指していないときはnull。
+export type Pointer = ShotCell | null;
 
 export function isSamePointer(a: Pointer, b: Pointer): boolean {
   if (a === null || b === null) return a === b;
-  if (a.kind === "shot" && b.kind === "shot") return a.shotId === b.shotId;
-  return (
-    a.kind === b.kind &&
-    a.distanceId === b.distanceId &&
-    a.endNumber === b.endNumber
-  );
+  return isSameCell(a, b);
 }
 
-// 距離の中で、`fromEnd`以降の、満杯でない最初のエンドの新しい矢。無ければnull。
-function openEndFrom(
+// エンドの`fromNumber`以降の、空の最初のマス。
+function emptyCellInEnd(
+  distance: Distance,
+  shots: Shot[],
+  endNumber: number,
+  fromNumber: number,
+): ShotCell | null {
+  for (let n = fromNumber; n <= distance.arrows_per_end; n++) {
+    const cell = { distanceId: distance.id, endNumber, shotNumber: n };
+    if (!shotAt(shots, cell)) return cell;
+  }
+  return null;
+}
+
+// 距離の中で、`fromEnd`のエンド以降の、空の最初のマス(エンドの昇順、マスの番号順)。無ければnull。
+function emptyCellFrom(
   distance: Distance,
   shots: Shot[],
   fromEnd: number,
-): Pointer {
+): ShotCell | null {
   for (let end = fromEnd; end <= distance.total_ends; end++) {
-    if (endHasRoom(distance, shots, end)) {
-      return newShotPointer(distance.id, end);
-    }
+    const cell = emptyCellInEnd(distance, shots, end, 1);
+    if (cell) return cell;
   }
   return null;
 }
 
-// 満杯でない最初のエンド(距離の並び順、エンドの昇順)の新しい矢。全て満杯ならnull。
+// 空の最初のマス(距離の並び順、エンドの昇順、マスの番号順)。全てのマスが埋まっていればnull。
 // `distances`は並び順、`shots`は生きている矢とする。
-export function firstOpenEnd(distances: Distance[], shots: Shot[]): Pointer {
+export function firstEmptyCell(distances: Distance[], shots: Shot[]): Pointer {
   for (const distance of distances) {
-    const pointer = openEndFrom(distance, shots, 1);
-    if (pointer) return pointer;
+    const cell = emptyCellFrom(distance, shots, 1);
+    if (cell) return cell;
   }
   return null;
 }
 
-// 点数を書いた後に指す矢。記録済みの矢はそのまま指す。
-// 新しい矢は、そのエンドに空きがあれば同じエンド、満杯なら同じ距離で後ろの空きのあるエンド、無ければnull(距離をまたがない)。
-// `shots`は書いた矢を含む。
+// 点数を書いた後に指すマス。記録済みのマスを直したときは、そのマスのまま。
+// 空のマスへ書いたときは、同じエンドの後ろの最初の空のマス、無ければ同じ距離の後ろのエンドの最初の空のマス、無ければnull(距離をまたがない)。
+// 書いたマスより前の空のマスへは戻らない。`shots`は書いた矢を含む。
 export function pointerAfterScore(
   distances: Distance[],
   shots: Shot[],
-  pointer: Pointer,
+  written: ShotCell,
+  wasEmpty: boolean,
 ): Pointer {
-  if (pointer?.kind !== "new") return pointer;
-  const distance = distances.find((d) => d.id === pointer.distanceId);
+  if (!wasEmpty) return written;
+  const distance = distances.find((d) => d.id === written.distanceId);
   if (!distance) return null;
-  return openEndFrom(distance, shots, pointer.endNumber);
+  return (
+    emptyCellInEnd(
+      distance,
+      shots,
+      written.endNumber,
+      written.shotNumber + 1,
+    ) ?? emptyCellFrom(distance, shots, written.endNumber + 1)
+  );
 }
 
-// 指している矢を、いまの状態に合わせる。
-// 記録済みの矢が消えたらそのエンドの新しい矢、新しい矢のエンドが満杯なら点数を書いた後と同じ規則で進む。
-// 距離が無い、またはエンドが距離の範囲外になったら何も指さない。
+// 指しているマスを、いまの構成に合わせる。他端末の矢の変化では動かさない。
+// 距離が無い、またはマスが距離の範囲(エンド数・射数/エンド)の外になったら何も指さない。
 export function reconcilePointer(
   distances: Distance[],
-  shots: Shot[],
   pointer: Pointer,
 ): Pointer {
   if (pointer === null) return null;
   const distance = distances.find((d) => d.id === pointer.distanceId);
-  if (!distance || pointer.endNumber > distance.total_ends) return null;
-  if (pointer.kind === "shot" && shots.some((s) => s.id === pointer.shotId)) {
-    return pointer;
+  if (
+    !distance ||
+    pointer.endNumber > distance.total_ends ||
+    pointer.shotNumber > distance.arrows_per_end
+  ) {
+    return null;
   }
-  const next = pointerAfterScore(
-    distances,
-    shots,
-    newShotPointer(pointer.distanceId, pointer.endNumber),
-  );
-  return isSamePointer(next, pointer) ? pointer : next;
+  return pointer;
 }

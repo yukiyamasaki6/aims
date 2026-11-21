@@ -18,9 +18,7 @@ insert into fa_id (alias, id) values
   ('RO', 'e0000000-0000-0000-0000-000000000011'),
   ('U',  'e0000000-0000-0000-0000-000000000021'),
   ('S',  'e0000000-0000-0000-0000-000000000022'),
-  ('X',  'e0000000-0000-0000-0000-000000000023'),
-  ('SS', 'e0000000-0000-0000-0000-000000000031'),
-  ('XS', 'e0000000-0000-0000-0000-000000000032');
+  ('X',  'e0000000-0000-0000-0000-000000000023');
 
 grant select on fa_id to authenticated;
 
@@ -72,11 +70,11 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
 
 select public.record_shots(jsonb_build_array(
-  jsonb_build_object('shot_event_id', pg_temp.ev(1), 'shot_id', pg_temp.id('SS'), 'distance_id', pg_temp.id('S'), 'end_number', 3, 'score_str', '9', 'score_int', 9),
-  jsonb_build_object('shot_event_id', pg_temp.ev(2), 'shot_id', pg_temp.id('XS'), 'distance_id', pg_temp.id('X'), 'end_number', 5, 'score_str', '9', 'score_int', 9)
+  jsonb_build_object('shot_event_id', pg_temp.ev(1), 'distance_id', pg_temp.id('S'), 'end_number', 3, 'shot_number', 1, 'score_str', '9', 'score_int', 9),
+  jsonb_build_object('shot_event_id', pg_temp.ev(2), 'distance_id', pg_temp.id('X'), 'end_number', 5, 'shot_number', 1, 'score_str', '9', 'score_int', 9)
 ));
 select public.clear_shots(jsonb_build_array(
-  jsonb_build_object('shot_event_id', pg_temp.ev(3), 'shot_id', pg_temp.id('XS'), 'distance_id', pg_temp.id('X'))
+  jsonb_build_object('shot_event_id', pg_temp.ev(3), 'distance_id', pg_temp.id('X'), 'end_number', 5, 'shot_number', 1)
 ));
 
 -- ============================================================

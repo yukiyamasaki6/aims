@@ -1,4 +1,5 @@
 import type { RoundRevisions, RoundTables } from "./round-tables";
+import { shotCellKey } from "./shot-cell";
 import type { SyncOperation } from "./sync-events";
 
 // 取得して端末に持つ、ラウンドのベース。サーバーの状態と、その時点の対象ごとのrevision。
@@ -37,7 +38,7 @@ function fetchedRevision(
       return revisions.distances[operation.distanceId] ?? 0;
     case "shot.recorded":
     case "shot.cleared":
-      return revisions.shots[operation.shotId] ?? 0;
+      return revisions.shots[shotCellKey(operation)] ?? 0;
   }
 }
 

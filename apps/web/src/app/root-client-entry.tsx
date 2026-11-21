@@ -44,7 +44,6 @@ import { whenOnline } from "@/features/rounds/application/when-online";
 import { SHORT_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
 import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
-import { shotIdAfter } from "@/features/rounds/domain/shot-id";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
 import {
   createBrowserHistoryViewMemory,
@@ -198,8 +197,6 @@ function composeStores(inputs: Inputs, records: Records) {
       whenOnline: whenOnline.bind(null, connectivity),
       historyViewMemory: createBrowserHistoryViewMemory(identityStore),
       historyPagesMemory: createHistoryPagesMemory(),
-      newShotId: (endShotIds: readonly string[]) =>
-        shotIdAfter(endShotIds, clock.now(), ids.randomBytes(10)),
     },
     listStore: createRoundsListStore({
       hub,

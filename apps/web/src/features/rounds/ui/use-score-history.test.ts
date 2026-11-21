@@ -4,9 +4,9 @@ import type { HistoryEntry } from "../domain/score-history";
 import { useScoreHistory } from "./use-score-history";
 
 const entry: HistoryEntry = {
-  shotId: "s1",
   distanceId: "d1",
   endNumber: 1,
+  shotNumber: 1,
   before: { alive: false },
   after: { alive: true, scoreStr: "10", scoreInt: 10 },
 };

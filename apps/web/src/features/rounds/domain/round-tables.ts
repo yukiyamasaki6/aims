@@ -1,6 +1,7 @@
 import type { Tables } from "@/types/supabase";
 import type { RoundConfig } from "./round-config";
 import type { Distance, Shot } from "./scorecard-types";
+import { cellOfShot, shotCellKey } from "./shot-cell";
 import type { RoundStatus, SyncOperation } from "./sync-events";
 
 // 対象ごとに、サーバーが確定した最新のrevision。取り消した矢と無効化した距離の行も含む。
@@ -9,7 +10,7 @@ export type RoundRevisions = {
   round: number;
   // 距離IDごと。
   distances: Record<string, number>;
-  // 矢のIDごと。
+  // マスの鍵(`shotCellKey`)ごと。
   shots: Record<string, number>;
 };
 
@@ -22,7 +23,7 @@ type RoundRow = {
 };
 // distances行。
 export type DistanceRow = Distance & { disabled: boolean };
-// shots行。主キーは`id`。
+// shots行。主キーはマス(距離、エンド、`shot_number`)。
 export type ShotRow = Shot & { disabled: boolean };
 
 // サーバーのテーブルのうち、1つのラウンドに属する行。端末の基準と操作を重ねた最終状態の形。
@@ -99,7 +100,6 @@ export function selectRoundState(tables: RoundTables): RoundState {
 // 列の型は生成型から導く。`status`だけ、生成型が`string`のため状態の型で絞る。
 type ServerShot = Pick<
   Tables<"shots">,
-  | "id"
   | "distance_id"
   | "end_number"
   | "shooter_id"
@@ -153,7 +153,7 @@ export function baseOfServerRound(round: ServerRound): {
         disabled_at: shotDisabledAt,
         ...shot
       } = shotRow;
-      revisions.shots[shot.id] = shotRevision;
+      revisions.shots[shotCellKey(cellOfShot(shot))] = shotRevision;
       if (distanceLive && shotDisabledAt === null) {
         shots.push({ ...shot, disabled: false });
       }

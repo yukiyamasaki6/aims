@@ -9,11 +9,11 @@ import {
 import type { PlanItem } from "./send-queue";
 import type { SyncOperation } from "./sync-events";
 
-// 矢の操作は、eventIdと同じ名前の矢で、エンドを指定して作る。異なるエンドの矢は衝突しない。
-const record = (id: string, distanceId: string, endNumber: number) =>
-  shotRecorded({ eventId: id, shotId: id, distanceId, endNumber });
-const clear = (id: string, distanceId: string, endNumber: number) =>
-  shotCleared({ eventId: id, shotId: id, distanceId, endNumber });
+// 矢の操作は、距離とマスの番号を指定して作る(エンドは1)。異なるマスの操作は衝突しない。
+const record = (id: string, distanceId: string, shotNumber: number) =>
+  shotRecorded({ eventId: id, distanceId, endNumber: 1, shotNumber });
+const clear = (id: string, distanceId: string, shotNumber: number) =>
+  shotCleared({ eventId: id, distanceId, endNumber: 1, shotNumber });
 const updateDistance = (id: string, distanceId: string) =>
   distanceUpdated({ eventId: id, distanceId });
 
@@ -75,7 +75,7 @@ describe("planFlights", () => {
   });
 
   it.each(["inflight", "backoff", "held", "persisting"] as const)(
-    "前の操作が%sの間は、同じ矢の後続を出さず、別のエンドの矢は出す",
+    "前の操作が%sの間は、同じマスの後続を出さず、同じエンドの別のマスは出す",
     (status) => {
       // Given
       const previous = item(clear("1", "d-1", 1), status);
@@ -155,11 +155,11 @@ describe("planFlights", () => {
     expect(ids(flights)).toEqual([["3"]]);
   });
 
-  // 上限の値(100件)そのものが検証の対象で、1距離の矢の数が上限に達する形は実際には起こらない。
+  // 上限の値(100件)そのものが検証の対象で、1距離で上限の100件が一度に溜まる形は実際には起こらない。
   it("矢のlaneは100件までで、超えた分は同じ距離の次の要求に回し、別の距離は影響しない", () => {
     // Given
     const arrows = Array.from({ length: 101 }, (_, index) =>
-      item(record(`s${index}`, "d-1", index)),
+      item(record(`s${index}`, "d-1", index + 1)),
     );
 
     // When

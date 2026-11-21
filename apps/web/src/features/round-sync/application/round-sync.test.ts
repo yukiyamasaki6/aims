@@ -65,19 +65,13 @@ function setup(options: { reading?: Reading; same?: boolean } = {}) {
 
 const needsOf = (rounds: Needs["rounds"] = []): Needs => ({ rounds });
 
-// 取り直しの要否。真の理由だけを指定する。
+// 取り直しが要るのは、効かなかった結果(diverged)があるラウンドだけ。
 const roundNeed = (
   roundId: string,
-  reasons: { diverged?: boolean; overlay?: boolean },
-): Needs["rounds"][number] => ({
-  roundId,
-  diverged: false,
-  overlay: false,
-  ...reasons,
-});
+  reasons: { diverged: true } = { diverged: true },
+): Needs["rounds"][number] => ({ roundId, ...reasons });
 
 const DIVERGED = { diverged: true } as const;
-const OVERLAY = { overlay: true } as const;
 
 describe("開始", () => {
   it("開始で記録の制御を始める", () => {
@@ -318,91 +312,5 @@ describe("効かなかった結果(diverged)の取り直し", () => {
 
     // Then
     expect(t.refreshRound).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("重ねられなかった操作(overlay)の取り直し", () => {
-  it("新しく当たったときだけ取り直し、続く間の知らせでは重ねない", async () => {
-    // Given
-    const t = setup();
-    t.sync.start("user-1");
-
-    // When
-    t.changeNeeds(needsOf([roundNeed("r1", OVERLAY)]));
-    await flush();
-    t.changeNeeds(needsOf([roundNeed("r1", OVERLAY)]));
-    t.changeNeeds(needsOf([roundNeed("r1", OVERLAY)]));
-    await flush();
-
-    // Then
-    expect(t.refreshRound).toHaveBeenCalledTimes(1);
-  });
-
-  it("外れてまた当たると、新しく当たったものとして1回取り直す", async () => {
-    // Given
-    const t = setup();
-    t.sync.start("user-1");
-    t.changeNeeds(needsOf([roundNeed("r1", OVERLAY)]));
-    await flush();
-
-    // When
-    t.changeNeeds(needsOf());
-    await flush();
-    const whileGone = t.refreshRound.mock.calls.length;
-    t.changeNeeds(needsOf([roundNeed("r1", OVERLAY)]));
-    await flush();
-
-    // Then
-    expect(whileGone).toBe(1);
-    expect(t.refreshRound).toHaveBeenCalledTimes(2);
-  });
-
-  it("効かなかった結果と同時に当たっても、取り直しは1回で足り、効かなかった結果が外れた後に重ねて取り直さない", async () => {
-    // Given
-    const t = setup();
-    t.sync.start("user-1");
-
-    // When
-    t.changeNeeds(needsOf([roundNeed("r1", { ...DIVERGED, ...OVERLAY })]));
-    await flush();
-    const afterBoth = t.refreshRound.mock.calls.length;
-    t.changeNeeds(needsOf([roundNeed("r1", OVERLAY)]));
-    await flush();
-
-    // Then
-    expect(afterBoth).toBe(1);
-    expect(t.refreshRound).toHaveBeenCalledTimes(1);
-  });
-
-  it("取り直しの後もoverlayが残る間は、次の知らせで重ねて取り直さない", async () => {
-    // Given
-    const t = setup();
-    t.sync.start("user-1");
-    t.changeNeeds(needsOf([roundNeed("r1", OVERLAY)]));
-    await flush();
-
-    // When
-    t.changeNeeds(needsOf([roundNeed("r1", OVERLAY)]));
-    await flush();
-
-    // Then
-    expect(t.refreshRound).toHaveBeenCalledTimes(1);
-  });
-
-  it("オフラインでは取り直さない。当たったことは数え、オンラインに戻っても同じ知らせでは取り直さない", async () => {
-    // Given
-    const t = setup();
-    t.network.offline = true;
-    t.sync.start("user-1");
-    t.changeNeeds(needsOf([roundNeed("r1", OVERLAY)]));
-    await flush();
-
-    // When
-    t.network.offline = false;
-    t.changeNeeds(needsOf([roundNeed("r1", OVERLAY)]));
-    await flush();
-
-    // Then
-    expect(t.refreshRound).not.toHaveBeenCalled();
   });
 });

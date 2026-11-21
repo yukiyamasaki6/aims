@@ -10,6 +10,7 @@ import {
 import { expectKeypadSettled } from "../helpers/keypad";
 import { getRoundRow, updateRound } from "../helpers/other-device";
 import { createRound, signInAsTestUser } from "../helpers/rounds";
+import { cell } from "../helpers/score-cells";
 import {
   comeBackOnline,
   goOffline,
@@ -22,19 +23,25 @@ test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
 type RoundInput = Omit<Parameters<typeof createRound>[0], "email" | "password">;
 
-function shot(distanceIndex: number, endNumber: number, score = "5") {
+function shot(
+  distanceIndex: number,
+  endNumber: number,
+  shotNumber: number,
+  score = "5",
+) {
   return {
     distanceIndex,
     endNumber,
+    shotNumber,
     scoreStr: score,
     scoreInt: Number(score),
   };
 }
 
-// 全てのエンドが満杯になる記録を作る。
+// 全てのマスが埋まる記録を作る。
 function allShots(distanceIndex: number, ends: number, arrows: number) {
   return Array.from({ length: ends * arrows }, (_, i) =>
-    shot(distanceIndex, Math.floor(i / arrows) + 1),
+    shot(distanceIndex, Math.floor(i / arrows) + 1, (i % arrows) + 1),
   );
 }
 
@@ -91,10 +98,10 @@ async function status(roundId: string) {
   return (await roundRow(roundId)).status;
 }
 
-test("全てのエンドが満杯になった入力中のラウンドで入力を完了するボタンを押すと、確認なしでラウンド一覧へ移り、ブラウザの戻るで戻っても、再読み込みしても、入力を完了するボタンは表示されない", async ({
+test("全てのマスが埋まった入力中のラウンドで入力を完了するボタンを押すと、確認なしでラウンド一覧へ移り、ブラウザの戻るで戻っても、再読み込みしても、入力を完了するボタンは表示されない", async ({
   page,
 }) => {
-  // 全てのエンドが満杯になったラウンドで入力を完了するボタンを押し、確認なしでラウンド一覧へ移る。
+  // 全てのマスが埋まったラウンドで入力を完了するボタンを押し、確認なしでラウンド一覧へ移る。
   const roundId = await openRound(page, { shots: allShots(0, 12, 3) });
   await expect(completeButton(page)).toHaveText(roundsText("completeRound"));
   await completeButton(page).click();
@@ -104,7 +111,7 @@ test("全てのエンドが満杯になった入力中のラウンドで入力�
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
   await waitForHydration(page);
-  await expect(page.getByTestId("shot-ball-1-1-3")).toHaveText("5");
+  await expect(cell(page, 1, 1, 3)).toHaveText("5");
   await expect(completeButton(page)).toBeHidden();
 
   // 完了の保存を待って再読み込みし、入力を完了するボタンが表示されないことを確かめる。
@@ -115,14 +122,14 @@ test("全てのエンドが満杯になった入力中のラウンドで入力�
   await expect(completeButton(page)).toBeHidden();
 });
 
-test("完了のラウンドでエンドの空白を押して点数を記録すると、入力を完了するボタンが再び表示され、再読み込みしても表示される", async ({
+test("完了のラウンドで空のマスを押して点数を記録すると、入力を完了するボタンが再び表示され、再読み込みしても表示される", async ({
   page,
 }) => {
-  // 完了のラウンドを開き、エンドの空白を押して点数を記録し、入力を完了するボタンが再び表示されるのを確かめる。
+  // 完了のラウンドを開き、空のマスを押して点数を記録し、入力を完了するボタンが再び表示されるのを確かめる。
   const roundId = await openRound(page, {}, { completed: true });
   await expect(completeButton(page)).toBeHidden();
   await expect(page.getByTestId("score-button-X")).toBeHidden();
-  await page.getByTestId("end-blank-1-1").click();
+  await cell(page, 1, 1, 1).click();
   // 閉じたテンキーを開き直す動きが終わってから押す。
   await expectKeypadSettled(page);
   await page.getByTestId("score-button-X").click();
@@ -136,10 +143,10 @@ test("完了のラウンドでエンドの空白を押して点数を記録す�
   await expect(completeButton(page)).toBeVisible();
 });
 
-test("オフラインで、満杯でないエンドがあるラウンドの入力を完了するボタンを押して確認で完了するを選ぶと、ラウンド一覧へ移り、オンラインに戻ると完了として保存される", async ({
+test("オフラインで、空のマスがあるラウンドの入力を完了するボタンを押して確認で完了するを選ぶと、ラウンド一覧へ移り、オンラインに戻ると完了として保存される", async ({
   page,
 }) => {
-  // 満杯でないエンドがあるラウンドを開いてオフラインにし、入力を完了するボタンを押して確認ダイアログを開く。
+  // 空のマスがあるラウンドを開いてオフラインにし、入力を完了するボタンを押して確認ダイアログを開く。
   const roundId = await openRound(page);
   await waitForServiceWorkerControl(page);
   await goOffline(page.context());

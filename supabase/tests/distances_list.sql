@@ -70,11 +70,11 @@ begin
       coalesce((v_row.v ->> 'f')::uuid, 'a1000000-0000-0000-0000-000000000001'::uuid), coalesce((v_row.v ->> 'm')::boolean, true),
       case when (v_row.v ->> 'x')::boolean then v_created end);
     insert into dl_dist (alias, id) values (v_row.v ->> 'n', v_id);
-    insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int)
-    select v_id, (i - 1) / (v_row.v ->> 'a')::int + 1, pg_temp.id(p_owner), 'X', 10
+    insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
+    select v_id, (i - 1) / (v_row.v ->> 'a')::int + 1, (i - 1) % (v_row.v ->> 'a')::int + 1, pg_temp.id(p_owner), 'X', 10
     from generate_series(1, coalesce((v_row.v ->> 't')::int, 0)) as i;
-    insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int, disabled_at)
-    select v_id, 1, pg_temp.id(p_owner), 'X', 10, now()
+    insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int, disabled_at)
+    select v_id, (v_row.v ->> 'e')::int, i, pg_temp.id(p_owner), 'X', 10, now()
     from generate_series(1, coalesce((v_row.v ->> 'dx')::int, 0)) as i;
   end loop;
 end;

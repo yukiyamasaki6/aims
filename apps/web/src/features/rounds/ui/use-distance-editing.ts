@@ -46,7 +46,7 @@ export function useDistanceEditing({
   function handleDistanceSaved(updated: Distance) {
     const structureChanged = changesDistanceStructure(distances, updated);
     toggleDistanceEditing(updated.id);
-    // 指している矢が新しい構成で無効になったときは、reconcilePointerが何も指さなくする。
+    // 指しているマスが新しい構成で範囲外になったときは、reconcilePointerが何も指さなくする。
     if (structureChanged) discardHistory(updated.id);
   }
 

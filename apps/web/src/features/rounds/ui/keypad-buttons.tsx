@@ -6,22 +6,22 @@ import {
   scoreKeysFor,
 } from "../domain/scorecard-scoring";
 import type { Distance } from "../domain/scorecard-types";
-import type { Pointer } from "../domain/shot-pointer";
 import { contrastText } from "./color-tone";
 import type { ScoreHistory } from "./use-score-history";
 import type { ShotInput } from "./use-shot-input";
 
-// テンキーの中身。戻す・進む・クリアの行と、指している矢の距離の的の点数のキー。
+// テンキーの中身。戻す・進む・クリアの行と、指しているマスの距離の的の点数のキー。
 export function KeypadButtons({
   keypadDistance,
   targetFaces,
-  pointer,
+  clearable,
   history,
   input,
 }: {
   keypadDistance: Distance;
   targetFaces: ScoringTargetFace[];
-  pointer: Pointer;
+  // 指しているマスに矢があるか。クリアはあるときだけ使える。
+  clearable: boolean;
   history: ScoreHistory;
   input: ShotInput;
 }) {
@@ -61,7 +61,7 @@ export function KeypadButtons({
           variant="outline"
           size="lg"
           className="h-12 text-lg"
-          disabled={pointer?.kind !== "shot"}
+          disabled={!clearable}
           data-testid="score-button-clear"
           aria-label={t("keypadClear")}
           onClick={input.handleClear}

@@ -3,6 +3,7 @@ import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { distanceNumber, summarizeDistance } from "../domain/scorecard-scoring";
 import type { Distance, Shot } from "../domain/scorecard-types";
+import type { ShotCell } from "../domain/shot-cell";
 import type { Pointer } from "../domain/shot-pointer";
 import type { SyncOperation } from "../domain/sync-events";
 import { lookupTargetFace, type TargetFaceOption } from "../domain/target-face";
@@ -26,8 +27,7 @@ export function DistanceSection({
   onSaved,
   onDeleted,
   enqueue,
-  onSelectShot,
-  onSelectEnd,
+  onSelectCell,
   onLinesChange,
 }: {
   distance: Distance;
@@ -42,8 +42,7 @@ export function DistanceSection({
   onSaved: (updated: Distance) => void;
   onDeleted: () => void;
   enqueue: (operation: SyncOperation) => void;
-  onSelectShot: (shot: Shot) => void;
-  onSelectEnd: (distance: Distance, end: number) => void;
+  onSelectCell: (cell: ShotCell) => void;
   onLinesChange: () => void;
 }) {
   const displayNumber = distanceNumber(distances, d.id);
@@ -60,8 +59,7 @@ export function DistanceSection({
       shots={shots}
       targetFace={face}
       pointer={pointer}
-      onSelectShot={onSelectShot}
-      onSelectEnd={onSelectEnd}
+      onSelectCell={onSelectCell}
       onLinesChange={onLinesChange}
     />
   );

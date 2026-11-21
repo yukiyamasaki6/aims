@@ -63,12 +63,11 @@ const baseDistance: Distance = {
 
 // 6エンド×6射の距離の、エンド3に3本が記録されている(記録済みの最大のエンドは3、1エンドの最大の射数/エンドは3)。
 const recordedShots: Shot[] = [1, 2, 3].map((n) => ({
-  id: `shot-${n}`,
   distance_id: "distance-1",
   end_number: 3,
   score_str: "M",
   score_int: 0,
-  shot_number: null,
+  shot_number: n,
 }));
 
 const EVENT_ID = "00000000-0000-4000-8000-000000000001";

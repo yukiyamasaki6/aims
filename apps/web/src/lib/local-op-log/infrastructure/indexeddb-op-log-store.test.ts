@@ -607,7 +607,7 @@ describe("op log store", () => {
   describe("保存形式の更新", () => {
     // 前のversionのDBに、別の名前のstoreとopsの内容が残っている状態を作る。
     async function createPreviousVersion() {
-      const previous = await openDB("aims-sync", 4, {
+      const previous = await openDB("aims-sync", 5, {
         upgrade(database) {
           const ops = database.createObjectStore("ops", {
             keyPath: "seq",

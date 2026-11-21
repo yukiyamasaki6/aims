@@ -138,7 +138,7 @@ describe("createRoundOpTransport", () => {
     });
   });
 
-  it("矢1件の記録は、射手と射順の指定が無ければキーを送らずにrecord_shotsへ送る", async () => {
+  it("矢1件の記録は、マス(距離・エンド・番号)と点数を、矢のIDと射手を送らずにrecord_shotsへ送る", async () => {
     // Given
     client.rpc.mockResolvedValue({
       data: [resultJson(7)],
@@ -155,9 +155,9 @@ describe("createRoundOpTransport", () => {
       p_shots: [
         {
           shot_event_id: "e-shot-recorded",
-          shot_id: "s-1",
           distance_id: "d-1",
           end_number: 1,
+          shot_number: 1,
           score_str: "10",
           score_int: 10,
         },
@@ -165,7 +165,7 @@ describe("createRoundOpTransport", () => {
     });
   });
 
-  it("矢の束は1回のRPCへ列の順で詰め、射手と射順は送らず、revisionを同じ順で返す", async () => {
+  it("矢の束は1回のRPCへ列の順で詰め、マスで指し、矢のIDと射手は送らず、revisionを同じ順で返す", async () => {
     // Given
     client.rpc.mockResolvedValue({
       data: [resultJson(2), resultJson(3), resultJson(4)],
@@ -177,8 +177,8 @@ describe("createRoundOpTransport", () => {
     const outcome = await sendRoundBatch(
       flight(
         shotRecorded({ eventId: "a" }),
-        shotRecorded({ eventId: "b", shotId: "s-2" }),
-        shotRecorded({ eventId: "c", shotId: "s-3" }),
+        shotRecorded({ eventId: "b", shotNumber: 2 }),
+        shotRecorded({ eventId: "c", shotNumber: 3 }),
       ),
     );
 
@@ -193,13 +193,16 @@ describe("createRoundOpTransport", () => {
       expect.objectContaining({ shot_event_id: "b" }),
       expect.objectContaining({ shot_event_id: "c" }),
     ]);
+    expect(
+      p_shots.map((shot: { shot_number: number }) => shot.shot_number),
+    ).toEqual([1, 2, 3]);
     for (const shot of p_shots) {
       expect(shot).not.toHaveProperty("shooter_id");
-      expect(shot).not.toHaveProperty("shot_number");
+      expect(shot).not.toHaveProperty("shot_id");
     }
   });
 
-  it("射手と射順を持つ古い形の操作が端末に残っていても、それらを送らずに送れる", async () => {
+  it("射手を持つ古い形の操作が端末に残っていても、射手と矢のIDを送らずに送れる", async () => {
     // Given
     client.rpc.mockResolvedValue({
       data: [resultJson(2)],
@@ -209,7 +212,7 @@ describe("createRoundOpTransport", () => {
     // 以前の版が端末に保存した形。型には無い項目を持つ。
     const legacy = shotRecorded({
       eventId: "a",
-      ...({ shooterId: "other", shotNumber: 3 } as object),
+      ...({ shooterId: "other", shotId: "s-old" } as object),
     });
 
     // When
@@ -219,7 +222,7 @@ describe("createRoundOpTransport", () => {
     expect(outcome).toEqual({ ok: true, results: [resultOf(2)] });
     const [, { p_shots }] = client.rpc.mock.calls[0];
     expect(p_shots[0]).not.toHaveProperty("shooter_id");
-    expect(p_shots[0]).not.toHaveProperty("shot_number");
+    expect(p_shots[0]).not.toHaveProperty("shot_id");
   });
 
   it("矢の記録の応答の効いた項目と効かなかった項目を、判定結果へ写す", async () => {
@@ -230,7 +233,7 @@ describe("createRoundOpTransport", () => {
           revision: 3,
           applied: true,
           applied_fields: ["score", "shooter_id"],
-          rejected_fields: [{ field: "shot_number", reason: "UNFIT" }],
+          rejected_fields: [{ field: "score", reason: "UNFIT" }],
         },
       ],
       error: null,
@@ -254,7 +257,7 @@ describe("createRoundOpTransport", () => {
     });
   });
 
-  it("取り消しの束は、矢のIDと距離をclear_shotsへ送る", async () => {
+  it("取り消しの束は、マスをclear_shotsへ送り、矢のIDは送らない", async () => {
     // Given
     client.rpc.mockResolvedValue({
       data: [resultJson(4), resultJson(5)],
@@ -266,7 +269,7 @@ describe("createRoundOpTransport", () => {
     const outcome = await sendRoundBatch(
       flight(
         shotCleared({ eventId: "a" }),
-        shotCleared({ eventId: "b", shotId: "s-2" }),
+        shotCleared({ eventId: "b", shotNumber: 2 }),
       ),
     );
 
@@ -274,8 +277,18 @@ describe("createRoundOpTransport", () => {
     expect(outcome).toEqual({ ok: true, results: [resultOf(4), resultOf(5)] });
     expect(client.rpc).toHaveBeenCalledWith("clear_shots", {
       p_shots: [
-        { shot_event_id: "a", shot_id: "s-1", distance_id: "d-1" },
-        { shot_event_id: "b", shot_id: "s-2", distance_id: "d-1" },
+        {
+          shot_event_id: "a",
+          distance_id: "d-1",
+          end_number: 1,
+          shot_number: 1,
+        },
+        {
+          shot_event_id: "b",
+          distance_id: "d-1",
+          end_number: 1,
+          shot_number: 2,
+        },
       ],
     });
   });
@@ -428,7 +441,7 @@ describe("createRoundOpTransport", () => {
     const outcome = await sendRoundBatch(
       flight(
         shotRecorded({ eventId: "a" }),
-        shotRecorded({ eventId: "b", shotId: "s-2" }),
+        shotRecorded({ eventId: "b", shotNumber: 2 }),
       ),
     );
 
@@ -457,7 +470,7 @@ describe("createRoundOpTransport", () => {
       "矢の束の件数が合わない",
       flight(
         shotRecorded({ eventId: "a" }),
-        shotRecorded({ eventId: "b", shotId: "s-2" }),
+        shotRecorded({ eventId: "b", shotNumber: 2 }),
       ),
       [resultJson(1)],
     ],
@@ -465,7 +478,7 @@ describe("createRoundOpTransport", () => {
       "矢の束が判定結果でない値を含む",
       flight(
         shotRecorded({ eventId: "a" }),
-        shotRecorded({ eventId: "b", shotId: "s-2" }),
+        shotRecorded({ eventId: "b", shotNumber: 2 }),
       ),
       [resultJson(1), "x"],
     ],

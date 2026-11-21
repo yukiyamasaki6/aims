@@ -5,14 +5,11 @@ import type { RoundWindow } from "./round-window";
 
 // 他の機能へ公開する、取り直しの操作。引数と戻り値は、ラウンドのIDの文字列と真偽だけで、ドメインの型は越えない。
 export type RoundRefreshControl = {
-  // 取り直しが要るラウンドを、要る理由の真偽とともに返す。準備完了の詳細のうち、いずれかの理由が真のラウンドだけを含む。
-  // - diverged: 送信の結果に、効かなかった操作か項目があった。
-  // - overlay: 確定済みの操作を、ベースに重ねられなかった。
+  // 取り直しが要るラウンドを返す。準備完了の詳細のうち、送信の結果に効かなかった操作か項目があった(diverged)ラウンドだけを含む。
   refreshNeeds(): {
     rounds: readonly {
       roundId: string;
       diverged: boolean;
-      overlay: boolean;
     }[];
   };
   onRefreshNeeds(listener: () => void): void;
@@ -32,12 +29,11 @@ export function createRoundRefreshControl(deps: {
   function refreshNeeds() {
     const rounds = roundWindow
       .readyRounds()
-      .map(({ roundId, overlay }) => ({
+      .map(({ roundId }) => ({
         roundId,
         diverged: hub.divergedStreams().has(roundStreamId(roundId)),
-        overlay,
       }))
-      .filter((need) => need.diverged || need.overlay);
+      .filter((need) => need.diverged);
     return { rounds };
   }
 

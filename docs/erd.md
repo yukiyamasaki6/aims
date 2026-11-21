@@ -6,7 +6,7 @@
 | `rounds`                  | アーチェリーの記録単位となる「ラウンド」（1回の練習・試合セッション）を表す。距離構成は`distances`が持つ |
 | `round_users`             | 特定のラウンドに対するユーザーのアクセス権限・ロールを管理する多対多の中間テーブル。1ラウンドに複数のeditor/viewerが存在しうる |
 | `distances`               | ラウンド中に射撃する特定の距離（70m、50m等）を表す。1ラウンドに複数の距離を持てる            |
-| `shots`                   | 1行が1本の矢で、点数・射手・射順を記録する。矢はIDで識別し、表示の位置・射順・点数に依存しない。エンドの生きている矢は射数/エンドを超えない |
+| `shots`                   | 1行が1つのマス(距離・エンド・マスの番号)の矢で、点数・射手を記録する。矢はマスで識別し、マスの番号が射順である。1つのマスの行は1つだけである |
 | `round_events` | `rounds`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない。効かせた操作の、効いた項目だけを記録する |
 | `distance_events` | `distances`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない。効かせた操作の、効いた項目だけを記録する |
 | `shot_events` | `shots`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない            |
@@ -76,10 +76,9 @@ erDiagram
         timestamp updated_at "最終更新時刻"
     }
     shots {
-        uuid id PK "矢のID。新しい矢は端末が作る時刻順のUUID(UUIDv7の形式)。点数の変更・消去・復活で変わらない"
-        uuid distance_id FK "所属する距離"
-        integer end_number "距離内で何番目のエンドか [CHECK: > 0]。生きている矢の数は距離の射数/エンド以下(RPCが判定する)"
-        integer shot_number "エンド内で何射目か [NULLABLE: null=射順不明] [CHECK: >= 1] [射数/エンド以下] [UK: (distance_id, end_number, shot_number) 生きている矢でnullでないもの]"
+        uuid distance_id PK, FK "所属する距離 [PK: (distance_id, end_number, shot_number)]"
+        integer end_number PK "距離内で何番目のエンドか [PK: (distance_id, end_number, shot_number)] [CHECK: > 0] [エンド数以下(RPCが判定する)]"
+        integer shot_number PK "エンド内のマスの番号で、その矢の射順 [PK: (distance_id, end_number, shot_number)] [NOT NULL] [CHECK: >= 1] [射数/エンド以下(RPCが判定する)]"
         uuid shooter_id FK "行射したユーザ。削除した利用者の矢は「削除済みの利用者」になる"
         string score_str "点数の文字列表現（例：X, M, 10）"
         integer score_int "点数の整数表現"
@@ -125,11 +124,10 @@ erDiagram
         uuid distance_id "対象距離の論理FK"
         string type "操作種別 [CHECK: RECORDED / CLEARED]"
         uuid author_id FK "操作実行ユーザ"
-        uuid shot_id "対象の矢の論理FK"
-        bigint revision UK "サーバー確定順 [NOT NULL] [CHECK: >= 1] [UK: (shot_id, revision)]"
-        text_array set_fields "RECORDEDで効いた属性(score、shooter_id、shot_number) [DB制約でなくRPCが保つ形。RECORDED: 必須、scoreを含む / CLEARED: NULL]"
-        integer end_number "shots.end_numberと同じ制約。全イベント種別で必須"
-        integer shot_number "shots.shot_numberと同じ制約 [DB制約でなくRPCが保つ形。RECORDED: set_fieldsにshot_numberを含むとき記録した値 / CLEARED: NULL]"
+        bigint revision UK "サーバー確定順 [NOT NULL] [CHECK: >= 1] [UK: (distance_id, end_number, shot_number, revision)]"
+        text_array set_fields "RECORDEDで効いた属性(score、shooter_id) [DB制約でなくRPCが保つ形。RECORDED: 必須、scoreを含む / CLEARED: NULL]"
+        integer end_number "対象のマスのエンド。shots.end_numberと同じ制約。全イベント種別で必須"
+        integer shot_number "対象のマスの番号。shots.shot_numberと同じ制約。全イベント種別で必須"
         uuid shooter_id FK "shots.shooter_idと同じ制約 [DB制約でなくRPCが保つ形。RECORDED: 必須 / CLEARED: NULL]"
         string score_str "shots.score_strと同じ制約 [DB制約でなくRPCが保つ形。RECORDED: 必須 / CLEARED: NULL]"
         integer score_int "shots.score_intと同じ制約 [DB制約でなくRPCが保つ形。RECORDED: 必須 / CLEARED: NULL]"
@@ -190,16 +188,17 @@ erDiagram
 
 ## 矢の記録
 
-- `shots`の1行は1本の矢である。エンド内の何本目かという位置の列は持たず、表示の順(射順不明の矢は点数の高い順、同点は`id`の昇順)は画面が決める。新しい矢の`id`は、端末がそのエンドの既にある矢の`id`より大きい時刻順のUUIDにするため、同点の後ろに並ぶ(`rounds/score-entry`)。
-- `shot_number`がnullの矢は射順不明である。利用者が射順を明示しない限り、矢は射順を持たない。
-- 同じ距離・同じエンドの生きている矢(`disabled_at`がnull)は、その距離の`arrows_per_end`本を超えない。書き込みのRPCが距離の行をロックして数え、効かせない。
-- 同じエンドの生きている矢は、同じ`shot_number`を持たない(部分一意索引)。消した矢を戻すときに、その射順を他の生きている矢が使っていれば、射順だけがnullになる。
+- `shots`の1行は1つのマスの矢で、マス(`distance_id`、`end_number`、`shot_number`)で識別する。矢のIDの列は持たない。マスの番号が射順で、画面はマスを番号順に固定で並べる(`rounds/score-entry`)。
+- 1つのマスの行は1つだけである。取り消しは行を残して`disabled_at`を入れ、同じマスへの記録は行を上書きして生き返らせる。同じマスへの書き込みは確定の順の後勝ちである(`rounds/sync`)。
+- マスは、エンドが1〜距離の`total_ends`、マスの番号が1〜距離の`arrows_per_end`の範囲に収まる。書き込みのRPCが距離の行をロックして判定し、範囲外のマスへの記録と、範囲外のマスに生きている矢が残る構成の変更を効かせない。このため、エンドの生きている矢(`disabled_at`がnull)は`arrows_per_end`本を超えない。
+- 変更履歴(`shot_events`)はマスごとに`revision`を持ち、マスを論理FKで指す。
+- マスで指す形への移行(`rounds/sync`の「更新前の矢の移行」)で、生きている矢は点数の高い順に射順を振ってマスへ写し、その履歴はマスへ付け替えた。取り消し済みの矢の行と履歴は持たない。変更履歴を削除・修正するのは、利用者の削除(`delete_account()`。「アカウントの削除と匿名化」)のほかには、この移行だけである。
 
 ## アカウントの削除と匿名化
 
 `delete_account()`が、1トランザクションで、利用者のアカウントと記録を取り除く(`auth/delete-account`)。
 
-- 利用者を除くと編集者がいなくなるラウンドは、ラウンド・距離・矢と、3つの変更履歴を全て消す(変更履歴の`round_id`・`distance_id`・`shot_id`は論理FKのため、関数が明示して消す)。
+- 利用者を除くと編集者がいなくなるラウンドは、ラウンド・距離・矢と、3つの変更履歴を全て消す(変更履歴の`round_id`・`distance_id`は論理FKのため、関数が明示して消す)。
 - 残るラウンドでは、`shots.shooter_id`、`shot_events.shooter_id`と各変更履歴の`author_id`を「削除済みの利用者」へ置き換える。他の列は変えない。
 - `users`の行、`round_users`、個人の`preset_rounds`は、`auth.users`の削除の連鎖で消える。
 - `users`を参照する列を足すときは、この関数の削除または置き換えに加える。

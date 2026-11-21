@@ -15,7 +15,7 @@ import type {
 
 const DB_NAME = "aims-sync";
 // 保存の形を変えたら上げる。更新では、以前の内容を移行せずに全てのstoreを作り直す。
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 const STORE_NAME = "ops";
 const BASE_STORE_NAME = "bases";
 

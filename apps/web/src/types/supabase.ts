@@ -379,8 +379,7 @@ export type Database = {
           score_str: string | null;
           set_fields: string[] | null;
           shooter_id: string | null;
-          shot_id: string;
-          shot_number: number | null;
+          shot_number: number;
           type: string;
           updated_at: string;
         };
@@ -396,8 +395,7 @@ export type Database = {
           score_str?: string | null;
           set_fields?: string[] | null;
           shooter_id?: string | null;
-          shot_id: string;
-          shot_number?: number | null;
+          shot_number: number;
           type: string;
           updated_at?: string;
         };
@@ -412,8 +410,7 @@ export type Database = {
           score_str?: string | null;
           set_fields?: string[] | null;
           shooter_id?: string | null;
-          shot_id?: string;
-          shot_number?: number | null;
+          shot_number?: number;
           type?: string;
           updated_at?: string;
         };
@@ -440,12 +437,11 @@ export type Database = {
           disabled_at: string | null;
           distance_id: string;
           end_number: number;
-          id: string;
           revision: number;
           score_int: number;
           score_str: string;
           shooter_id: string;
-          shot_number: number | null;
+          shot_number: number;
           updated_at: string;
         };
         ComputedFields: never;
@@ -454,12 +450,11 @@ export type Database = {
           disabled_at?: string | null;
           distance_id: string;
           end_number: number;
-          id?: string;
           revision?: number;
           score_int: number;
           score_str: string;
           shooter_id: string;
-          shot_number?: number | null;
+          shot_number: number;
           updated_at?: string;
         };
         Update: {
@@ -467,12 +462,11 @@ export type Database = {
           disabled_at?: string | null;
           distance_id?: string;
           end_number?: number;
-          id?: string;
           revision?: number;
           score_int?: number;
           score_str?: string;
           shooter_id?: string;
-          shot_number?: number | null;
+          shot_number?: number;
           updated_at?: string;
         };
         Relationships: [

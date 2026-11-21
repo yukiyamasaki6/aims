@@ -12,16 +12,10 @@ export type Distance = Pick<
   | "is_marked"
 >;
 
-// スコアカードが扱う矢1本の記録。矢はIDで識別し、エンド内の位置を持たない。
-// 射順(`shot_number`)は任意で、nullは射順不明。
+// スコアカードが扱う矢1本の記録。矢はマス(距離、エンド、`shot_number`)で識別し、`shot_number`が射順を兼ねる。
 // `shooter_id`は任意で、端末が射手を含めない操作がある。
 export type Shot = Pick<
   Tables<"shots">,
-  | "id"
-  | "distance_id"
-  | "end_number"
-  | "score_str"
-  | "score_int"
-  | "shot_number"
+  "distance_id" | "end_number" | "score_str" | "score_int" | "shot_number"
 > &
   Partial<Pick<Tables<"shots">, "shooter_id">>;

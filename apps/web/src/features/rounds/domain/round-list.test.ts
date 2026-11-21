@@ -114,7 +114,7 @@ describe("localRoundsList", () => {
             pending(
               shotRecorded({
                 eventId: "e-2",
-                shotId: "s-2",
+                shotNumber: 2,
                 scoreStr: "9",
                 scoreInt: 9,
               }),
@@ -158,11 +158,11 @@ describe("localRoundsList: 距離ごとの小計", () => {
     arrowsPerEnd: 3,
     targetFaceId: "face-1",
   });
-  const shot = (id: string, distanceId: string, score: number) =>
+  const shot = (shotNumber: number, distanceId: string, score: number) =>
     pending(
       shotRecorded({
-        eventId: `e-${id}`,
-        shotId: id,
+        eventId: `e-${shotNumber}-${distanceId}`,
+        shotNumber,
         distanceId,
         scoreStr: String(score),
         scoreInt: score,
@@ -184,9 +184,9 @@ describe("localRoundsList: 距離ごとの小計", () => {
           ],
         }),
       ),
-      shot("s-1", "d-late", 9),
-      shot("s-2", "d-first", 10),
-      shot("s-3", "d-first", 8),
+      shot(1, "d-late", 9),
+      shot(2, "d-first", 10),
+      shot(3, "d-first", 8),
     ]);
 
     // When
@@ -209,11 +209,11 @@ describe("localRoundsList: 距離ごとの小計", () => {
           distances: [distanceOf("d-1", "a", 70), distanceOf("d-2", "b", 50)],
         }),
       ),
-      shot("s-1", "d-1", 10),
-      shot("s-2", "d-1", 9),
-      shot("s-3", "d-2", 8),
+      shot(1, "d-1", 10),
+      shot(2, "d-1", 9),
+      shot(3, "d-2", 8),
       pending(
-        shotCleared({ eventId: "e-clear", shotId: "s-2", distanceId: "d-1" }),
+        shotCleared({ eventId: "e-clear", shotNumber: 2, distanceId: "d-1" }),
       ),
       pending(distanceDisabled("d-2")),
     ]);
@@ -243,7 +243,7 @@ describe("localRoundsList: 的に無い点数", () => {
             pending(
               shotRecorded({
                 eventId: "e-2",
-                shotId: "s-2",
+                shotNumber: 2,
                 scoreStr: "10",
                 scoreInt: 10,
               }),

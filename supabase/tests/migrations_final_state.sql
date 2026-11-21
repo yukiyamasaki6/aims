@@ -1,6 +1,6 @@
 begin;
 
-select plan(15);
+select plan(21);
 
 select ok(
   exists (select 1 from auth.users where id = '00000000-0000-4000-8000-000000000001'
@@ -96,8 +96,8 @@ select is_empty(
       and (d.objoid, a.attname) in (
         ('public.distance_events'::regclass, 'set_fields'), ('public.round_events'::regclass, 'set_fields'),
         ('public.round_events'::regclass, 'status'), ('public.rounds'::regclass, 'status'),
-        ('public.shot_events'::regclass, 'shot_id'), ('public.shot_events'::regclass, 'shot_number'),
-        ('public.shot_events'::regclass, 'set_fields'), ('public.shots'::regclass, 'id'),
+        ('public.shot_events'::regclass, 'shot_number'),
+        ('public.shot_events'::regclass, 'set_fields'),
         ('public.shots'::regclass, 'shot_number'))$$,
   '削除済みの列コメントはない'
 );
@@ -109,6 +109,56 @@ select ok(
     and (select count(*) from public.preset_rounds where owner_id is null) > 0
     and (select count(*) from public.preset_distances) > 0,
   '公式の的3表と公式プリセット2表は投入されている'
+);
+
+-- 矢のマス目形式の最終形
+select is(
+  (select array_agg(a.attname::text order by k.ord)
+    from pg_constraint c
+    cross join lateral unnest(c.conkey) with ordinality as k(attnum, ord)
+    join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
+    where c.conrelid = 'public.shots'::regclass and c.contype = 'p'),
+  array['distance_id', 'end_number', 'shot_number'],
+  'shotsの主キーはマス(distance_id, end_number, shot_number)である'
+);
+
+select is_empty(
+  $$select 1 from information_schema.columns
+    where table_schema = 'public' and (
+      (table_name = 'shots' and column_name = 'id') or (table_name = 'shot_events' and column_name = 'shot_id'))$$,
+  'shotsのid列とshot_eventsのshot_id列はない'
+);
+
+select is(
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and is_nullable = 'NO'
+      and ((table_name = 'shots' and column_name in ('end_number', 'shot_number'))
+        or (table_name = 'shot_events' and column_name in ('distance_id', 'end_number', 'shot_number')))),
+  5::bigint,
+  'shotsとshot_eventsのマスの列はNOT NULLである'
+);
+
+select is(
+  (select array_agg(a.attname::text order by k.ord)
+    from pg_constraint c
+    cross join lateral unnest(c.conkey) with ordinality as k(attnum, ord)
+    join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
+    where c.conrelid = 'public.shot_events'::regclass and c.contype = 'u'),
+  array['distance_id', 'end_number', 'shot_number', 'revision'],
+  'shot_eventsはマスとrevisionの組で一意である'
+);
+
+select is_empty(
+  $$select indexname from pg_indexes
+    where schemaname = 'public' and tablename in ('shots', 'shot_events')
+      and indexname not in ('shots_pkey', 'shot_events_pkey', 'shot_events_cell_revision_key')$$,
+  'shotsとshot_eventsに、生きている矢の部分一意索引と容量の索引はない'
+);
+
+select is(
+  (select count(*) from pg_proc where pronamespace = 'public'::regnamespace and proname in ('record_shots', 'clear_shots', 'shot_fits')),
+  3::bigint,
+  '矢のRPCと範囲の判定関数は新しい署名の1つずつだけが存在する'
 );
 
 select * from finish();

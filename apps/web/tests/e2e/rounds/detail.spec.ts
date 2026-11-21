@@ -18,6 +18,7 @@ import {
 } from "../helpers/reference-data";
 import { roundName } from "../helpers/round-name";
 import { createRound } from "../helpers/rounds";
+import { expectCells, expectPointedCell } from "../helpers/score-cells";
 import {
   comeBackOnline,
   goOffline,
@@ -45,10 +46,16 @@ async function openRound(page: Page, overrides: Partial<RoundInput> = {}) {
   return roundId;
 }
 
-function shot(distanceIndex: number, endNumber: number, score: string) {
+function shot(
+  distanceIndex: number,
+  endNumber: number,
+  shotNumber: number,
+  score: string,
+) {
   return {
     distanceIndex,
     endNumber,
+    shotNumber,
     scoreStr: score,
     scoreInt: score === "X" ? 10 : Number(score),
   };
@@ -64,7 +71,7 @@ test("記録済みの得点があるラウンドを開くと、スコアカー�
 }) => {
   await openRound(page, {
     distances: TWO_DISTANCES,
-    shots: [shot(0, 1, "X"), shot(0, 1, "8"), shot(1, 1, "5")],
+    shots: [shot(0, 1, 1, "X"), shot(0, 1, 2, "8"), shot(1, 1, 1, "5")],
   });
 
   await expect(page.getByTestId("round-config-summary")).toBeVisible();
@@ -179,7 +186,7 @@ test("的の一覧を端末に保存せずにオフラインで開始したラ�
   await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
 });
 
-test("他の端末で記録した入力中のラウンドは、オンラインで取得を済ませた後なら、一度も開かずにオフラインで再起動して開いても、記録と合計と仮の矢とテンキーが表示される", async ({
+test("他の端末で記録した入力中のラウンドは、オンラインで取得を済ませた後なら、一度も開かずにオフラインで再起動して開いても、記録と合計と最初の空のマスとテンキーが表示される", async ({
   profile,
   baseURL,
 }) => {
@@ -191,7 +198,7 @@ test("他の端末で記録した入力中のラウンドは、オンライン�
     name: "他端末で記録",
     roundDate: "2026-08-24",
     distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
-    shots: [shot(0, 1, "X"), shot(0, 1, "8")],
+    shots: [shot(0, 1, 1, "X"), shot(0, 1, 2, "8")],
   });
   const first = await profile.open();
   // 他の端末の記録の準備で確認済みのセッションを渡す(画面のサインインは同じ宛先の送信間隔を待つため)。
@@ -211,12 +218,8 @@ test("他の端末で記録した入力中のラウンドは、オンライン�
     roundsText("roundTotal", { total: "18" }),
   );
   await expect(page.getByTestId("distance-summary-1")).toContainText("18m");
-  await expect(
-    page.getByTestId("end-row-1-1").locator("[data-shot-id]"),
-  ).toHaveText(["X", "8"]);
-  await expect(
-    page.getByTestId("end-row-1-1").getByTestId("provisional-shot"),
-  ).toBeVisible();
+  await expectCells(page, 1, 1, ["X", "8", null]);
+  await expectPointedCell(page, 1, 1, 3);
   await expect(
     page.getByTestId("distance-summary-1").locator('[role="img"]').first(),
   ).toBeVisible();

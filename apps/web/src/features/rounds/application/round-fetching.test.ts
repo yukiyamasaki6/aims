@@ -52,13 +52,12 @@ const distanceA = {
   is_marked: true,
 };
 const shotA = {
-  id: "s-a",
   distance_id: "d-a",
   end_number: 1,
   shooter_id: "user-1",
   score_str: "X",
   score_int: 10,
-  shot_number: null,
+  shot_number: 1,
 };
 
 const serverRound: ServerRound = {
@@ -204,7 +203,7 @@ describe("fetchRoundDetail", () => {
           revisions: {
             round: 3,
             distances: { "d-a": 4 },
-            shots: { "s-a": 5 },
+            shots: { "d-a:1:1": 5 },
           },
         },
         startedAt: 1000,
@@ -341,7 +340,7 @@ describe("fetchRoundDetail", () => {
       data: {
         base: {
           tables: { distances: [{ ...distanceA, disabled: false }], shots: [] },
-          revisions: { shots: { "s-a": 5 } },
+          revisions: { shots: { "d-a:1:1": 5 } },
         },
       },
     });

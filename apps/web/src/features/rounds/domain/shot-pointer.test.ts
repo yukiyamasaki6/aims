@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Distance, Shot } from "@/features/rounds/domain/scorecard-types";
+import type { ShotCell } from "@/features/rounds/domain/shot-cell";
 import {
-  firstOpenEnd,
+  firstEmptyCell,
   isSamePointer,
-  newShotPointer,
-  type Pointer,
   pointerAfterScore,
   reconcilePointer,
-  shotPointer,
 } from "@/features/rounds/domain/shot-pointer";
 
 function distance(
@@ -27,159 +25,169 @@ function distance(
   };
 }
 
-// 12エンド×3本の距離が2つ。
+// 12エンド×3射の距離が2つ。
 const distanceA = distance("d-a", "a", 12, 3);
 const distanceB = distance("d-b", "b", 12, 3);
 const distances = [distanceA, distanceB];
 
-function shot(
-  id: string,
-  distanceId: string,
-  end: number,
-  scoreStr = "10",
-  scoreInt = 10,
-): Shot {
+function cell(distanceId: string, endNumber: number, shotNumber: number) {
+  return { distanceId, endNumber, shotNumber };
+}
+
+function shotIn(c: ShotCell): Shot {
   return {
-    id,
-    distance_id: distanceId,
-    end_number: end,
-    score_str: scoreStr,
-    score_int: scoreInt,
-    shot_number: null,
+    distance_id: c.distanceId,
+    end_number: c.endNumber,
+    shot_number: c.shotNumber,
+    score_str: "10",
+    score_int: 10,
   };
 }
 
-// エンドを満たす3本の矢。
-function fill(distanceId: string, end: number): Shot[] {
-  return [
-    shot(`${distanceId}-${end}-1`, distanceId, end),
-    shot(`${distanceId}-${end}-2`, distanceId, end),
-    shot(`${distanceId}-${end}-3`, distanceId, end),
-  ];
+// 指定した番号のマスだけを埋めた矢。
+function shotsAt(distanceId: string, end: number, numbers: number[]): Shot[] {
+  return numbers.map((n) => shotIn(cell(distanceId, end, n)));
 }
 
-// 距離の全てのエンドを満たす矢。
+function fillEnd(distanceId: string, end: number): Shot[] {
+  return shotsAt(distanceId, end, [1, 2, 3]);
+}
+
 function fillAll(distanceId: string): Shot[] {
-  return Array.from({ length: 12 }, (_, i) => fill(distanceId, i + 1)).flat();
+  return Array.from({ length: 12 }, (_, i) =>
+    fillEnd(distanceId, i + 1),
+  ).flat();
 }
 
-// 指している矢を「new:距離/エンド」「shot:ID」の文字列で表し、期待値をリテラルで書けるようにする。
-function describePointer(pointer: Pointer): string | null {
-  if (pointer === null) return null;
-  return pointer.kind === "new"
-    ? `new:${pointer.distanceId}/${pointer.endNumber}`
-    : `shot:${pointer.shotId}`;
-}
-
-describe("firstOpenEnd", () => {
-  it("矢が無ければ、最初の距離のエンド1の新しい矢を指す", () => {
+describe("firstEmptyCell", () => {
+  it("矢が無ければ、最初の距離のエンド1のマス1を指す", () => {
     // Given
 
     // When
-    const result = firstOpenEnd(distances, []);
+    const result = firstEmptyCell(distances, []);
 
     // Then
-    expect(describePointer(result)).toBe("new:d-a/1");
+    expect(result).toEqual(cell("d-a", 1, 1));
   });
 
-  it("満杯でない最初のエンドを、後ろのエンドに矢があっても指す", () => {
+  it("エンドの途中の空のマスを、後ろのエンドに矢があっても指す", () => {
     // Given
+    const shots = [
+      ...fillEnd("d-a", 1),
+      ...shotsAt("d-a", 2, [1, 3]),
+      ...fillEnd("d-a", 3),
+    ];
 
     // When
-    const shots = [...fill("d-a", 1), shot("x", "d-a", 2), ...fill("d-a", 3)];
-    const result = firstOpenEnd(distances, shots);
+    const result = firstEmptyCell(distances, shots);
 
     // Then
-    expect(describePointer(result)).toBe("new:d-a/2");
+    expect(result).toEqual(cell("d-a", 2, 2));
   });
 
-  it("最初の距離が全て満杯なら、次の距離のエンド1の新しい矢を指す", () => {
+  it("前のエンドに空のマスがあれば、後ろのエンドのマスが空でも前を指す", () => {
     // Given
+    const shots = [...shotsAt("d-a", 1, [1, 2]), ...fillEnd("d-a", 2)];
 
     // When
-    const allA = fillAll("d-a");
-    const result = firstOpenEnd(distances, allA);
+    const result = firstEmptyCell(distances, shots);
 
     // Then
-    expect(describePointer(result)).toBe("new:d-b/1");
+    expect(result).toEqual(cell("d-a", 1, 3));
   });
 
-  it("全ての距離が満杯なら、何も指さない", () => {
+  it("最初の距離が全て埋まっていれば、次の距離のエンド1のマス1を指す", () => {
     // Given
+    const shots = fillAll("d-a");
 
     // When
-    const result = firstOpenEnd(distances, [
-      ...fillAll("d-a"),
-      ...fillAll("d-b"),
-    ]);
+    const result = firstEmptyCell(distances, shots);
 
     // Then
-    expect(result).toBeNull();
+    expect(result).toEqual(cell("d-b", 1, 1));
+  });
+
+  it("全てのマスが埋まっているか、距離が無ければ、何も指さない", () => {
+    // Given
+    const full = [...fillAll("d-a"), ...fillAll("d-b")];
+
+    // When
+    const whenFull = firstEmptyCell(distances, full);
+    const noDistances = firstEmptyCell([], []);
+
+    // Then
+    expect(whenFull).toBeNull();
+    expect(noDistances).toBeNull();
   });
 });
 
 describe("pointerAfterScore", () => {
-  it("記録済みの矢を指しているなら、そのまま指す", () => {
+  it("空のマスへ書くと、同じエンドの後ろの最初の空のマスを指し、埋まったマスは飛ばす", () => {
     // Given
+    const written = cell("d-a", 1, 1);
+    const shots = shotsAt("d-a", 1, [1, 2]);
 
     // When
-    const pointed = shotPointer(shot("s", "d-a", 1));
-    const result = pointerAfterScore(distances, [], pointed);
+    const result = pointerAfterScore(distances, shots, written, true);
 
     // Then
-    expect(result).toBe(pointed);
+    expect(result).toEqual(cell("d-a", 1, 3));
   });
 
-  it("新しい矢のエンドに空きがあれば、同じエンドの新しい矢を指す", () => {
+  it("書いたマスより前に空のマスがあっても、前へは戻らない", () => {
     // Given
+    const written = cell("d-a", 1, 2);
+    const shots = shotsAt("d-a", 1, [2]);
 
     // When
-    const shots = [shot("x", "d-a", 1)];
-    const result = pointerAfterScore(
-      distances,
-      shots,
-      newShotPointer("d-a", 1),
-    );
+    const result = pointerAfterScore(distances, shots, written, true);
 
     // Then
-    expect(describePointer(result)).toBe("new:d-a/1");
+    expect(result).toEqual(cell("d-a", 1, 3));
   });
 
-  it("満杯なら同じ距離で後ろの空きのあるエンドを指し、満杯のエンドは飛ばす", () => {
+  it("エンドの最後のマスへ書くと、同じ距離の後ろのエンドの最初の空のマスを指し、満杯のエンドは飛ばす", () => {
     // Given
+    const written = cell("d-a", 1, 3);
+    const shots = [...fillEnd("d-a", 1), ...fillEnd("d-a", 2)];
 
     // When
-    const shots = [...fill("d-a", 1), ...fill("d-a", 2)];
-    const result = pointerAfterScore(
-      distances,
-      shots,
-      newShotPointer("d-a", 1),
-    );
+    const result = pointerAfterScore(distances, shots, written, true);
 
     // Then
-    expect(describePointer(result)).toBe("new:d-a/3");
+    expect(result).toEqual(cell("d-a", 3, 1));
   });
 
   it("同じ距離の後ろに空きが無ければ、前のエンドや次の距離に空きがあっても何も指さない", () => {
     // Given
+    const written = cell("d-a", 12, 3);
+    const shots = fillEnd("d-a", 12);
 
     // When
-    const shots = fill("d-a", 12);
-    const result = pointerAfterScore(
-      distances,
-      shots,
-      newShotPointer("d-a", 12),
-    );
+    const result = pointerAfterScore(distances, shots, written, true);
 
     // Then
     expect(result).toBeNull();
   });
 
-  it("距離が無ければ何も指さない", () => {
+  it("記録済みのマスを直したときは、後ろに空きがあっても同じマスを指す", () => {
     // Given
+    const written = cell("d-a", 1, 1);
+    const shots = shotsAt("d-a", 1, [1]);
 
     // When
-    const result = pointerAfterScore(distances, [], newShotPointer("none", 1));
+    const result = pointerAfterScore(distances, shots, written, false);
+
+    // Then
+    expect(result).toEqual(written);
+  });
+
+  it("距離が無ければ何も指さない", () => {
+    // Given
+    const written = cell("none", 1, 1);
+
+    // When
+    const result = pointerAfterScore(distances, [], written, true);
 
     // Then
     expect(result).toBeNull();
@@ -187,132 +195,70 @@ describe("pointerAfterScore", () => {
 });
 
 describe("reconcilePointer", () => {
-  it("何も指していなければ、そのまま", () => {
+  it("何も指していなければ、何も指さない", () => {
     // Given
 
     // When
-    const result = reconcilePointer(distances, [], null);
+    const result = reconcilePointer(distances, null);
 
     // Then
     expect(result).toBeNull();
   });
 
-  it("生きている記録済みの矢は、そのまま指す", () => {
+  it("範囲内のマスは、空でも埋まっていても、そのまま指す", () => {
     // Given
+    const pointed = cell("d-a", 2, 2);
 
     // When
-    const s = shot("s", "d-a", 1);
-    const pointed = shotPointer(s);
-    const result = reconcilePointer(distances, [s], pointed);
+    const result = reconcilePointer(distances, pointed);
 
     // Then
     expect(result).toBe(pointed);
   });
 
-  it("空きのあるエンドの新しい矢は、そのまま指す", () => {
+  it("エンド数と射数/エンドの最後のマスは指したままにし、その外は何も指さない", () => {
     // Given
 
     // When
-    const s = shot("s", "d-a", 1);
-    const fresh = newShotPointer("d-a", 2);
-    const result = reconcilePointer(distances, [s], fresh);
+    const lastEnd = reconcilePointer(distances, cell("d-a", 12, 1));
+    const lastShot = reconcilePointer(distances, cell("d-a", 1, 3));
+    const beyondEnd = reconcilePointer(distances, cell("d-a", 13, 1));
+    const beyondShot = reconcilePointer(distances, cell("d-a", 1, 4));
 
     // Then
-    expect(result).toBe(fresh);
+    expect(lastEnd).toEqual(cell("d-a", 12, 1));
+    expect(lastShot).toEqual(cell("d-a", 1, 3));
+    expect(beyondEnd).toBeNull();
+    expect(beyondShot).toBeNull();
   });
 
-  it("指している記録済みの矢が消えたら、そのエンドの新しい矢を指す", () => {
+  it("距離が無くなったら何も指さない", () => {
     // Given
 
     // When
-    const pointed = shotPointer(shot("s", "d-a", 2));
-    const result = reconcilePointer(distances, [], pointed);
-
-    // Then
-    expect(describePointer(result)).toBe("new:d-a/2");
-  });
-
-  it("新しい矢のエンドが満杯になったら、点数を書いた後と同じ規則で進む", () => {
-    // Given
-
-    // When
-    const result = reconcilePointer(
-      distances,
-      fill("d-a", 1),
-      newShotPointer("d-a", 1),
-    );
-
-    // Then
-    expect(describePointer(result)).toBe("new:d-a/2");
-  });
-
-  it("距離が無ければ何も指さない", () => {
-    // Given
-
-    // When
-    const result = reconcilePointer(distances, [], newShotPointer("none", 1));
+    const result = reconcilePointer(distances, cell("none", 1, 1));
 
     // Then
     expect(result).toBeNull();
   });
-
-  it("エンドが範囲外になったら何も指さず、最後のエンドは指したままにする", () => {
-    // Given
-
-    // When
-    const last = reconcilePointer(distances, [], newShotPointer("d-a", 12));
-    const beyond = reconcilePointer(distances, [], newShotPointer("d-a", 13));
-
-    // Then
-    expect(describePointer(last)).toBe("new:d-a/12");
-    expect(beyond).toBeNull();
-  });
 });
 
 describe("isSamePointer", () => {
-  it("記録済みの矢どうしは、IDで比べる", () => {
+  it("マスが一致するときだけ同じで、距離・エンド・番号のどれかが違えば違う", () => {
     // Given
+    const a = cell("d-a", 1, 1);
 
     // When
-    const a = shot("s", "d-a", 1);
-    const sameId = isSamePointer(shotPointer(a), shotPointer({ ...a }));
-    const otherId = isSamePointer(
-      shotPointer(a),
-      shotPointer(shot("t", "d-a", 1)),
-    );
+    const same = isSamePointer(a, { ...a });
+    const others = [
+      isSamePointer(a, cell("d-b", 1, 1)),
+      isSamePointer(a, cell("d-a", 2, 1)),
+      isSamePointer(a, cell("d-a", 1, 2)),
+    ];
 
     // Then
-    expect(sameId).toBe(true);
-    expect(otherId).toBe(false);
-  });
-
-  it("新しい矢どうしは、距離とエンドで比べる", () => {
-    // Given
-
-    // When
-    const sameEnd = isSamePointer(
-      newShotPointer("d-a", 1),
-      newShotPointer("d-a", 1),
-    );
-    const otherEnd = isSamePointer(
-      newShotPointer("d-a", 1),
-      newShotPointer("d-a", 2),
-    );
-
-    // Then
-    expect(sameEnd).toBe(true);
-    expect(otherEnd).toBe(false);
-  });
-
-  it("記録済みの矢と新しい矢は、同じとみなさない", () => {
-    // Given
-
-    // When
-    const a = shot("s", "d-a", 1);
-    const result = isSamePointer(newShotPointer("d-a", 1), shotPointer(a));
-
-    // Then
-    expect(result).toBe(false);
+    expect(same).toBe(true);
+    expect(others).toEqual([false, false, false]);
   });
 
   it("何も指していないものどうしは同じで、指しているものとは違う", () => {
@@ -320,10 +266,12 @@ describe("isSamePointer", () => {
 
     // When
     const bothNone = isSamePointer(null, null);
-    const noneAndNew = isSamePointer(null, newShotPointer("d-a", 1));
+    const noneAndCell = isSamePointer(null, cell("d-a", 1, 1));
+    const cellAndNone = isSamePointer(cell("d-a", 1, 1), null);
 
     // Then
     expect(bothNone).toBe(true);
-    expect(noneAndNew).toBe(false);
+    expect(noneAndCell).toBe(false);
+    expect(cellAndNone).toBe(false);
   });
 });

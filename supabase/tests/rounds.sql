@@ -115,8 +115,8 @@ values ('77777777-7777-7777-7777-777777777777', '66666666-6666-6666-6666-6666666
 insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
 values ('88888888-8888-8888-8888-888888888888', '77777777-7777-7777-7777-777777777777', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
-insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int)
-values ('88888888-8888-8888-8888-888888888888', 1, '55555555-5555-5555-5555-555555555555', 'X', 10);
+insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
+values ('88888888-8888-8888-8888-888888888888', 1, 1, '55555555-5555-5555-5555-555555555555', 'X', 10);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '66666666-6666-6666-6666-666666666666', true);
@@ -214,35 +214,35 @@ select id as shots_distance_id from public.distances where round_id = :'shots_ro
 
 select results_eq(
   $$select record_shots(jsonb_build_array(jsonb_build_object(
-      'shot_event_id', gen_random_uuid(), 'shot_id', gen_random_uuid(), 'distance_id', '$$ || :'shots_distance_id' || $$'::uuid,
-      'end_number', 1, 'score_str', 'bullseye', 'score_int', -1
+      'shot_event_id', gen_random_uuid(), 'distance_id', '$$ || :'shots_distance_id' || $$'::uuid,
+      'end_number', 1, 'shot_number', 1, 'score_str', 'bullseye', 'score_int', -1
     ))) -> 0 ->> 'reason'$$,
   $$values ('UNFIT'::text)$$,
   '的に無い点数はUNFITで効かず、矢として記録されない'
 );
 
--- 以降の一意制約テストが、1エンド目に矢b0000000-...-0000000000a1がある状態を前提とする。
+-- 以降の一意制約テストが、1エンド目のマス1に矢がある状態を前提とする。
 select record_shots(jsonb_build_array(jsonb_build_object(
-  'shot_event_id', gen_random_uuid(), 'shot_id', 'b0000000-0000-0000-0000-0000000000a1'::uuid, 'distance_id', :'shots_distance_id'::uuid,
-  'end_number', 1, 'score_str', 'X', 'score_int', 10
+  'shot_event_id', gen_random_uuid(), 'distance_id', :'shots_distance_id'::uuid,
+  'end_number', 1, 'shot_number', 1, 'score_str', 'X', 'score_int', 10
 )));
 
--- record_shotsは同じ矢IDへの再記録を更新として扱うため、生の主キー制約（23505）はRLS対象外の接続ロールで直接検証する。
+-- record_shotsは同じマスへの再記録を更新として扱うため、生の主キー制約（23505）はRLS対象外の接続ロールで直接検証する。
 reset role;
 
 select throws_ok(
-  $$insert into public.shots (id, distance_id, end_number, shooter_id, score_str, score_int)
-    values ('b0000000-0000-0000-0000-0000000000a1', '$$ || :'shots_distance_id' || $$', 1, 'b0000000-0000-0000-0000-000000000004', '9', 9)$$,
+  $$insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
+    values ('$$ || :'shots_distance_id' || $$', 1, 1, 'b0000000-0000-0000-0000-000000000004', '9', 9)$$,
   '23505',
   null,
-  '同じ矢IDの重複挿入は主キーで拒否される'
+  '同じマス(距離・エンド・番号)の重複挿入は主キーで拒否される'
 );
 
--- 同じエンドの矢は位置で識別しないため、別の矢IDなら同じエンドに並ぶ。
+-- マスの番号が違えば、同じエンドに同じ点数・同じ射手の矢が並ぶ。
 select lives_ok(
-  $$insert into public.shots (id, distance_id, end_number, shooter_id, score_str, score_int)
-    values ('b0000000-0000-0000-0000-0000000000a2', '$$ || :'shots_distance_id' || $$', 1, 'b0000000-0000-0000-0000-000000000004', 'X', 10)$$,
-  '同じエンドに、同じ点数・同じ射手の別の矢を記録できる'
+  $$insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
+    values ('$$ || :'shots_distance_id' || $$', 1, 2, 'b0000000-0000-0000-0000-000000000004', 'X', 10)$$,
+  '同じエンドの別のマスに、同じ点数・同じ射手の矢を記録できる'
 );
 
 set local role authenticated;
@@ -555,9 +555,8 @@ select results_eq(
 
 select record_shots(jsonb_build_array(jsonb_build_object(
   'shot_event_id', '90000000-0000-0000-0000-000000000015',
-  'shot_id', '90000000-0000-0000-0000-0000000000a1',
   'distance_id', '90000000-0000-0000-0000-000000000013',
-  'end_number', 1, 'score_str', 'X', 'score_int', 10
+  'end_number', 1, 'shot_number', 1, 'score_str', 'X', 'score_int', 10
 )));
 
 select results_eq(
@@ -568,35 +567,34 @@ select results_eq(
 
 select clear_shots(jsonb_build_array(jsonb_build_object(
   'shot_event_id', '90000000-0000-0000-0000-000000000016',
-  'shot_id', '90000000-0000-0000-0000-0000000000a1',
-  'distance_id', '90000000-0000-0000-0000-000000000013'
+  'distance_id', '90000000-0000-0000-0000-000000000013',
+  'end_number', 1, 'shot_number', 1
 )));
 
 select results_eq(
   $$select type, revision from shot_events where event_id = '90000000-0000-0000-0000-000000000016'$$,
   $$values ('CLEARED'::text, 2::bigint)$$,
-  'clear_shotsは同じ矢のrevisionを2に進めてCLEAREDイベントを記録する'
+  'clear_shotsは同じマスのrevisionを2に進めてCLEAREDイベントを記録する'
 );
 
 select results_eq(
   $$select revision, (disabled_at is not null) from shots
-    where id = '90000000-0000-0000-0000-0000000000a1'$$,
+    where distance_id = '90000000-0000-0000-0000-000000000013' and end_number = 1 and shot_number = 1$$,
   $$values (2::bigint, true)$$,
   'clear_shots後の射影(shots)はrevision=2・disabled_at設定済みになる（物理削除ではない）'
 );
 
 select record_shots(jsonb_build_array(jsonb_build_object(
   'shot_event_id', '90000000-0000-0000-0000-000000000017',
-  'shot_id', '90000000-0000-0000-0000-0000000000a1',
   'distance_id', '90000000-0000-0000-0000-000000000013',
-  'end_number', 1, 'score_str', '9', 'score_int', 9
+  'end_number', 1, 'shot_number', 1, 'score_str', '9', 'score_int', 9
 )));
 
 select results_eq(
   $$select revision, disabled_at, score_str from shots
-    where id = '90000000-0000-0000-0000-0000000000a1'$$,
+    where distance_id = '90000000-0000-0000-0000-000000000013' and end_number = 1 and shot_number = 1$$,
   $$values (3::bigint, null::timestamptz, '9'::text)$$,
-  '取消済みの矢への再記録はdisabled_atを解除しrevisionを進める'
+  '取消済みのマスへの再記録はdisabled_atを解除しrevisionを進める'
 );
 
 select disable_round('90000000-0000-0000-0000-000000000018', '90000000-0000-0000-0000-000000000011');
@@ -615,7 +613,7 @@ select results_eq(
 );
 
 select results_eq(
-  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'shot_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000013', 'end_number', 2, 'score_str', 'X', 'score_int', 10))) -> 0 ->> 'reason'$$,
+  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000013', 'end_number', 2, 'shot_number', 1, 'score_str', 'X', 'score_int', 10))) -> 0 ->> 'reason'$$,
   $$values ('DISABLED'::text)$$,
   '削除済みのラウンド配下への矢記録はDISABLEDで効かない'
 );
@@ -647,7 +645,7 @@ select results_eq(
 );
 
 select results_eq(
-  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'shot_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000023', 'end_number', 1, 'score_str', 'X', 'score_int', 10))) -> 0 ->> 'reason'$$,
+  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000023', 'end_number', 1, 'shot_number', 1, 'score_str', 'X', 'score_int', 10))) -> 0 ->> 'reason'$$,
   $$values ('DISABLED'::text)$$,
   '削除済みの距離への矢記録はDISABLEDで効かない'
 );
@@ -659,24 +657,24 @@ select results_eq(
   '削除済みの距離への後続の操作は、削除を維持し、イベントも射影のrevisionも進めない'
 );
 
--- 存在しない矢への取り消しは効かない操作として返し、記録しない。
+-- 行の無いマスの取り消しは効かない操作として返し、記録しない。
 select results_eq(
   $$select (r -> 0 ->> 'reason') || '/' || (r -> 0 ->> 'applied') || '/' || (select count(*) from shot_events where event_id = '90000000-0000-0000-0000-000000000025')
-    from clear_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000025', 'shot_id', '90000000-0000-0000-0000-0000000000a3', 'distance_id', '90000000-0000-0000-0000-000000000028'))) as r$$,
+    from clear_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000025', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 1, 'shot_number', 1))) as r$$,
   $$values ('MISSING/false/0'::text)$$,
-  '存在しない矢への取り消しはMISSINGで効かず、記録されない'
+  '行の無いマスの取り消しはMISSINGで効かず、記録されない'
 );
 
-select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000026', 'shot_id', '90000000-0000-0000-0000-0000000000a2', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'score_str', 'X', 'score_int', 10)));
+select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000026', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'shot_number', 2, 'score_str', 'X', 'score_int', 10)));
 
-select clear_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000029', 'shot_id', '90000000-0000-0000-0000-0000000000a2', 'distance_id', '90000000-0000-0000-0000-000000000028')));
+select clear_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000029', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'shot_number', 2)));
 
-select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-00000000002a', 'shot_id', '90000000-0000-0000-0000-0000000000a2', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'score_str', '9', 'score_int', 9)));
+select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-00000000002a', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'shot_number', 2, 'score_str', '9', 'score_int', 9)));
 
 select results_eq(
-  $$select type, revision, end_number from shot_events where shot_id = '90000000-0000-0000-0000-0000000000a2' order by revision$$,
+  $$select type, revision, end_number from shot_events where distance_id = '90000000-0000-0000-0000-000000000028' and end_number = 6 and shot_number = 2 order by revision$$,
   $$values ('RECORDED'::text, 1::bigint, 6::bigint), ('CLEARED'::text, 2::bigint, 6::bigint), ('RECORDED'::text, 3::bigint, 6::bigint)$$,
-  '記録・取り消し・再記録は矢ごとの順序を保って追記され、取り消しにも行のエンドを写す'
+  '記録・取り消し・再記録はマスごとの順序を保って追記され、取り消しにも行のエンドを写す'
 );
 
 select * from finish();

@@ -45,8 +45,8 @@ export type RoundEntryDeps = {
   hub: Pick<RoundRecordHub, "ready" | "record" | "subscribe">;
   fetching: Pick<RoundFetching, "savedTargetFaces" | "fetchTargetFaces">;
   refresh: Pick<RoundBaseRefreshing, "refreshRound">;
-  // 準備完了の印。overlayは取り直しが要るか、nullは準備完了でない。
-  marks: { set(roundId: string, overlay: boolean | null): void };
+  // 準備完了の印。trueは準備完了、falseは準備完了でない。
+  marks: { set(roundId: string, ready: boolean): void };
   editing: RoundEditing;
   clock: Clock;
   connectivity: Connectivity;
@@ -185,7 +185,7 @@ export function createRoundEntry(
 
   // 準備完了の間だけ、取り直しの対象にする印を付ける。
   function syncReadyMarks(ready: Derivation | null) {
-    marks.set(roundId, ready ? ready.screen.needsRefetch : null);
+    marks.set(roundId, ready !== null);
   }
 
   // offlineの間だけ、通信が戻ったら自動で再取得する。errorは自動で再取得しない。
@@ -324,7 +324,7 @@ export function createRoundEntry(
       stopped = true;
       stopHub?.();
       stopOnline?.();
-      marks.set(roundId, null);
+      marks.set(roundId, false);
     },
   };
 }

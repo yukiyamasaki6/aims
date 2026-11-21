@@ -19,11 +19,10 @@ const unfitResult = {
 
 // 窓口の準備完了の詳細は、テストが与える。窓口の中身は窓口のテストで確かめる。
 function fakeWindow() {
-  const ready = new Map<string, boolean>();
+  const ready = new Set<string>();
   const listeners = new Set<() => void>();
   const roundWindow: Pick<RoundWindow, "readyRounds" | "onReadyChange"> = {
-    readyRounds: () =>
-      [...ready].map(([roundId, overlay]) => ({ roundId, overlay })),
+    readyRounds: () => [...ready].map((roundId) => ({ roundId })),
     onReadyChange: (listener) => {
       listeners.add(listener);
       return () => {
@@ -34,8 +33,8 @@ function fakeWindow() {
   return {
     roundWindow,
     // 準備完了の詳細を設定し、購読者へ知らせる。
-    setReady(roundId: string, overlay: boolean) {
-      ready.set(roundId, overlay);
+    setReady(roundId: string) {
+      ready.add(roundId);
       for (const listener of [...listeners]) listener();
     },
   };
@@ -62,14 +61,6 @@ async function setup() {
   return { hub, store, fake, fetching, control };
 }
 
-// 取り直しの要否の期待値。真の理由だけを指定する。
-function needOf(
-  roundId: string,
-  reasons: { diverged?: boolean; overlay?: boolean },
-) {
-  return { roundId, diverged: false, overlay: false, ...reasons };
-}
-
 // 効かなかった結果の印を、そのラウンドの列に付ける。
 async function markDiverged(
   hub: Awaited<ReturnType<typeof setup>>["hub"],
@@ -81,28 +72,18 @@ async function markDiverged(
 }
 
 describe("理由の導出", () => {
-  it("準備完了の詳細のうち、当たる理由があるものを、ラウンドごとの真偽で返す", async () => {
+  it("準備完了の詳細のうち、効かなかった印があるものだけを返す", async () => {
     // Given
     const { hub, fake, control } = await setup();
-    fake.setReady("r-quiet", false);
+    fake.setReady("r-quiet");
     await markDiverged(hub, "r-diverged");
-    fake.setReady("r-diverged", false);
-    fake.setReady("r-overlay", true);
-    await markDiverged(hub, "r-both");
-    fake.setReady("r-both", true);
+    fake.setReady("r-diverged");
 
     // When
     const { rounds } = control.refreshNeeds();
 
     // Then
-    expect(rounds).toHaveLength(3);
-    expect(rounds).toEqual(
-      expect.arrayContaining([
-        needOf("r-diverged", { diverged: true }),
-        needOf("r-overlay", { overlay: true }),
-        needOf("r-both", { diverged: true, overlay: true }),
-      ]),
-    );
+    expect(rounds).toEqual([{ roundId: "r-diverged", diverged: true }]);
   });
 
   it("準備完了でない詳細は、効かなかった印があっても含めない", async () => {
@@ -119,26 +100,23 @@ describe("理由の導出", () => {
 });
 
 describe("refreshNeeds", () => {
-  it("効かなかった印が外れるとdivergedが、重ねられるようになるとoverlayが偽になる", async () => {
+  it("効かなかった印が外れると、含まれなくなる", async () => {
     // Given
     const { hub, fake, control } = await setup();
     const stream = roundStreamId("r-1");
     await hub.append(stream, roundUpdated({ eventId: "d" }));
     hub.applySendResults(stream, ["d"], [unfitResult]);
-    fake.setReady("r-1", true);
+    fake.setReady("r-1");
     const reasons = () => control.refreshNeeds().rounds;
 
     // When
     const first = reasons();
     hub.clearDiverged(stream);
     const second = reasons();
-    fake.setReady("r-1", false);
-    const third = reasons();
 
     // Then
-    expect(first).toEqual([needOf("r-1", { diverged: true, overlay: true })]);
-    expect(second).toEqual([needOf("r-1", { overlay: true })]);
-    expect(third).toEqual([]);
+    expect(first).toEqual([{ roundId: "r-1", diverged: true }]);
+    expect(second).toEqual([]);
   });
 
   describe("取り直しの開始", () => {
@@ -147,7 +125,7 @@ describe("refreshNeeds", () => {
       const stream = roundStreamId("r-1");
       await tab.hub.append(stream, roundUpdated({ eventId: "d" }));
       tab.hub.applySendResults(stream, ["d"], [unfitResult]);
-      tab.fake.setReady("r-1", false);
+      tab.fake.setReady("r-1");
       const detailFetch = Promise.withResolvers<{
         status: "error";
         reason: "failed";
@@ -167,7 +145,7 @@ describe("refreshNeeds", () => {
       const during = control.refreshNeeds().rounds;
 
       // Then
-      expect(before).toEqual([needOf("r-1", { diverged: true })]);
+      expect(before).toEqual([{ roundId: "r-1", diverged: true }]);
       expect(during).toEqual([]);
     });
 
@@ -191,7 +169,7 @@ describe("refreshNeeds", () => {
     control.onRefreshNeeds(listener);
 
     // When
-    fake.setReady("r-1", false);
+    fake.setReady("r-1");
     await hub.append(STREAM, roundUpdated());
 
     // Then

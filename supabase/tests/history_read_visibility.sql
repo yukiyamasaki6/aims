@@ -22,13 +22,17 @@ insert into hv_id (alias, id) values
   ('D1a', 'd0000000-0000-0000-0000-000000000201'),
   ('D1b', 'd0000000-0000-0000-0000-000000000202'),
   ('D3', 'd0000000-0000-0000-0000-000000000203'),
-  ('D4', 'd0000000-0000-0000-0000-000000000204'),
-  ('S1a', 'd0000000-0000-0000-0000-000000000301'),
-  ('S1b', 'd0000000-0000-0000-0000-000000000302'),
-  ('S3', 'd0000000-0000-0000-0000-000000000303'),
-  ('S4', 'd0000000-0000-0000-0000-000000000304');
+  ('D4', 'd0000000-0000-0000-0000-000000000204');
 
-grant select on hv_id to authenticated;
+-- 矢のマスの別名。
+create temp table hv_cell (alias text primary key, distance_id uuid not null, end_number bigint not null, shot_number bigint not null);
+insert into hv_cell (alias, distance_id, end_number, shot_number) values
+  ('S1a', 'd0000000-0000-0000-0000-000000000201', 1, 1),
+  ('S1b', 'd0000000-0000-0000-0000-000000000201', 1, 2),
+  ('S3', 'd0000000-0000-0000-0000-000000000203', 1, 1),
+  ('S4', 'd0000000-0000-0000-0000-000000000204', 1, 1);
+
+grant select on hv_id, hv_cell to authenticated;
 
 create function pg_temp.id(p_alias text) returns uuid
 language sql stable
@@ -41,9 +45,14 @@ as $$
 declare
   v_result text;
 begin
+  -- 矢は、IDでなくマスで指すため、マスの別名の表と結ぶ。
   execute format(
-    'select coalesce(string_agg(coalesce(i.alias, ''?''), '','' order by coalesce(i.alias, ''?'')), '''') from public.%I t left join hv_id i on i.id = t.id',
-    p_table
+    'select coalesce(string_agg(coalesce(i.alias, ''?''), '','' order by coalesce(i.alias, ''?'')), '''') from public.%I t left join %s',
+    p_table,
+    case p_table
+      when 'shots' then 'hv_cell i on (i.distance_id, i.end_number, i.shot_number) = (t.distance_id, t.end_number, t.shot_number)'
+      else 'hv_id i on i.id = t.id'
+    end
   ) into v_result;
   return v_result;
 end;
@@ -81,11 +90,15 @@ insert into public.distances (id, round_id, position_key, distance, total_ends, 
   (pg_temp.id('D3'), pg_temp.id('R3'), '1', 70, 12, 3, 'a1000000-0000-0000-0000-000000000001', '2026-10-04 00:00+00'),
   (pg_temp.id('D4'), pg_temp.id('R4'), '1', 70, 12, 3, 'a1000000-0000-0000-0000-000000000001', null);
 
-insert into public.shots (id, distance_id, end_number, shooter_id, score_str, score_int, disabled_at) values
-  (pg_temp.id('S1a'), pg_temp.id('D1a'), 1, pg_temp.id('E'), 'X', 10, null),
-  (pg_temp.id('S1b'), pg_temp.id('D1a'), 1, pg_temp.id('E'), '9', 9, null),
-  (pg_temp.id('S3'), pg_temp.id('D3'), 1, pg_temp.id('E'), '8', 8, '2026-10-04 00:00+00'),
-  (pg_temp.id('S4'), pg_temp.id('D4'), 1, pg_temp.id('Y'), 'X', 10, null);
+insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int, disabled_at)
+select c.distance_id, c.end_number, c.shot_number, pg_temp.id(v.shooter), v.score_str, v.score_int, v.disabled_at
+from (values
+  ('S1a', 'E', 'X', 10, null::timestamptz),
+  ('S1b', 'E', '9', 9, null),
+  ('S3', 'E', '8', 8, '2026-10-04 00:00+00'),
+  ('S4', 'Y', 'X', 10, null)
+) as v (cell, shooter, score_str, score_int, disabled_at)
+join hv_cell c on c.alias = v.cell;
 
 -- ============================================================
 -- 所属するラウンド（編集者E）
@@ -154,7 +167,7 @@ select is(
 
 select is(
   (select count(*) from public.distances where id = pg_temp.id('D4'))::text
-    || ',' || (select count(*) from public.shots where id = pg_temp.id('S4'))::text
+    || ',' || (select count(*) from public.shots where distance_id = pg_temp.id('D4') and end_number = 1 and shot_number = 1)::text
     || ',' || (select count(*) from public.shots where distance_id = pg_temp.id('D4'))::text,
   '0,0,0',
   '他の利用者のラウンドの距離と矢は、IDを指定しても見えない（他のラウンドに属していても）'

@@ -53,6 +53,7 @@ export async function addRound(
       targetFaceId?: string;
     }[];
     // 矢は1本ずつ記録する。distanceIndexとendNumberを省くと、最初の距離の1エンドに置く。
+    // マスの番号は、同じ距離・エンドの中で書いた順に1から振る。
     shots?: {
       scoreStr: string;
       scoreInt: number;
@@ -97,11 +98,7 @@ export async function createRoundFixture<T>(
                 arrowsPerEnd: 3,
               },
             ],
-            shots: options.shots?.map((shot) => ({
-              distanceIndex: 0,
-              endNumber: 1,
-              ...shot,
-            })),
+            shots: numberShots(options.shots),
           });
           if (options.completed)
             await updateRound(supabase, roundId, { status: "completed" });
@@ -111,5 +108,18 @@ export async function createRoundFixture<T>(
     } finally {
       await supabase.auth.stopAutoRefresh();
     }
+  });
+}
+
+function numberShots(
+  shots: NonNullable<Parameters<typeof addRound>[3]>["shots"],
+) {
+  const counts = new Map<string, number>();
+  return shots?.map((shot) => {
+    const cell = { distanceIndex: 0, endNumber: 1, ...shot };
+    const key = `${cell.distanceIndex}-${cell.endNumber}`;
+    const shotNumber = (counts.get(key) ?? 0) + 1;
+    counts.set(key, shotNumber);
+    return { ...cell, shotNumber };
   });
 }

@@ -79,20 +79,20 @@ describe("reflectsBase", () => {
     expect(above).toBe(false);
   });
 
-  it("矢は矢のIDごと、距離は距離ごとのrevisionで判定する。ベースに行が無い対象は0として比べる", () => {
+  it("矢はマスごと、距離は距離ごとのrevisionで判定する。ベースに行が無い対象は0として比べる", () => {
     // Given
     const base = record({
       revisions: {
         distances: { "d-a": 3 },
-        shots: { "shot-2": 2 },
+        shots: { "d-a:1:2": 2 },
       },
     });
     const recorded = (n: number): SyncOperation => ({
       type: "shot.recorded",
       eventId: `s${n}`,
-      shotId: `shot-${n}`,
       distanceId: "d-a",
       endNumber: 1,
+      shotNumber: n,
       scoreStr: "9",
       scoreInt: 9,
     });
@@ -119,14 +119,14 @@ describe("reflectsBase", () => {
     expect(distanceNotInBase).toBe(false);
   });
 
-  it("確定した取り消しは、取得にその矢が無ければ反映済みでない", () => {
+  it("確定した取り消しは、取得にそのマスの矢が無ければ反映済みでない", () => {
     // Given
     const cleared: SyncOperation = {
       type: "shot.cleared",
       eventId: "c",
-      shotId: "shot-1",
       distanceId: "d-a",
       endNumber: 1,
+      shotNumber: 1,
     };
 
     // When

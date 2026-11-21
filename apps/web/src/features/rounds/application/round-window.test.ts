@@ -877,13 +877,13 @@ describe("append / 画面の導出", () => {
 
     // Then
     expect(beforeLoaded).toEqual([]);
-    expect(whileReady).toEqual([{ roundId: ROUND, overlay: false }]);
+    expect(whileReady).toEqual([{ roundId: ROUND }]);
     expect(callsWhileReady).toBe(1);
     expect(tab.roundWindow.readyRounds()).toEqual([]);
     expect(changed).toHaveBeenCalledTimes(2);
   });
 
-  it("確定済みの操作をベースに重ねられないとき、overlayが真になり、解消すると偽に戻って通知する", async () => {
+  it("確定済みの操作は、構成に収まらなくても常にベースへ重なり、準備完了の増減を起こさない", async () => {
     // Given
     const tab = await detailTab();
     const distance = {
@@ -896,12 +896,11 @@ describe("append / 画面の導出", () => {
       is_marked: true,
     };
     const stored = {
-      id: "s-0",
       distance_id: "d-1",
       end_number: 1,
       score_str: "10",
       score_int: 10,
-      shot_number: null,
+      shot_number: 1,
     };
     await tab.hub.commit(
       STREAM,
@@ -913,19 +912,25 @@ describe("append / 画面の導出", () => {
     await flush();
     const changed = vi.fn();
     tab.roundWindow.onReadyChange(changed);
-    const op = shotRecorded({ shotId: "s-1", eventId: "e-s1" });
+    const op = shotRecorded({ shotNumber: 2, eventId: "e-s2" });
     await tab.hub.append(STREAM, op);
 
     // When
-    tab.hub.applySendResults(STREAM, ["e-s1"], [ackedOnce]);
-    const overlaid = tab.roundWindow.readyRounds();
-    await tab.hub.discard(STREAM, ["e-s1"]);
+    tab.hub.applySendResults(STREAM, ["e-s2"], [ackedOnce]);
 
     // Then
-    expect(overlaid).toEqual([{ roundId: ROUND, overlay: true }]);
-    expect(tab.roundWindow.readyRounds()).toEqual([
-      { roundId: ROUND, overlay: false },
-    ]);
-    expect(changed).toHaveBeenCalledTimes(2);
+    expect(tab.roundWindow.view(ROUND)).toMatchObject({
+      status: "ok",
+      data: {
+        state: {
+          shots: [
+            expect.objectContaining({ shot_number: 1 }),
+            expect.objectContaining({ shot_number: 2 }),
+          ],
+        },
+      },
+    });
+    expect(tab.roundWindow.readyRounds()).toEqual([{ roundId: ROUND }]);
+    expect(changed).not.toHaveBeenCalled();
   });
 });

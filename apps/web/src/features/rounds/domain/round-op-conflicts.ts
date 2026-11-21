@@ -29,15 +29,15 @@ function isRoundOperation(operation: SyncOperation): boolean {
   return operation.type.startsWith("round.");
 }
 
-// 同じ矢か、同じエンド。エンドの射数/エンドの上限と射順の重なりの判定が、同じエンドの矢の確定の順に依存する。
-function isSameShotOrEnd(
+// 同じマス。同じマスへの記録・取り消しは、確定の順の後勝ちで結果が変わる。同じエンドの別のマスは、判定が互いに依存しないため衝突しない。
+function isSameCellOperation(
   previous: ShotOperation,
   next: ShotOperation,
 ): boolean {
   return (
-    previous.shotId === next.shotId ||
-    (previous.distanceId === next.distanceId &&
-      previous.endNumber === next.endNumber)
+    previous.distanceId === next.distanceId &&
+    previous.endNumber === next.endNumber &&
+    previous.shotNumber === next.shotNumber
   );
 }
 
@@ -71,7 +71,7 @@ export function conflicts(
     return true;
   }
   if (isShotOperation(previous) && isShotOperation(next)) {
-    return isSameShotOrEnd(previous, next);
+    return isSameCellOperation(previous, next);
   }
   return false;
 }
