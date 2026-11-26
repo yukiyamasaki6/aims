@@ -11,11 +11,11 @@
 
     "lint": "biome check . && pnpm --filter web lint:text && pnpm --filter web lint:messages",
     "lint:fix": "biome check --write .",
-    "typecheck": "pnpm --filter web typecheck",
-    "knip": "pnpm --filter web knip",
+    "typecheck": "pnpm -r typecheck",
+    "knip": "pnpm -r knip",
     "lint:sql": "squawk supabase/migrations/*.sql",
 
-    "test": "pnpm --filter web test",
+    "test": "pnpm -r test",
     "test:db": "supabase test db",
     "test:e2e": "pnpm --filter web test:e2e",
 

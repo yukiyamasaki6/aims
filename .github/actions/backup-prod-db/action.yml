@@ -1,0 +1,129 @@
+name: Backup Production Database
+description: >-
+  本番のDBを取得し、ageの公開鍵で暗号化してR2のbackups/へ置き、置いたものと保持期間を確かめる(docs/backup.md)。
+  呼び出す前に、リポジトリのcheckout、Supabase CLIの準備、本番へのlinkを済ませておく。
+  設定が1つでも無いときは、取得せずに失敗する。
+
+inputs:
+  kind:
+    description: 取得の種類(scheduled または pre-migration)
+    required: true
+  r2-endpoint:
+    description: R2のS3互換のエンドポイント(https://<アカウントID>.r2.cloudflarestorage.com)
+    required: true
+  r2-bucket:
+    description: R2のバケット名
+    required: true
+  r2-access-key-id:
+    description: このバケットだけのObject Read & WriteのトークンのアクセスキーID
+    required: true
+  r2-secret-access-key:
+    description: 同じトークンのシークレットアクセスキー
+    required: true
+  age-recipient:
+    description: 運営者のageの公開鍵(age1...)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Check backup settings
+      shell: bash
+      env:
+        KIND: ${{ inputs.kind }}
+        R2_ENDPOINT: ${{ inputs.r2-endpoint }}
+        R2_BUCKET: ${{ inputs.r2-bucket }}
+        R2_ACCESS_KEY_ID: ${{ inputs.r2-access-key-id }}
+        R2_SECRET_ACCESS_KEY: ${{ inputs.r2-secret-access-key }}
+        AGE_RECIPIENT: ${{ inputs.age-recipient }}
+      run: |
+        missing=()
+        for name in R2_ENDPOINT R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY AGE_RECIPIENT; do
+          [[ -n ${!name} ]] || missing+=("$name")
+        done
+        if ((${#missing[@]} > 0)); then
+          echo "::error::バックアップの設定がありません: ${missing[*]}(docs/backup.mdの「設定の一覧」)"
+          exit 1
+        fi
+        if [[ $KIND != scheduled && $KIND != pre-migration ]]; then
+          echo "::error::取得の種類が不正です: $KIND"
+          exit 1
+        fi
+        if [[ ! $AGE_RECIPIENT =~ ^age1[0-9a-z]+$ ]]; then
+          echo "::error::ageの公開鍵の形ではありません"
+          exit 1
+        fi
+
+    - name: Install age
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq age >/dev/null
+        age --version
+        aws --version
+
+    - name: Dump, encrypt and store
+      shell: bash
+      env:
+        BACKUP_KIND: ${{ inputs.kind }}
+        BACKUP_COMMIT: ${{ github.sha }}
+        R2_ENDPOINT: ${{ inputs.r2-endpoint }}
+        R2_BUCKET: ${{ inputs.r2-bucket }}
+        AGE_RECIPIENT: ${{ inputs.age-recipient }}
+        AWS_ACCESS_KEY_ID: ${{ inputs.r2-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.r2-secret-access-key }}
+        AWS_DEFAULT_REGION: auto
+        # R2が対応しない既定のチェックサムを、AWS CLIに付けさせないため。
+        AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+        AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+      run: |
+        set -euo pipefail
+        umask 077
+        # 平文はランナーの一時領域にだけ置き、終わったら消す。ログ・成果物・キャッシュには出さない。
+        work=$(mktemp -d "$RUNNER_TEMP/backup.XXXXXX")
+        trap 'rm -rf "$work"' EXIT
+
+        scripts/backup/dump-db.sh "$work/dump" --remote
+        name="$(date -u +%Y%m%dT%H%M%SZ)-$BACKUP_KIND.tar.gz.age"
+        tar -C "$work/dump" -czf - . | age -r "$AGE_RECIPIENT" -o "$work/$name"
+        rm -rf "$work/dump"
+
+        key="backups/$name"
+        aws s3api put-object --endpoint-url "$R2_ENDPOINT" --bucket "$R2_BUCKET" \
+          --key "$key" --body "$work/$name" --output text --query ETag >/dev/null
+
+        expected=$(stat -c %s "$work/$name")
+        actual=$(aws s3api head-object --endpoint-url "$R2_ENDPOINT" --bucket "$R2_BUCKET" \
+          --key "$key" --output text --query ContentLength)
+        if [[ $actual != "$expected" ]]; then
+          echo "::error::置いたバックアップの大きさが一致しません: $key 手元 $expected R2 $actual"
+          exit 1
+        fi
+        echo "保管しました: $key($expected バイト)"
+
+    - name: Check retention
+      shell: bash
+      env:
+        R2_ENDPOINT: ${{ inputs.r2-endpoint }}
+        R2_BUCKET: ${{ inputs.r2-bucket }}
+        AWS_ACCESS_KEY_ID: ${{ inputs.r2-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.r2-secret-access-key }}
+        AWS_DEFAULT_REGION: auto
+        AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+        AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+      run: |
+        set -euo pipefail
+        # ライフサイクル(backups/は30日、deletions/は31日)が消し損ねたものを、通常の遅れ(24時間以内)を越えたら失敗にする。
+        failed=0
+        for rule in "backups/ 31" "deletions/ 32"; do
+          read -r prefix days <<<"$rule"
+          cutoff=$(date -u -d "$days days ago" +%Y-%m-%dT%H:%M:%S)
+          expired=$(aws s3api list-objects-v2 --endpoint-url "$R2_ENDPOINT" --bucket "$R2_BUCKET" \
+            --prefix "$prefix" --output json --query "Contents[].[Key, LastModified]" |
+            jq -r --arg cutoff "$cutoff" '(. // [])[] | select(.[1][0:19] < $cutoff) | .[0]')
+          if [[ -n $expired ]]; then
+            echo "::error::保持期間(${days}日)を過ぎたものが残っています($prefix): $(wc -l <<<"$expired") 件"
+            failed=1
+          fi
+        done
+        exit "$failed"

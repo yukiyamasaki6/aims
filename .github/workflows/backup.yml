@@ -1,0 +1,64 @@
+name: Backup
+
+on:
+  schedule:
+    # 毎日 03:36(JST)。毎時0分の混雑を避ける。
+    - cron: "36 18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  # cd.ymlの適用前の取得とは分ける(定期の取得が適用を待たせないため)
+  group: backup-prod-db
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup-prod-db:
+    name: Backup Production Database
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      HEALTHCHECK_PING_URL: ${{ secrets.BACKUP_HEALTHCHECK_PING_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 3.1.0
+
+      - name: Link to Production Project
+        run: supabase link --project-ref ${{ vars.SUPABASE_PROD_PROJECT_ID }}
+
+      - name: Backup Production Database
+        uses: ./.github/actions/backup-prod-db
+        with:
+          kind: scheduled
+          r2-endpoint: ${{ vars.BACKUP_R2_ENDPOINT }}
+          r2-bucket: ${{ vars.BACKUP_R2_BUCKET }}
+          r2-access-key-id: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY }}
+          age-recipient: ${{ vars.BACKUP_AGE_RECIPIENT }}
+
+      # 成功と失敗はこのワークフローだけが知らせる。Healthchecks.ioは失敗の知らせと、成功の知らせが来ないことでメールする。
+      - name: Report success to Healthchecks.io
+        if: success()
+        run: |
+          if [[ -z $HEALTHCHECK_PING_URL ]]; then
+            echo "::error::BACKUP_HEALTHCHECK_PING_URLがありません(docs/backup.mdの「設定の一覧」)"
+            exit 1
+          fi
+          curl -fsS -m 10 --retry 5 -o /dev/null "$HEALTHCHECK_PING_URL"
+
+      - name: Report failure to Healthchecks.io
+        if: failure()
+        run: |
+          if [[ -z $HEALTHCHECK_PING_URL ]]; then
+            echo "::error::BACKUP_HEALTHCHECK_PING_URLがありません"
+            exit 1
+          fi
+          curl -fsS -m 10 --retry 5 -o /dev/null "$HEALTHCHECK_PING_URL/fail"

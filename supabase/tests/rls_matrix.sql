@@ -543,6 +543,7 @@ where p.pronamespace = 'public'::regnamespace;
 -- 期待値の方針:
 --   RPC、アカウント削除（delete_account）、履歴の取得（rounds_list、distances_list）と、それが読むラウンドの条件の関数（history_rounds）、SELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
 --   distance_config_over_limit: SECURITY INVOKERのsave_round_as_presetが呼ぶ純関数のため、authenticatedだけtrue。anonはfalse。
+--   purge_account: 復元の手順（docs/backup.md）だけが所有者のpostgresで呼ぶ内部関数のため、どちらもfalse。
 --   is_round_editor、shot_fits: RPC（SECURITY DEFINER）の内部だけが呼ぶため、どちらもfalse。
 --   ensure_email_identity: authenticatedだけtrue。anonはfalse（メールの手段の作成は呼び出した本人だけ）。
 --   トリガー関数（handle_new_user, set_updated_at, keep_email_identity）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
@@ -582,6 +583,8 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.is_round_member(uuid)',                                                    'authenticated', true),
   ('public.keep_email_identity()',                                                    'anon',          false),
   ('public.keep_email_identity()',                                                    'authenticated', false),
+  ('public.purge_account(uuid)',                                                        'anon',          false),
+  ('public.purge_account(uuid)',                                                        'authenticated', false),
   ('public.record_shots(jsonb)',                                                      'anon',          false),
   ('public.record_shots(jsonb)',                                                      'authenticated', true),
   ('public.rounds_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb)', 'anon',          false),
