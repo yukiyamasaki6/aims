@@ -12,7 +12,7 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| 何を | 本番のDBのデータ(`auth`を含む)、スキーマ、migration履歴、取得の記録(時刻、種類、commit、表ごとの行数) |
+| 何を | 本番のDBのデータ(アプリの`public`と、サインインに要る`auth`。Storageなどは対象外)、スキーマ、migration履歴、取得の記録(時刻、種類、commit、表ごとの行数) |
 | いつ | 毎日(`.github/workflows/backup.yml`)と、migrationの適用の直前(`cd.yml`。取れなければ適用しない) |
 | どこへ | Cloudflare R2の非公開のバケット`aims-backup`の`backups/<UTC時刻>-<scheduled\|pre-migration>.tar.gz.age` |
 | 暗号化 | GitHub Actionsの中で`age`の公開鍵で暗号化する。秘密鍵は運営者の手元の2か所だけに置き、失うと全てのバックアップを復元できない |

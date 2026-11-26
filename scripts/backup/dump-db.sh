@@ -10,7 +10,8 @@
 #   SUPABASE_CLI   Supabase CLIのコマンド。既定はPATHのsupabase、無ければリポジトリのnode_modules/.bin/supabase
 #
 # 出力:
-#   data.sql        データ(--data-only --use-copy)。authを含む
+#   data.sql        データ(--data-only --use-copy)。アプリのpublicと、サインインに要るauthだけ。
+#                   storageなどSupabaseが管理するスキーマは対象外(Storageは使わず、復元先の接続のロールは書き込めない)
 #   schema.sql      スキーマ(照合用。復元はmigrationで作る)
 #   migrations.sql  migration履歴(supabase_migrations)
 #   manifest.json   取得の記録(取得時刻、種類、commit、migrationの版、表ごとの行数)
@@ -59,7 +60,7 @@ cd "$repo_root"
 
 # データの取得の前後でmigration履歴を取り、違えば失敗にする。取得の間に適用されたmigrationと、データの版がずれないため。
 "$supabase_cli" db dump "${target[@]}" --data-only --use-copy --schema supabase_migrations -f "$out/migrations.sql"
-"$supabase_cli" db dump "${target[@]}" --data-only --use-copy -f "$out/data.sql"
+"$supabase_cli" db dump "${target[@]}" --data-only --use-copy --schema public,auth -f "$out/data.sql"
 "$supabase_cli" db dump "${target[@]}" -f "$out/schema.sql"
 "$supabase_cli" db dump "${target[@]}" --data-only --use-copy --schema supabase_migrations -f "$out/migrations-after.sql"
 if [[ $(migration_versions "$out/migrations.sql") != $(migration_versions "$out/migrations-after.sql") ]]; then
