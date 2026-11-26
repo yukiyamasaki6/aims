@@ -53,3 +53,8 @@ insert into auth.identities (
   now()
 )
 on conflict (provider_id, provider) do nothing;
+
+-- アカウント削除の記録(docs/backup.md)を、ローカル・CI・プレビューでは送らない。
+-- 記録先の設定が無いと削除は拒否されるため、'disabled'を置く。本番のVaultには記録先(Workerの宛先と鍵)を置く。
+select vault.create_secret('disabled', 'account_deletion_log_endpoint')
+where not exists (select 1 from vault.secrets where name = 'account_deletion_log_endpoint');

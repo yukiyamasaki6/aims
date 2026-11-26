@@ -38,6 +38,9 @@ supabase/.branches/
 # Vercel
 .vercel
 
+# Cloudflare Workers(wrangler)
+.wrangler/
+
 # Logs
 logs
 *.log

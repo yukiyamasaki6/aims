@@ -1,0 +1,13 @@
+# 削除の記録のWorker(docs/backup.md)。配備は `npx wrangler@4 deploy`、鍵は `npx wrangler@4 secret put authKey` で行う。名前は docs/backup.md の「設定の一覧」。
+name = "aims-account-deletion-log"
+main = "src/index.ts"
+compatibility_date = "2025-11-01"
+workers_dev = true
+preview_urls = false
+
+# バックアップと同じR2のバケット。名前はGitHub VariablesのBACKUP_R2_BUCKETと同じにする。
+[[r2_buckets]]
+binding = "bucket"
+bucket_name = "aims-backup"
+
+# 鍵は `wrangler secret put authKey` で登録し、このファイルに書かない。

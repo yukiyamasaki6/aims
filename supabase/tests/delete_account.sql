@@ -3,12 +3,13 @@
 --   - 削除: 他に編集者がいないラウンドは全ての状態で消え、利用者のプロフィール・参加・個人のプリセット・認証の行も消える
 --   - 匿名化: 他の編集者が残るラウンドの矢・履歴は残り、利用者を指す列だけが「削除済みの利用者」に置き換わる
 --   - 再登録と旧トークン、原子性、関数の属性
+--   - 削除の記録(docs/backup.md): 記録先の設定が無い・記録を送れないときの取り消しと、復元で使うpurge_account
 -- 権限(anonとauthenticatedのEXECUTE)は rls_matrix.sql の関数EXECUTE表が固定する。
 -- ラウンドの形は実際のデータに合わせ、屋外の12エンド×3射の距離を1つ持つ。
 
 begin;
 
-select plan(34);
+select plan(49);
 
 -- ============================================================
 -- fixture
@@ -615,6 +616,224 @@ select is(
   (select count(*) from public.preset_rounds where name = '旧トークンのプリセット'),
   0::bigint,
   '旧IDのJWTの書き込みで、行は増えない'
+);
+
+-- ============================================================
+-- A6 削除の記録(docs/backup.md)と、復元で使う内部関数purge_account
+-- ============================================================
+
+-- P: 自分だけのラウンドと、他の編集者Bが残るラウンドを持つ。復元の手順5と同じ入力(削除の後の状態へ戻す利用者)に使う。
+select pg_temp.mk_user('P', 'pat@example.test', 'Pat Archer');
+select pg_temp.mk_round('P1', 'P');
+select pg_temp.mk_shot('P1', 1, 'P', 'P');
+select pg_temp.mk_round('P2', 'B', 'completed');
+select pg_temp.join_round('P2', 'P', 'editor');
+select pg_temp.mk_shot('P2', 1, 'P', 'P');
+select pg_temp.mk_shot('P2', 2, 'B', 'P');
+select pg_temp.mk_edit('P2', 'P');
+select pg_temp.mk_preset('Pp', 'P');
+select pg_temp.mk_auth_rows('P');
+
+-- 成功したときは'ok'、失敗したときはその文言を返す。
+create function pg_temp.call_message(p_uid uuid) returns text
+language plpgsql
+as $$
+declare
+  v_result text;
+begin
+  perform set_config('request.jwt.claims', (jsonb_build_object('sub', p_uid, 'role', 'authenticated') || pg_temp.fresh())::text, true);
+  set local role authenticated;
+  begin
+    perform public.delete_account(p_uid);
+    v_result := 'ok';
+  exception when others then
+    v_result := sqlerrm;
+  end;
+  reset role;
+  return v_result;
+end;
+$$;
+
+-- 記録先(Vault)を、指定した値に置き換える。p_endpointまたはp_keyがnullなら、その秘密を置かない。
+create function pg_temp.set_log_target(p_endpoint text, p_key text) returns void
+language plpgsql
+as $$
+begin
+  delete from vault.secrets where name in ('account_deletion_log_endpoint', 'account_deletion_log_key');
+  if p_endpoint is not null then
+    perform vault.create_secret(p_endpoint, 'account_deletion_log_endpoint');
+  end if;
+  if p_key is not null then
+    perform vault.create_secret(p_key, 'account_deletion_log_key');
+  end if;
+end;
+$$;
+
+-- snapshot()から、更新日時(更新のたびに現在時刻になり、実行ごとに異なる)を除いた指紋。
+create function pg_temp.snapshot_without_updated_at() returns jsonb
+language plpgsql stable
+as $$
+declare
+  v_table text;
+  v_result jsonb := '{}';
+  v_hash text;
+begin
+  foreach v_table in array array[
+    'auth.users', 'auth.sessions', 'auth.refresh_tokens', 'auth.identities',
+    'public.users', 'public.rounds', 'public.round_users', 'public.distances', 'public.shots',
+    'public.shot_events', 'public.distance_events', 'public.round_events', 'public.preset_rounds', 'public.preset_distances'
+  ] loop
+    execute format('select md5(coalesce(jsonb_agg(to_jsonb(t) - ''updated_at'' order by (to_jsonb(t) - ''updated_at'')::text), ''[]'')::text) from %s t', v_table) into v_hash;
+    v_result := v_result || jsonb_build_object(v_table, v_hash);
+  end loop;
+  return v_result;
+end;
+$$;
+
+-- 関数を実行した後の全記録の指紋(更新日時を除く)を返し、実行は取り消す。
+create function pg_temp.snapshot_after(p_kind text, p_uid uuid) returns jsonb
+language plpgsql
+as $$
+declare
+  v_snapshot jsonb;
+begin
+  begin
+    if p_kind = 'delete' then
+      if pg_temp.call_as(p_uid, pg_temp.fresh()) <> 'ok' then
+        raise exception 'delete_account failed';
+      end if;
+    else
+      perform public.purge_account(p_uid);
+    end if;
+    v_snapshot := pg_temp.snapshot_without_updated_at();
+    raise exception 'rollback' using errcode = 'P0099';
+  exception when sqlstate 'P0099' then
+    null;
+  end;
+  return v_snapshot;
+end;
+$$;
+
+-- 復元の手順5(purge_account)は、認可もWorkerへの記録も行わず、同じ利用者にdelete_accountが成功した後と同じ状態にする。
+select is(
+  pg_temp.snapshot_after('purge', pg_temp.uid('P')),
+  pg_temp.snapshot_after('delete', pg_temp.uid('P')),
+  '利用者が自分だけのラウンドと他の編集者が残るラウンドを持つとき、purge_accountの後の全記録は、delete_accountの成功後と同一である'
+);
+
+create temp table da_before_missing as select pg_temp.snapshot() as snap;
+
+select lives_ok(
+  format('select public.purge_account(%L::uuid)', pg_temp.uid('nobody')),
+  '居ない利用者へのpurge_accountは、例外にならず成功する'
+);
+
+select is(
+  pg_temp.snapshot(),
+  (select snap from da_before_missing),
+  '居ない利用者へのpurge_accountは、何も変えない'
+);
+
+select throws_ok(
+  format('select public.purge_account(%L::uuid)', pg_temp.deleted_user()),
+  'P0001',
+  'account_purge_forbidden',
+  '匿名化の置き先(削除済みの利用者)へのpurge_accountは拒否される'
+);
+
+select throws_ok(
+  'select public.purge_account(null)',
+  'P0001',
+  'account_purge_forbidden',
+  '利用者IDがnullのpurge_accountは拒否される'
+);
+
+select lives_ok(
+  format('select public.purge_account(%L::uuid)', pg_temp.uid('P')),
+  '居る利用者へのpurge_accountは、利用者の認証がなくても成功する'
+);
+
+select results_eq(
+  $$select (select count(*) from auth.users where id = pg_temp.uid('P')),
+         (select count(*) from public.rounds where id = pg_temp.uid('P1')),
+         (select count(*) from public.rounds where id = pg_temp.uid('P2')),
+         (select count(*) from public.shots where distance_id = pg_temp.uid('P2.d') and shooter_id = pg_temp.deleted_user()),
+         pg_temp.leftover_refs(pg_temp.uid('P'))$$,
+  $$values (0::bigint, 0::bigint, 1::bigint, 1::bigint, 0::bigint)$$,
+  'purge_accountの後は、利用者と自分だけのラウンドが消え、他の編集者が残るラウンドは残って矢の射手が削除済みの利用者になり、利用者を指す行が無い'
+);
+
+create temp table da_before_twice as select pg_temp.snapshot() as snap;
+select public.purge_account(pg_temp.uid('P'));
+
+select is(
+  pg_temp.snapshot(),
+  (select snap from da_before_twice),
+  'purge_accountを同じ利用者に再び実行しても、状態は変わらない(復元の手順を繰り返せる)'
+);
+
+-- 記録先の設定が無い、または記録を送れないとき、削除は全体が取り消される。
+select pg_temp.mk_user('L');
+select pg_temp.mk_round('L1', 'L');
+select pg_temp.mk_shot('L1', 1, 'L', 'L');
+select pg_temp.mk_auth_rows('L');
+
+create temp table da_log_before as select pg_temp.snapshot() as snap;
+
+select pg_temp.set_log_target(null, null);
+create temp table da_log_no_endpoint as select pg_temp.call_message(pg_temp.uid('L')) as r;
+select pg_temp.set_log_target('http://127.0.0.1:1/', null);
+create temp table da_log_no_key as select pg_temp.call_message(pg_temp.uid('L')) as r;
+-- 127.0.0.1:1は接続を拒否し、5432はHTTPでない応答を返す。どちらもWorkerに届かない場合の再現である。
+select pg_temp.set_log_target('http://127.0.0.1:1/', 'test-key');
+create temp table da_log_refused as select pg_temp.call_message(pg_temp.uid('L')) as r;
+select pg_temp.set_log_target('http://127.0.0.1:5432/', 'test-key');
+create temp table da_log_bad_reply as select pg_temp.call_message(pg_temp.uid('L')) as r;
+select pg_temp.set_log_target('disabled', null);
+
+select results_eq(
+  $$select (select r from da_log_no_endpoint), (select r from da_log_no_key)$$,
+  $$values ('account_deletion_log_unconfigured'::text, 'account_deletion_log_unconfigured'::text)$$,
+  '記録先の宛先または鍵の設定が無いとき、削除は設定が無いという例外で拒否される'
+);
+
+select ok(
+  (select r from da_log_refused) not in ('ok', 'account_deletion_forbidden', 'otp_confirmation_required')
+    and (select r from da_log_bad_reply) not in ('ok', 'account_deletion_forbidden', 'otp_confirmation_required'),
+  '記録先に接続できない、またはHTTPの応答が得られないとき、削除は記録の失敗として例外になる'
+);
+
+select is(
+  pg_temp.snapshot(),
+  (select snap from da_log_before),
+  '記録の設定が無い・記録を送れないときに拒否された削除は、削除も匿名化も残さない'
+);
+
+select is(
+  pg_temp.call_message(pg_temp.uid('L')),
+  'ok',
+  '記録先が記録しない設定(disabled)のとき、削除は成功する'
+);
+
+-- ---- 関数の属性 ----
+
+select ok(
+  (select p.prosecdef and p.proconfig @> array['search_path=""', 'statement_timeout=60s']
+    from pg_proc p where p.oid = 'public.delete_account(uuid)'::regprocedure),
+  'delete_accountは、SECURITY DEFINERで、空のsearch_pathと60秒のstatement_timeoutを持つ'
+);
+
+select ok(
+  (select not p.prosecdef and p.proconfig @> array['search_path=""']
+    from pg_proc p where p.oid = 'public.purge_account(uuid)'::regprocedure),
+  'purge_accountは、SECURITY INVOKERで、空のsearch_pathを持つ'
+);
+
+select ok(
+  not has_function_privilege('service_role', 'public.purge_account(uuid)', 'execute')
+    and (select p.proacl is not null and not exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0)
+         from pg_proc p where p.oid = 'public.purge_account(uuid)'::regprocedure),
+  'purge_accountの実行権限は、PUBLICにもservice_roleにも無い(anonとauthenticatedは行列が固定する)'
 );
 
 select * from finish();

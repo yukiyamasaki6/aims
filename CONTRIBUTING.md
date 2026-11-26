@@ -12,21 +12,23 @@ AIMS is a [pnpm workspace](https://pnpm.io/workspaces) monorepo. See the [README
 aims/
 ├── docs/          # Project documentation
 ├── apps/
-│   └── web/           # Next.js frontend
-│       ├── src/
-│       │   ├── app/           # Entry points (App Router pages, Service Worker)
-│       │   ├── features/      # Features, each split into domain / application / infrastructure / ui
-│       │   ├── components/    # Shared UI components (shadcn/ui)
-│       │   ├── hooks/         # Shared UI hooks
-│       │   ├── lib/           # Shared technical capabilities and utilities
-│       │   └── types/         # Type definitions
-│       └── tests/
-│           └── e2e/           # E2E tests
+│   ├── web/           # Next.js frontend
+│   │   ├── src/
+│   │   │   ├── app/           # Entry points (App Router pages, Service Worker)
+│   │   │   ├── features/      # Features, each split into domain / application / infrastructure / ui
+│   │   │   ├── components/    # Shared UI components (shadcn/ui)
+│   │   │   ├── hooks/         # Shared UI hooks
+│   │   │   ├── lib/           # Shared technical capabilities and utilities
+│   │   │   └── types/         # Type definitions
+│   │   └── tests/
+│   │       └── e2e/           # E2E tests
+│   └── account-deletion-log/  # Cloudflare Worker that records account deletions outside Supabase
 ├── supabase/      # Local Supabase config
 │   ├── docs/          # Seed-data reference
 │   ├── migrations/    # Database migrations
 │   └── tests/         # pgTAP tests
 ├── packages/      # Shared packages (currently empty)
+├── scripts/       # Repository-wide scripts (local setup, backup and restore)
 └── .github/       # Issue templates, CI/CD workflows
 ```
 

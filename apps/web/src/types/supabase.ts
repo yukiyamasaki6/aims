@@ -723,6 +723,7 @@ export type Database = {
       };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
+      purge_account: { Args: { target_user_id: string }; Returns: undefined };
       record_shots: { Args: { p_shots: Json }; Returns: Json };
       rounds_list: {
         Args: {

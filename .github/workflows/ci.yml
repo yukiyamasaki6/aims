@@ -31,13 +31,13 @@ jobs:
             code:
               - '**'
               # Markdown(文書、Agent向けの指示書、IssueとPRのテンプレート)。
-              # Biomeは処理せず、Type Check、Knip、Unit Test、Lint SQL、pgTAP and E2E Testのどれも読まない。
+              # Biomeは処理せず、Type Check、Knip、Unit Test、Lint SQL、DB Test、E2E Testのどれも読まない。
               # .mdを読む必須チェック(Markdownのlint、MDXのページ、文書を読むテストなど)を足すと、.mdだけのPRでそのチェックがskipされ、黙って通過する。
               # そのときは、この行を消すか、そのチェックが読む場所を除外の対象から外す。
               - '!**/*.md'
               # ライセンス(ルートのファイルだけに当たる)。どの必須チェックも読まない。
               - '!LICENSE'
-              # 除外を足すときは、Lint、Type Check、Knip、Lint SQL、Unit Test、pgTAP and E2E Testのどれも読まないことを確かめる。迷うものは足さない。
+              # 除外を足すときは、Lint、Type Check、Knip、Lint SQL、Unit Test、DB Test、E2E Testのどれも読まないことを確かめる。迷うものは足さない。
 
   lint:
     name: Lint
@@ -167,8 +167,54 @@ jobs:
           path: apps/web/coverage
           retention-days: 14
 
+  db-test:
+    name: DB Test
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 3.1.0
+
+      - name: Setup Supabase CLI environment variables
+        run: cp .env.example .env
+
+      - name: Log in to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # verify-restore.shは、メールOTPのサインインにMailpitを使うため、除外しない。
+      - name: Start local Supabase
+        run: supabase start -x studio,postgres-meta
+
+      - name: Apply migrations and seed data
+        run: supabase db reset
+
+      - name: Run pgTAP Tests
+        run: pnpm test:db
+
+      # 復元の仕組み(docs/backup.md)の検証。取得→初期化→復元をローカルのDBで行う。psqlとjqはランナーのものを使う。
+      - name: Run Restore Check
+        run: scripts/backup/tests/verify-restore.sh
+
   e2e-test:
-    name: pgTAP and E2E Test
+    name: E2E Test
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -241,9 +287,6 @@ jobs:
 
       - name: Apply migrations and seed data
         run: supabase db reset
-
-      - name: Run pgTAP Tests
-        run: pnpm test:db
 
       - name: Run E2E Tests
         env:

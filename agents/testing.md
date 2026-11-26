@@ -114,6 +114,7 @@ Playwrightを使用する。
 - 途中の実装は、jsdomで再現できるものをVitestで確かめる。
 - E2Eは実DB・実サーバーを使い、利用者・データはテストごとに作る(`helpers/round-fixtures.ts`)。実DBで作れない状態(取得の失敗など)は、コンポーネントテストで確かめる。
 - ジョブ(CI)は、テストの種類のために増やさない。
+  - 例外: 復元の仕組みの検証(`scripts/backup/tests/verify-restore.sh`)は、pgTAPと同じDBテストのジョブ(`DB Test`)で実行する。このスクリプトはDBを初期化し、E2Eと同じDBを同時に使えないため、DBテストとE2Eのジョブを分けて並列に動かす。
 
 ## テスト補助の置き場
 
