@@ -8,6 +8,7 @@
 # 段階(どれかが失敗したら、そこで止まる):
 #   1. 復元先のmigration履歴の版が、取得の記録と一致することを確かめる
 #   2. 取得にある表を空にしてから(migrationとシードが入れた行を消す)、トリガーと外部キーの検査を止めてデータを入れる(1トランザクション)
+#      入れるのはpublicとauthの表だけ。それ以外のスキーマ(storageなど)の表は、取得物にあっても飛ばす
 #   3. 各表の行数が取得の記録と一致し、外部キーごとに参照先の無い行が0であることを確かめる
 #   4. 削除の記録にある利用者を、purge_accountで削除の後の状態へ戻す(居なければ何もしない)
 set -euo pipefail
@@ -26,6 +27,10 @@ run_psql() {
   psql "$DATABASE_URL" -X -q -v ON_ERROR_STOP=1 "$@"
 }
 
+# 復元するスキーマ。アプリのpublicと、サインインに要るauthだけ(docs/backup.md)。
+# 以前の取得物はstorageなどSupabaseが管理するスキーマを含み、復元先の接続のロール(Session poolerのpostgres)は書き込めないため飛ばす。
+restored_table_pattern='^"(public|auth)"\.'
+
 echo "1. migrationの版を確かめます"
 expected_versions=$(jq -r '.migration_versions[]' "$manifest" | sort)
 actual_versions=$(run_psql -At -c "select version from supabase_migrations.schema_migrations" | sort)
@@ -36,8 +41,18 @@ if [[ $expected_versions != "$actual_versions" ]]; then
 fi
 
 echo "2. データを入れます"
-tables=$(grep -oE '^COPY [^ ]+' "$data" | cut -d' ' -f2 | paste -sd, -)
-run_psql --single-transaction -o /dev/null -c "TRUNCATE $tables" -f "$data"
+# 復元するスキーマのCOPYとsetvalだけを残す。平文を含むため、所有者だけが読める一時ファイルに置き、終わったら消す。
+restored_data=$(mktemp)
+trap 'rm -f "$restored_data"' EXIT
+RESTORED_TABLE_PATTERN=$restored_table_pattern awk '
+  BEGIN { pattern = ENVIRON["RESTORED_TABLE_PATTERN"] }
+  skip { if ($0 == "\\.") skip = 0; next }
+  /^COPY / && $2 !~ pattern { skip = 1; next }
+  /^SELECT pg_catalog\.setval\(/ { if (substr($0, index($0, "(") + 2) !~ pattern) next }
+  { print }
+' "$data" >"$restored_data"
+tables=$(grep -oE '^COPY [^ ]+' "$restored_data" | cut -d' ' -f2 | paste -sd, -)
+run_psql --single-transaction -o /dev/null -c "TRUNCATE $tables" -f "$restored_data"
 
 echo "3. 行数と参照を確かめます"
 mismatches=0
@@ -47,7 +62,7 @@ while IFS=$'\t' read -r table expected; do
     echo "行数が一致しません: $table 取得 $expected 復元 $actual" >&2
     mismatches=$((mismatches + 1))
   fi
-done < <(jq -r '.row_counts | to_entries[] | "\(.key)\t\(.value)"' "$manifest")
+done < <(jq -r --arg pattern "$restored_table_pattern" '.row_counts | to_entries[] | select(.key | test($pattern)) | "\(.key)\t\(.value)"' "$manifest")
 if ((mismatches > 0)); then
   exit 1
 fi
