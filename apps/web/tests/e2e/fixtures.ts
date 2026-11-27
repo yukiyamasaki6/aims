@@ -64,24 +64,12 @@ export const test = base.extend<{
       const email = `case-${randomUUID()}@aims.test`;
       setIsolatedEmail(email);
       await context.clearCookies();
-      const userId = await prepareConfirmedUserSession(context, baseURL, {
-        email,
-        password: "unused",
-      });
-      // 共有利用者の端末の記憶を、サインイン後の端末と同じくケースの利用者のものへ替える。
-      // 記憶を空のままにすると、アプリが利用者の切り替えとして最初の画面を読み込み直し、直後の操作と競合する。
-      await context.addInitScript(
-        ({ origin, email, userId }) => {
-          if (
-            location.origin !== origin ||
-            localStorage.getItem("aims:e2e-case") === email
-          )
-            return;
-          localStorage.clear();
-          localStorage.setItem("aims:e2e-case", email);
-          localStorage.setItem("aims:local-user-id", userId);
-        },
-        { origin: new URL(baseURL).origin, email, userId },
+      // 共有の認証状態が持つ端末の保存を、ケースの利用者へ引き継がないために空にする。
+      await prepareConfirmedUserSession(
+        context,
+        baseURL,
+        { email, password: "unused" },
+        { clearStorage: true },
       );
       await use(undefined);
     },
