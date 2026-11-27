@@ -36,7 +36,7 @@ const savePreset = procedures.presetSaving.savePreset;
 
 const targetFace: TargetFaceOption = {
   id: "face-x",
-  name: "10点的",
+  placement: "single",
   size: 122,
   format: "outdoor",
   bow_type: ["recurve"],

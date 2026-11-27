@@ -30,7 +30,7 @@ import type {
   LoadedRoundsList,
   RoundListItem,
 } from "../domain/round-list";
-import type { TargetFaceOption } from "../domain/target-face";
+import { seedTargetFace } from "../domain/target-face-test-helpers";
 import { installFakeIntersectionObserver } from "./intersection-observer-test-helpers";
 import {
   fakeSearchParams,
@@ -50,6 +50,7 @@ import {
   RoundWindowProvider,
 } from "./rounds-context";
 import { RoundsHistory } from "./rounds-history";
+import { targetFaceDescription } from "./target-face-label-test-helpers";
 
 const suspense = vi.hoisted(() => ({ pending: null as Promise<void> | null }));
 
@@ -207,42 +208,31 @@ function leaveRange(_name: string) {
   applyFilter();
 }
 
-// 輪を1つだけ持つ的。的の表示は輪を持つ的を前提にする。
-const SINGLE_RING_SPOTS = [
-  {
-    center_x: 0,
-    center_y: 0,
-    target_face_rings: [
-      {
-        radius: 1,
-        color: "#FFFFFF",
-        line_color: null,
-        z_index: 1,
-        score_str: "M",
-        score_int: 0,
-      },
-    ],
-  },
-];
-
-// 保存した的の一覧。UUIDの形のIDで、屋外・インドアが混ざる。
-const OUTDOOR_FACE: TargetFaceOption = {
-  id: "a1000000-0000-0000-0000-000000000001",
-  name: "122cmアウトドア",
-  size: 122,
-  format: "outdoor",
-  bow_type: ["recurve", "compound"],
-  target_face_spots: SINGLE_RING_SPOTS,
-};
-const INDOOR_FACE: TargetFaceOption = {
-  id: "a1000000-0000-0000-0000-000000000004",
-  name: "60cmインドア",
-  size: 60,
-  format: "indoor",
-  bow_type: ["recurve", "compound"],
-  target_face_spots: SINGLE_RING_SPOTS,
-};
+// 保存した的の一覧。公式の的の実データで、屋外・インドアが混ざる。
+const OUTDOOR_FACE = seedTargetFace("A1");
+const INDOOR_FACE = seedTargetFace("B1");
 const FACES = [OUTDOOR_FACE, INDOOR_FACE];
+
+const OUTDOOR_DESCRIPTION = targetFaceDescription({
+  format: "outdoor",
+  size: 122,
+  bowTypes: ["recurve", "compound", "barebow"],
+  minScore: 1,
+  maxScore: 10,
+  hasX: true,
+  tenRadius: 6.1,
+  placement: "single",
+});
+const INDOOR_DESCRIPTION = targetFaceDescription({
+  format: "indoor",
+  size: 60,
+  bowTypes: ["compound"],
+  minScore: 1,
+  maxScore: 10,
+  hasX: false,
+  tenRadius: 1.5,
+  placement: "single",
+});
 
 const VARIED_NAMES = ["夜練習", "午前練習", "朝練習", "午後練習"];
 
@@ -3859,6 +3849,126 @@ describe("RoundsHistory", () => {
         expect(
           screen.getByTestId(`target-face-option-${OUTDOOR_FACE.id}`),
         ).toBeVisible();
+      });
+
+      describe("読み上げ", () => {
+        // 保存した一覧と指定中の的を決めて、その距離のダイアログを開く手前まで表示する。
+        async function renderDistance(
+          saved: typeof FACES,
+          targetFaceId: string | null,
+        ) {
+          procedures.fetching.savedTargetFaces.mockReturnValue(saved);
+          return renderWithDistances([distanceRow(50, { targetFaceId })]);
+        }
+
+        const openDistance = (user: ReturnType<typeof userEvent.setup>) =>
+          user.click(screen.getByTestId("history-filter-distance-0"));
+        const targetButton = () =>
+          screen.getByTestId("history-distance-dialog-target");
+
+        const states: [string, typeof FACES, string | null, string][] = [
+          [
+            "指定済み",
+            FACES,
+            OUTDOOR_FACE.id,
+            roundsText("targetFaceTrigger", { name: OUTDOOR_DESCRIPTION }),
+          ],
+          ["未指定", FACES, null, roundsText("targetFaceTriggerNone")],
+          [
+            "保存した一覧に無い的",
+            [INDOOR_FACE],
+            OUTDOOR_FACE.id,
+            roundsText("targetFaceTriggerMissing"),
+          ],
+        ];
+
+        it.each(states)(
+          "的が%sのとき、閉じた状態の的のボタンは、名前が「的」で、状態の説明を持つ",
+          async (_state, saved, targetFaceId, description) => {
+            // Given
+            const user = await renderDistance(saved, targetFaceId);
+
+            // When
+            await openDistance(user);
+
+            // Then
+            expect(targetButton()).toHaveAccessibleName(
+              roundsText("historyFilterTarget"),
+            );
+            expect(targetButton()).toHaveAccessibleDescription(description);
+            expect(targetButton()).toHaveAttribute("aria-expanded", "false");
+            expect(targetButton()).toHaveAttribute("aria-haspopup", "dialog");
+          },
+        );
+
+        it.each(states)(
+          "的が%sのとき、的のボタンを押すと、開いた状態になる",
+          async (_state, saved, targetFaceId) => {
+            // Given
+            const user = await renderDistance(saved, targetFaceId);
+            await openDistance(user);
+
+            // When
+            await user.click(targetButton());
+
+            // Then
+            expect(targetButton()).toHaveAttribute("aria-expanded", "true");
+          },
+        );
+
+        it("的を選ぶと、的のボタンは名前が「的」のまま、説明が選んだ的の説明になる", async () => {
+          // Given
+          const user = await renderDistance(FACES, OUTDOOR_FACE.id);
+          await openDistance(user);
+          await user.click(targetButton());
+
+          // When
+          await user.click(
+            await screen.findByTestId(`target-face-option-${INDOOR_FACE.id}`),
+          );
+
+          // Then
+          expect(targetButton()).toHaveAccessibleName(
+            roundsText("historyFilterTarget"),
+          );
+          expect(targetButton()).toHaveAccessibleDescription(
+            roundsText("targetFaceTrigger", { name: INDOOR_DESCRIPTION }),
+          );
+        });
+
+        it("指定済みの的から「指定なし」を選ぶと、的のボタンの説明が指定なしの案内になる", async () => {
+          // Given
+          const user = await renderDistance(FACES, OUTDOOR_FACE.id);
+          await openDistance(user);
+          await user.click(targetButton());
+
+          // When
+          await user.click(
+            await screen.findByTestId("history-distance-dialog-target-none"),
+          );
+
+          // Then
+          expect(targetButton()).toHaveAccessibleDescription(
+            roundsText("targetFaceTriggerNone"),
+          );
+        });
+
+        it("的の一覧の各候補は、的の説明を名前に持つ", async () => {
+          // Given
+          const user = await renderDistance(FACES, null);
+          await openDistance(user);
+
+          // When
+          await user.click(targetButton());
+
+          // Then
+          expect(
+            await screen.findByTestId(`target-face-option-${OUTDOOR_FACE.id}`),
+          ).toHaveAccessibleName(OUTDOOR_DESCRIPTION);
+          expect(
+            screen.getByTestId(`target-face-option-${INDOOR_FACE.id}`),
+          ).toHaveAccessibleName(INDOOR_DESCRIPTION);
+        });
       });
 
       it.each([

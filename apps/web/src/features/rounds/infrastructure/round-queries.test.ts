@@ -122,7 +122,7 @@ const round = {
 function face(id: string) {
   return {
     id,
-    name: id,
+    placement: "single",
     size: 122,
     format: "outdoor",
     bow_type: ["recurve"],
@@ -386,6 +386,23 @@ describe("roundDetails", () => {
       [uuidAt(1), 3],
       [dup, 9],
     ]);
+  });
+
+  it("的の取得が列の不一致で失敗すると、ラウンドの取得が成功していても全体を失敗とする", async () => {
+    // Given
+    const database = makeDatabase({
+      rounds: ok([{ ...round, id: uuid1 }]),
+      target_faces: failed(400, {
+        code: "42703",
+        message: "column target_faces.placement does not exist",
+      }),
+    });
+
+    // When
+    const response = await database.createQueries().roundDetails([uuid1]);
+
+    // Then
+    expect(response).toEqual({ status: "failed" });
   });
 
   it("取得の1つでも失敗したら、全体を失敗とする(2回目以降を含む)", async () => {

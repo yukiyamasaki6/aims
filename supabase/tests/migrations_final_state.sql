@@ -1,6 +1,6 @@
 begin;
 
-select plan(23);
+select plan(26);
 
 select ok(
   exists (select 1 from auth.users where id = '00000000-0000-4000-8000-000000000001'
@@ -109,6 +109,27 @@ select ok(
     and (select count(*) from public.preset_rounds where owner_id is null) > 0
     and (select count(*) from public.preset_distances) > 0,
   '公式の的3表と公式プリセット2表は投入されている'
+);
+
+-- 的の名称の廃止と配置の追加の最終形
+select is_empty(
+  $$select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'target_faces' and column_name = 'name'$$,
+  'target_facesに廃止済みのnameはない'
+);
+
+select ok(
+  exists (select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'target_faces' and column_name = 'placement'
+      and data_type = 'text' and is_nullable = 'NO' and column_default is null),
+  'target_faces.placementはtextでNOT NULLで、既定値がない'
+);
+
+select ok(
+  exists (select 1 from pg_constraint
+    where conrelid = 'public.target_faces'::regclass and conname = 'target_faces_placement_check'
+      and contype = 'c' and convalidated),
+  'target_faces.placementの値を限るCHECK制約が有効である'
 );
 
 -- 矢のマス目形式の最終形

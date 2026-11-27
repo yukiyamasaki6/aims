@@ -1,10 +1,21 @@
 import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { targetFaceDescription } from "@/features/rounds/ui/target-face-label-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { FRAME_PATHS, shellUrlOf } from "@/routes";
 import { expect, test } from "../fixtures";
-import { SHARED_AUTH_STATE_PATH, signUpAndSignIn } from "../helpers/auth";
+import {
+  SHARED_AUTH_STATE_PATH,
+  signUpAndSignIn,
+  waitForHydration,
+} from "../helpers/auth";
 import { collectHydrationErrors } from "../helpers/hydration";
+import { expectPendingOps } from "../helpers/op-log";
+import { openOtherDevice } from "../helpers/other-device";
+import { expectRoundBasesFetched } from "../helpers/reference-data";
+import { addRound, createPreparedUser } from "../helpers/round-fixtures";
+import { expectCells, expectPointedCell } from "../helpers/score-cells";
 import {
   comeBackOnline,
   goOffline,
@@ -144,6 +155,169 @@ test("Service Workerが登録済みでオフラインのとき、紹介画面を
   await expect(
     page.getByText(offlinePwaText("offlineDescription")),
   ).toBeVisible();
+});
+
+// 公式の的: ラウンドの準備で使うアウトドア・122cmと、選び直し先のアウトドア・80cmの5〜10点。
+const OUTDOOR_122CM_FACE_ID = "a1000000-0000-0000-0000-000000000001";
+const OUTDOOR_80CM_FIVE_ZONE_FACE_ID = "a1000000-0000-0000-0000-000000000003";
+const OUTDOOR_80CM_FIVE_ZONE_DESCRIPTION = targetFaceDescription({
+  format: "outdoor",
+  size: 80,
+  bowTypes: ["recurve", "compound", "barebow"],
+  minScore: 5,
+  maxScore: 10,
+  hasX: true,
+  tenRadius: 4,
+  placement: "single",
+});
+
+// 配置を持たず名称を持っていた、旧版の的の取得のselect。
+const TARGET_FACE_SELECT_WITH_NAME =
+  "id, name, size, format, bow_type, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index, score_str, score_int))";
+
+// ケースだけの利用者と未記録のラウンドを用意して詳細を開き、的の一覧とラウンドが端末に保存され、Service Workerがページを制御するまで待つ。
+async function openRoundSavedOnDevice(page: Page) {
+  const credentials = await createPreparedUser(page, "e2e-offline-face");
+  const roundId = await addRound(credentials, "オフラインの的", "2026-08-24");
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+  await expect(page.getByTestId("round-summary")).toBeVisible();
+  await expectRoundBasesFetched(page, { roundId });
+  await waitForServiceWorkerControl(page);
+  await expect(page.getByTestId("round-summary")).toBeVisible();
+  return { credentials, roundId };
+}
+
+// 端末の的の保存を、旧版が保存した形(旧selectのshapeで、的は名称を持ち配置が無い)へ書き換える。
+async function replaceSavedTargetFacesWithOldShape(page: Page) {
+  await page.evaluate((shape) => {
+    for (const [key, value] of Object.entries(localStorage)) {
+      if (!key.startsWith("aims:reference:target-faces:")) continue;
+      const stored = JSON.parse(value) as {
+        startedAt: number;
+        data: { placement?: string }[];
+      };
+      const data = stored.data.map(({ placement: _, ...face }) => ({
+        ...face,
+        name: "旧形式の的",
+      }));
+      localStorage.setItem(key, JSON.stringify({ ...stored, shape, data }));
+    }
+  }, TARGET_FACE_SELECT_WITH_NAME);
+}
+
+// サーバーに保存された、ラウンドの唯一の距離の的と、生きている矢("エンド-マスの番号:点数"の文字列の順)。
+async function savedDistance(supabase: SupabaseClient, roundId: string) {
+  const { data, error } = await supabase
+    .from("distances")
+    .select(
+      "target_face_id, shots(end_number, shot_number, score_str, disabled_at)",
+    )
+    .eq("round_id", roundId)
+    .single();
+  if (error) throw error;
+  return {
+    targetFaceId: data.target_face_id as string,
+    shots: data.shots
+      .filter((shot) => shot.disabled_at === null)
+      .map((shot) => `${shot.end_number}-${shot.shot_number}:${shot.score_str}`)
+      .sort(),
+  };
+}
+
+test("新形式の的を端末に保存していると、オフラインで的を選び直して点数を記録でき、オンラインに戻ると保存される", async ({
+  page,
+  context,
+}) => {
+  const { credentials, roundId } = await openRoundSavedOnDevice(page);
+
+  // オフラインでラウンドを開き直し、端末の内容が表示されることを確かめる。
+  await goOffline(context);
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+  await expect(page.getByTestId("round-summary")).toBeVisible();
+
+  // 距離の的を読み上げの説明で選び直して保存し、選んだ的の点数のキーに変わることを確かめる。
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("target-face-picker-trigger").click();
+  await page
+    .getByRole("button", {
+      name: OUTDOOR_80CM_FIVE_ZONE_DESCRIPTION,
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByTestId("target-face-picker-trigger"),
+  ).toHaveAccessibleName(
+    roundsText("targetFaceTrigger", {
+      name: OUTDOOR_80CM_FIVE_ZONE_DESCRIPTION,
+    }),
+  );
+  await page.getByTestId("distance-config-save-1").click();
+  await expect(page.getByTestId("distance-config-save-1")).toBeHidden();
+  await expect(page.getByTestId("score-button-5")).toBeVisible();
+  await expect(page.getByTestId("score-button-4")).toHaveCount(0);
+
+  // 点数を1本記録し、マスに表示されることを確かめる。
+  await page.getByTestId("score-button-5").click();
+  await expectCells(page, 1, 1, ["5", null, null]);
+
+  // オンラインに戻り、選び直した的と矢が保存されることを確かめる。
+  await comeBackOnline(context, page);
+  const { supabase } = await openOtherDevice(
+    credentials.email,
+    credentials.password,
+  );
+  await expect
+    .poll(() => savedDistance(supabase, roundId), { timeout: 30_000 })
+    .toEqual({
+      targetFaceId: OUTDOOR_80CM_FIVE_ZONE_FACE_ID,
+      shots: ["1-1:5"],
+    });
+});
+
+test("旧形式の的の保存しかない端末は、オフラインではラウンド詳細に「ネットワークに接続されていません」が表示されて入力できず、オンラインに戻ると未送信の記録を保って入力を再開できる", async ({
+  page,
+  context,
+}) => {
+  const { credentials, roundId } = await openRoundSavedOnDevice(page);
+
+  // オフラインでラウンドを開き直し、1本記録して未送信の操作を端末に残す。
+  await goOffline(context);
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+  await page.getByTestId("score-button-9").click();
+  await expectCells(page, 1, 1, ["9", null, null]);
+  await expectPendingOps(page, roundId, 1);
+
+  // 的の保存を旧形式にして読み込み直し、内容とテンキーが表示されないことを確かめる。
+  await replaceSavedTargetFacesWithOldShape(page);
+  // 内容を出さない間は水和の属性が付かないため、水和を待たない。
+  await page.reload();
+  await expect(page.getByText(roundsText("fetchOffline"))).toBeVisible();
+  await expect(page.getByTestId("round-summary")).toHaveCount(0);
+  await expect(page.getByTestId(/^score-button-/)).toHaveCount(0);
+
+  // オンラインに戻り、未送信だった記録を含む内容が表示されることを確かめる。
+  await comeBackOnline(context, page);
+  await expect(page.getByTestId("round-summary")).toBeVisible();
+  await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
+  await expectCells(page, 1, 1, ["9", null, null]);
+  await expectPointedCell(page, 1, 1, 2);
+
+  // 2本目を記録し、2本とも保存されることを確かめる。
+  await page.getByTestId("score-button-8").click();
+  await expectCells(page, 1, 1, ["9", "8", null]);
+  const { supabase } = await openOtherDevice(
+    credentials.email,
+    credentials.password,
+  );
+  await expect
+    .poll(() => savedDistance(supabase, roundId), { timeout: 30_000 })
+    .toEqual({
+      targetFaceId: OUTDOOR_122CM_FACE_ID,
+      shots: ["1-1:9", "1-2:8"],
+    });
 });
 
 test.describe("認証済みで開く", () => {

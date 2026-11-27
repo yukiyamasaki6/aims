@@ -136,7 +136,7 @@ erDiagram
     }
     target_faces {
         uuid id PK "サロゲートID"
-        string name "的名（例：Outdoor 122cm）"
+        string placement "スポットの配置(単一・三角三つ目・縦三つ目) [NOT NULL] [CHECK: single / triangle / vertical]"
         bigint size "的の呼称サイズ（cm） [CHECK: > 0]"
         string format "対応する種別 [CHECK: outdoor / indoor / field]"
         string_array bow_type "対応する弓種配列 [CHECK: recurve / compound / barebow] [NULLABLE: 空配列=弓種指定なし]"

@@ -14,7 +14,7 @@ type OpeningInput = Parameters<typeof roundOpening>[0];
 const faces: TargetFaceOption[] = [
   {
     id: "face-1",
-    name: "122cm",
+    placement: "single",
     size: 122,
     format: "outdoor",
     bow_type: ["recurve"],

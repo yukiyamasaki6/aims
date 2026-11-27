@@ -576,7 +576,7 @@ export type Database = {
           created_at: string;
           format: string;
           id: string;
-          name: string;
+          placement: string;
           size: number;
           updated_at: string;
         };
@@ -586,7 +586,7 @@ export type Database = {
           created_at?: string;
           format: string;
           id?: string;
-          name: string;
+          placement: string;
           size: number;
           updated_at?: string;
         };
@@ -595,7 +595,7 @@ export type Database = {
           created_at?: string;
           format?: string;
           id?: string;
-          name?: string;
+          placement?: string;
           size?: number;
           updated_at?: string;
         };

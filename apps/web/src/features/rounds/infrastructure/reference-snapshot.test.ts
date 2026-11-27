@@ -123,6 +123,53 @@ describe("reference-snapshot", () => {
     expect(loaded).toBeNull();
   });
 
+  it("nameを含みplacementの無い的のselectで保存した一覧は、無いものとして扱い、保存先の値を変換も削除もしない", () => {
+    // Given
+    const selectWithName =
+      "id, name, size, format, bow_type, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index, score_str, score_int))";
+    const stored = JSON.stringify({
+      shape: selectWithName,
+      startedAt: 1,
+      data: [{ id: "face-1", name: "旧形式の的" }],
+    });
+    localStorage.setItem("aims:reference:target-faces:user-1", stored);
+
+    // When
+    const loaded = snapshots.load("target-faces");
+
+    // Then
+    expect(loaded).toBeNull();
+    expect(localStorage.getItem("aims:reference:target-faces:user-1")).toBe(
+      stored,
+    );
+  });
+
+  it("旧形式の的の保存がある状態で、より新しい取得を保存すると読める", () => {
+    // Given
+    localStorage.setItem(
+      "aims:reference:target-faces:user-1",
+      JSON.stringify({
+        shape:
+          "id, name, size, format, bow_type, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index, score_str, score_int))",
+        startedAt: 1,
+        data: [{ id: "face-1", name: "旧形式の的" }],
+      }),
+    );
+
+    // When
+    snapshots.save(
+      "target-faces",
+      "user-1",
+      [{ id: "face-1", placement: "single" }],
+      2,
+    );
+
+    // Then
+    expect(snapshots.load("target-faces")).toEqual([
+      { id: "face-1", placement: "single" },
+    ]);
+  });
+
   it("shapeが一致するものは読める", () => {
     // Given
     localStorage.setItem(

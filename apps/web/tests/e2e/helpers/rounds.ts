@@ -3,7 +3,7 @@ import { expect, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { signInWithEmailOtp, testUserSession } from "./auth";
 
-const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点的（アウトドア・122cm）
+const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // アウトドア・122cmの1〜10点の的
 
 // ローカル・CIのTURNSTILE_SECRET_KEYはCloudflareのテスト専用
 // シークレット（常に検証を通過する）のため、captchaTokenの値自体は
