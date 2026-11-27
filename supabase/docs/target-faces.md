@@ -277,3 +277,32 @@ bow_type: recurve, compound, barebow
 | Field 20cm 縦3スポット | (0, +22.00) | 中(0, 0) | 下(0, -22.00) |
 | Indoor 40cm 三角3スポット | (0, +12.70) | (-11.00, -6.35) | (+11.00, -6.35) |
 | Indoor 60cm 三角3スポット | (0, +18.48) | (-16.00, -9.24) | (+16.00, -9.24) |
+
+## 的の一覧と配置
+
+`target_faces`は名称を持たない。下の「構成」は本書の点数帯の見出しに対応する呼び名で、DBには保存しない。
+
+| ID | 構成 | 配置(`placement`) |
+| :--- | :--- | :--- |
+| `a1000000-0000-0000-0000-000000000001` | Outdoor 122cm | `single` |
+| `a1000000-0000-0000-0000-000000000002` | Outdoor 80cm | `single` |
+| `a1000000-0000-0000-0000-000000000003` | Outdoor 80cm 6-ring | `single` |
+| `a1000000-0000-0000-0000-000000000004` | Indoor 60cm | `single` |
+| `a1000000-0000-0000-0000-000000000005` | Indoor 60cm Triangular 3-spot | `triangle` |
+| `a1000000-0000-0000-0000-000000000006` | Indoor 60cm Vertical 3-spot | `vertical` |
+| `a1000000-0000-0000-0000-000000000007` | Indoor 40cm | `single` |
+| `a1000000-0000-0000-0000-000000000008` | Indoor 40cm Triangular 3-spot | `triangle` |
+| `a1000000-0000-0000-0000-000000000009` | Indoor 40cm Vertical 3-spot | `vertical` |
+| `a1000000-0000-0000-0000-000000000010` | Field 80cm | `single` |
+| `a1000000-0000-0000-0000-000000000011` | Field 60cm | `single` |
+| `a1000000-0000-0000-0000-000000000012` | Field 40cm | `single` |
+| `a1000000-0000-0000-0000-000000000013` | Field 20cm Vertical 3-spot | `vertical` |
+| `b1000000-0000-0000-0000-000000000001` | Indoor 60cm Compound | `single` |
+| `b1000000-0000-0000-0000-000000000002` | Indoor 40cm Compound | `single` |
+| `b1000000-0000-0000-0000-000000000003` | Indoor 60cm Triangular 3-spot Compound | `triangle` |
+| `b1000000-0000-0000-0000-000000000004` | Indoor 60cm Vertical 3-spot Compound | `vertical` |
+| `b1000000-0000-0000-0000-000000000005` | Indoor 40cm Triangular 3-spot Compound | `triangle` |
+| `b1000000-0000-0000-0000-000000000006` | Indoor 40cm Vertical 3-spot Compound | `vertical` |
+
+`placement`は、`single`(単一。中心(0, 0)の1スポット)、`triangle`(三角三つ目)、`vertical`(縦三つ目)のいずれかで、スポットの中心座標と一致させる。
+的はmigrationで追加・変更し、`placement`とスポットの座標を同じ変更でそろえて、`supabase/tests/target_faces.sql`で整合を確かめる。

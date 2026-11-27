@@ -7,26 +7,29 @@ import { lookupTargetFace, type TargetFaceOption } from "../domain/target-face";
 import { FILTER_ALL, filterTargetFaces } from "../domain/target-face-filter";
 import { TargetFaceInfo } from "./target-face-info";
 import { useOptionLabels } from "./use-option-labels";
+import { useTargetFaceLabel } from "./use-target-face-label";
 
-// フィルタ（種別・弓種）は絞り込みなし（「指定なし」）も選択肢に含める。ラウンドの種別・弓種を
-// 既定にはするが、絞り込みが自由度を奪って目的の的を選べなくなることが
-// ないよう、常に全件へ戻れる逃げ道を残す。
-function triggerLabel(
+// 選択中の的のボタンの、読み上げの説明と操作の案内。
+export function targetFaceTriggerLabel(
   t: ReturnType<typeof useTranslations<"rounds">>,
+  describe: (face: TargetFaceOption) => string,
   selected: TargetFaceOption | "missing",
   locked: boolean | undefined,
 ): string {
   const name =
-    typeof selected === "string" ? t("targetFaceName") : selected.name;
+    typeof selected === "string" ? t("targetFaceName") : describe(selected);
   if (locked) return t("targetFaceTriggerLocked", { name });
   if (selected === "missing") return t("targetFaceTriggerMissing");
   return t("targetFaceTrigger", { name });
 }
 
-// 的の選択UI。名称は一切表示せず、実際のリング配色・レイアウト（3つ目の
-// トライアングル/バーティカル等）とサイズの数字だけで見分けられるようにする。
+// 的の選択UI。画面では、実際のリング配色・レイアウト（3つ目の
+// トライアングル/バーティカル等）とサイズの数字で見分けられるようにする。
 // 通常は選択中の1枚だけを的情報（TargetFaceInfo）として表示し、タップすると
 // ポップアップで一覧（同じく的情報のリスト）から選び直せる。
+// フィルタ（種別・弓種）は絞り込みなし（「指定なし」）も選択肢に含める。ラウンドの種別・弓種を
+// 既定にはするが、絞り込みが自由度を奪って目的の的を選べなくなることが
+// ないよう、常に全件へ戻れる逃げ道を残す。
 export function TargetFacePicker({
   targetFaces,
   selectedId,
@@ -47,6 +50,7 @@ export function TargetFacePicker({
   describedBy?: string;
 }) {
   const t = useTranslations("rounds");
+  const describe = useTargetFaceLabel();
   const [open, setOpen] = useState(false);
   // ラウンドの種別・弓種に対応する選択欄の値を既定にする。選び直した場合はダイアログを
   // 再度開いてもそのまま保持する（開くたびに毎回既定へ戻すと、直前に見ていた
@@ -69,7 +73,7 @@ export function TargetFacePicker({
         data-testid="target-face-picker-trigger"
         aria-disabled={locked ? true : undefined}
         aria-describedby={describedBy}
-        aria-label={triggerLabel(t, selected, locked)}
+        aria-label={targetFaceTriggerLabel(t, describe, selected, locked)}
         className={cn("w-full", locked && "cursor-not-allowed opacity-50")}
       >
         <TargetFaceInfo face={selected} />
@@ -157,6 +161,7 @@ export function TargetFaceList({
   onSelect: (id: string) => void;
   none?: { content: ReactNode; testId: string; onSelect: () => void };
 }) {
+  const describe = useTargetFaceLabel();
   return (
     // 選択中の項目に付くring（box-shadow）がコンテナの縁に接して
     // overflowで見切れないよう、-mx-1で横幅（上の選択欄との揃え）を
@@ -179,7 +184,7 @@ export function TargetFaceList({
         <button
           key={f.id}
           type="button"
-          aria-label={f.name}
+          aria-label={describe(f)}
           aria-pressed={f.id === selectedId}
           data-testid={`target-face-option-${f.id}`}
           onClick={() => onSelect(f.id)}

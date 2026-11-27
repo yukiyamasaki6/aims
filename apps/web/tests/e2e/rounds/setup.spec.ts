@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { targetFaceDescription } from "@/features/rounds/ui/target-face-label-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { test } from "../fixtures";
 import {
@@ -14,9 +15,20 @@ const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
-const INDOOR_40CM_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000007"; // 10点的（インドア・40cm）
-const INDOOR_40CM_TARGET_FACE_LABEL = roundsText("targetFaceSize", {
-  size: "インドア・40",
+// インドア・40cmの1〜10点の単一の的と、その選択中のボタンの名前。
+const INDOOR_40CM_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000007";
+const INDOOR_40CM_TARGET_FACE_DESCRIPTION = targetFaceDescription({
+  format: "indoor",
+  size: 40,
+  bowTypes: ["recurve", "barebow"],
+  minScore: 1,
+  maxScore: 10,
+  hasX: false,
+  tenRadius: 2,
+  placement: "single",
+});
+const INDOOR_40CM_TRIGGER_NAME = roundsText("targetFaceTrigger", {
+  name: INDOOR_40CM_TARGET_FACE_DESCRIPTION,
 });
 
 const UPDATE_ROUND_RPC = "**/rest/v1/rpc/update_round";
@@ -119,7 +131,7 @@ test("距離があるときに距離を追加すると、最後の距離をコ�
   await expect(page.getByTestId("distance-config-arrows-2")).toHaveValue("3");
   await expect(
     page.getByTestId("target-face-picker-trigger"),
-  ).toHaveAccessibleName(new RegExp(INDOOR_40CM_TARGET_FACE_LABEL));
+  ).toHaveAccessibleName(INDOOR_40CM_TRIGGER_NAME);
 
   // 再読み込みして、変えた内容が残ることを確かめる。
   await reloadAfter(page, sent);
@@ -145,7 +157,10 @@ test("距離・的・射数/エンド・エンド数を変えて保存すると�
     .getByRole("option", { name: roundsText("formatOption.indoor") })
     .click();
   await page
-    .getByTestId(`target-face-option-${INDOOR_40CM_TARGET_FACE_ID}`)
+    .getByRole("button", {
+      name: INDOOR_40CM_TARGET_FACE_DESCRIPTION,
+      exact: true,
+    })
     .click();
   const sent = page.waitForResponse(UPDATE_DISTANCE_RPC);
   await page.getByTestId("distance-config-save-1").click();
@@ -165,7 +180,7 @@ test("距離・的・射数/エンド・エンド数を変えて保存すると�
   await page.getByTestId("distance-config-toggle-1").click();
   await expect(
     page.getByTestId("target-face-picker-trigger"),
-  ).toHaveAccessibleName(new RegExp(INDOOR_40CM_TARGET_FACE_LABEL));
+  ).toHaveAccessibleName(INDOOR_40CM_TRIGGER_NAME);
 });
 
 test("スコアが記録済みの距離は、記録済みのスコアに収まる総エンド数だけ保存でき、収まらない値は理由が出て保存されない", async ({
