@@ -39,8 +39,22 @@ jobs:
       - name: Link to Production Project
         run: supabase link --project-ref ${{ vars.SUPABASE_PROD_PROJECT_ID }}
 
-      - name: Reset Production DB
-        run: supabase db reset --remote --yes --no-seed
+      # 適用の直前の時点を取る。取れなければ、後続の適用(migrationとconfig)は動かない(docs/backup.md)。
+      - name: Backup Production Database
+        uses: ./.github/actions/backup-prod-db
+        with:
+          kind: pre-migration
+          r2-endpoint: ${{ vars.BACKUP_R2_ENDPOINT }}
+          r2-bucket: ${{ vars.BACKUP_R2_BUCKET }}
+          r2-access-key-id: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY }}
+          age-recipient: ${{ vars.BACKUP_AGE_RECIPIENT }}
+
+      - name: Dry-run migrations
+        run: supabase db push --dry-run --remote
+
+      - name: Push migrations to Production DB
+        run: supabase db push --yes --remote
 
       - name: Push config to Production Project
         run: supabase config push --yes
