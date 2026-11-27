@@ -2681,9 +2681,9 @@ describe("RoundsHistory", () => {
         expect(rangeInput("scoreMin")).toHaveValue("100");
       });
 
-      it("旧い形の保存値(sortKey=score、unit=distance、filterOpen)は、読み替えられず、既定の入力値で復元され、表示単位は「ラウンド」である", async () => {
+      it("型に無い項目だけの保存値(sortKey=score、unit=distance、filterOpen)は、読み替えられず、既定の入力値で復元され、表示単位は「ラウンド」である", async () => {
         // Given
-        // 旧い形を読み替えない規則はdomainで確かめる。ここでは、画面までの接続だけを確かめる。
+        // 型に無い項目を読み替えない規則はdomainで確かめる。ここでは、画面までの接続だけを確かめる。
         memory = createFakeHistoryViewMemory({
           input: historyViewStateOf({
             condition: {

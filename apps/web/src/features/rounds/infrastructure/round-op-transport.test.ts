@@ -202,29 +202,6 @@ describe("createRoundOpTransport", () => {
     }
   });
 
-  it("射手を持つ古い形の操作が端末に残っていても、射手と矢のIDを送らずに送れる", async () => {
-    // Given
-    client.rpc.mockResolvedValue({
-      data: [resultJson(2)],
-      error: null,
-      status: 200,
-    });
-    // 以前の版が端末に保存した形。型には無い項目を持つ。
-    const legacy = shotRecorded({
-      eventId: "a",
-      ...({ shooterId: "other", shotId: "s-old" } as object),
-    });
-
-    // When
-    const outcome = await sendRoundBatch(flight(legacy));
-
-    // Then
-    expect(outcome).toEqual({ ok: true, results: [resultOf(2)] });
-    const [, { p_shots }] = client.rpc.mock.calls[0];
-    expect(p_shots[0]).not.toHaveProperty("shooter_id");
-    expect(p_shots[0]).not.toHaveProperty("shot_id");
-  });
-
   it("矢の記録の応答の効いた項目と効かなかった項目を、判定結果へ写す", async () => {
     // Given
     client.rpc.mockResolvedValue({

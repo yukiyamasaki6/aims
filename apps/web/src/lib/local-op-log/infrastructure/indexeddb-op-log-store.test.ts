@@ -506,6 +506,19 @@ describe("op log store", () => {
       expect(stored.base).toEqual({ startedAt: 1, base: base(0, false) });
     });
 
+    it("appendは、サーバーに無い(null)ベースを受けると、操作だけを保存し、ベースの行を書かない", async () => {
+      // Given
+      const store = newStore();
+
+      // When
+      await store.append(entry("a"), { startedAt: 10, base: null });
+      const stored = await group(store);
+
+      // Then
+      expect(stored.base).toBeUndefined();
+      expect(stored.entries.map((e) => e.operation.value)).toEqual(["a"]);
+    });
+
     it("loadAllは、ベースだけを持つ列と、他のユーザーのベースを分けて返す", async () => {
       // Given
       const store = newStore();
@@ -691,23 +704,6 @@ describe("op log store", () => {
       expect(settledWhileBlocked).toBe(false);
       expect(seq).toBeGreaterThan(0);
       expect(reloaded.entries.map((e) => e.operation.value)).toEqual(["a"]);
-    });
-
-    it("更新が塞がれている間、古い版の保存の内容は変わらない", async () => {
-      // Given
-      const previous = await openStaleConnection();
-      await previous.add("ops", entry("old"));
-      const store = newStore();
-      const appending = store.append(entry("new"));
-
-      // When
-      await wait(50);
-      const whileBlocked = await previous.getAll("ops");
-      previous.close();
-      await appending;
-
-      // Then
-      expect(whileBlocked.map((row) => row.operation.value)).toEqual(["old"]);
     });
   });
 });

@@ -1,6 +1,6 @@
 import type { TargetFaceOption, TargetFaceRing } from "./target-face";
 
-// シード(`supabase/migrations/20261117000002_target_faces.sql`)の公式の的19件を、取得の形で写した値。配置はIDごとの固定の割り当てである。
+// シード(`supabase/migrations/20261127010002_target_faces.sql`)の公式の的19件を、取得の形で写した値。配置はIDごとの固定の割り当てである。
 // 表示の順と説明は持たせず、期待値は各テストが書く。
 
 type RingRow = readonly [

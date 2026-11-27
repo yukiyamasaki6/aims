@@ -133,8 +133,7 @@ CREATE TABLE IF NOT EXISTS "public"."shot_events" (
     "score_int" bigint,
     "created_at" timestamp with time zone DEFAULT "clock_timestamp"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "clock_timestamp"() NOT NULL,
-    "shot_id" "uuid" NOT NULL,
-    "shot_number" bigint,
+    "shot_number" bigint NOT NULL,
     "set_fields" "text"[],
     CONSTRAINT "shot_events_revision_positive" CHECK (("revision" >= 1)),
     CONSTRAINT "shot_events_shot_number_check" CHECK (("shot_number" >= 1)),
@@ -152,7 +151,6 @@ ALTER TABLE "public"."shot_events" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."shots" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() PRIMARY KEY,
     "distance_id" "uuid" NOT NULL,
     "end_number" bigint NOT NULL,
     "shooter_id" "uuid" NOT NULL,
@@ -162,7 +160,8 @@ CREATE TABLE IF NOT EXISTS "public"."shots" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "revision" bigint DEFAULT 1 NOT NULL,
     "disabled_at" timestamp with time zone,
-    "shot_number" bigint,
+    "shot_number" bigint NOT NULL,
+    CONSTRAINT "shots_pkey" PRIMARY KEY (distance_id, end_number, shot_number),
     CONSTRAINT "shots_revision_check" CHECK (("revision" >= 1)),
     CONSTRAINT "shots_shot_number_check" CHECK (("shot_number" >= 1))
 );
@@ -188,13 +187,11 @@ ALTER TABLE ONLY "public"."round_users"
 
 
 ALTER TABLE ONLY "public"."shot_events"
-    ADD CONSTRAINT "shot_events_shot_id_revision_key" UNIQUE ("shot_id", "revision");
+    ADD CONSTRAINT "shot_events_cell_revision_key" UNIQUE ("distance_id", "end_number", "shot_number", "revision");
 
 
-CREATE INDEX "shots_live_end_idx" ON "public"."shots" USING "btree" ("distance_id", "end_number");
 
 
-CREATE UNIQUE INDEX "shots_live_shot_number_key" ON "public"."shots" USING "btree" ("distance_id", "end_number", "shot_number") WHERE (("disabled_at" IS NULL) AND ("shot_number" IS NOT NULL));
 
 
 CREATE OR REPLACE FUNCTION "public"."distance_config_over_limit"("p_distance" numeric, "p_total_ends" numeric, "p_arrows_per_end" numeric) RETURNS boolean
@@ -211,26 +208,25 @@ ALTER FUNCTION "public"."distance_config_over_limit"("p_distance" numeric, "p_to
 REVOKE EXECUTE ON FUNCTION "public"."distance_config_over_limit"("p_distance" numeric, "p_total_ends" numeric, "p_arrows_per_end" numeric) FROM PUBLIC, "anon";
 GRANT EXECUTE ON FUNCTION "public"."distance_config_over_limit"("p_distance" numeric, "p_total_ends" numeric, "p_arrows_per_end" numeric) TO "authenticated";
 
-CREATE OR REPLACE FUNCTION "public"."clear_shots"("p_shots" "jsonb") RETURNS "jsonb"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO 'public'
-    AS $_$
+create or replace function public.clear_shots(p_shots jsonb) returns jsonb
+language plpgsql security definer
+set search_path to 'public'
+as $_$
 declare
   v_shot jsonb;
   v_distance_id uuid;
   v_round_id uuid;
   v_round_disabled_at timestamptz;
   v_distance_disabled_at timestamptz;
-  v_shot_id uuid;
-  v_row_distance_id uuid;
-  v_row_end bigint;
+  v_end bigint;
+  v_shot_number bigint;
   v_row_disabled_at timestamptz;
   v_new_revision bigint;
   v_event_revision bigint;
   v_results jsonb := '[]'::jsonb;
   v_uuid_re constant text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
 begin
-  -- 契約の検証。shot_idの無い要素は拒否する。
+  -- 契約の検証。マス(end_number、shot_number)の無い要素と旧い形(shot_id)の要素は拒否する。
   if p_shots is null or jsonb_typeof(p_shots) <> 'array' or jsonb_array_length(p_shots) > 100 then
     raise exception '矢の取り消しは100件以下の配列で指定してください。' using errcode = 'PT422';
   end if;
@@ -239,10 +235,12 @@ begin
     if jsonb_typeof(v_shot) <> 'object'
       or coalesce(jsonb_typeof(v_shot -> 'distance_id'), '') <> 'string'
       or coalesce(jsonb_typeof(v_shot -> 'shot_event_id'), '') <> 'string'
-      or coalesce(jsonb_typeof(v_shot -> 'shot_id'), '') <> 'string'
+      or coalesce(jsonb_typeof(v_shot -> 'end_number'), '') <> 'number'
+      or coalesce(jsonb_typeof(v_shot -> 'shot_number'), '') <> 'number'
       or coalesce((v_shot ->> 'distance_id') !~ v_uuid_re, true)
       or coalesce((v_shot ->> 'shot_event_id') !~ v_uuid_re, true)
-      or coalesce((v_shot ->> 'shot_id') !~ v_uuid_re, true) then
+      or coalesce((v_shot #>> '{end_number}') !~ '^[1-9][0-9]{0,15}$', true)
+      or coalesce((v_shot #>> '{shot_number}') !~ '^[1-9][0-9]{0,15}$', true) then
       raise exception '矢の取り消しの指定が不正です。' using errcode = 'PT422';
     end if;
   end loop;
@@ -267,7 +265,8 @@ begin
   for v_shot in select * from jsonb_array_elements(p_shots)
   loop
     v_distance_id := (v_shot ->> 'distance_id')::uuid;
-    v_shot_id := (v_shot ->> 'shot_id')::uuid;
+    v_end := (v_shot ->> 'end_number')::bigint;
+    v_shot_number := (v_shot ->> 'shot_number')::bigint;
 
     select d.round_id, d.disabled_at, r.disabled_at
       into v_round_id, v_distance_disabled_at, v_round_disabled_at
@@ -291,35 +290,35 @@ begin
       continue;
     end if;
 
-    select distance_id, end_number, disabled_at into v_row_distance_id, v_row_end, v_row_disabled_at from shots where id = v_shot_id;
+    select disabled_at into v_row_disabled_at from shots
+    where distance_id = v_distance_id and end_number = v_end and shot_number = v_shot_number;
     if not found then
       v_results := v_results || jsonb_build_object('revision', null::bigint, 'applied', false, 'reason', 'MISSING');
       continue;
     end if;
-    if v_row_distance_id <> v_distance_id then
-      raise exception '矢の距離が記録と一致しません。' using errcode = 'PT422';
-    end if;
 
-    -- 消えている矢を別の操作IDで消す要求は、書かずに効かない結果で返す(履歴に同じ消去を並べない)。
+    -- 消えているマスを別の操作IDで消す要求は、書かずに効かない結果で返す(履歴に同じ消去を並べない)。
     if v_row_disabled_at is not null then
       v_results := v_results || jsonb_build_object('revision', null::bigint, 'applied', false, 'reason', 'DISABLED');
       continue;
     end if;
 
     select greatest(
-      (select max(e.revision) from shot_events e where e.shot_id = v_shot_id),
-      (select s.revision from shots s where s.id = v_shot_id),
+      (select max(e.revision) from shot_events e
+        where e.distance_id = v_distance_id and e.end_number = v_end and e.shot_number = v_shot_number),
+      (select s.revision from shots s
+        where s.distance_id = v_distance_id and s.end_number = v_end and s.shot_number = v_shot_number),
       0
     ) + 1 into v_new_revision;
 
-    insert into shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number)
+    insert into shot_events (event_id, distance_id, end_number, shot_number, type, author_id, revision)
     values (
-      (v_shot ->> 'shot_event_id')::uuid, v_distance_id, v_shot_id, 'CLEARED', auth.uid(), v_new_revision, v_row_end
+      (v_shot ->> 'shot_event_id')::uuid, v_distance_id, v_end, v_shot_number, 'CLEARED', auth.uid(), v_new_revision
     );
 
     update shots
     set disabled_at = clock_timestamp(), revision = v_new_revision
-    where id = v_shot_id;
+    where distance_id = v_distance_id and end_number = v_end and shot_number = v_shot_number;
 
     v_results := v_results || jsonb_build_object('revision', v_new_revision, 'applied', true, 'reason', null::text);
   end loop;
@@ -690,10 +689,10 @@ $$;
 ALTER FUNCTION "public"."is_round_member"("target_round_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."record_shots"("p_shots" "jsonb") RETURNS "jsonb"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO 'public'
-    AS $_$
+create or replace function public.record_shots(p_shots jsonb) returns jsonb
+language plpgsql security definer
+set search_path to 'public'
+as $_$
 declare
   v_shot jsonb;
   v_distance_id uuid;
@@ -703,20 +702,15 @@ declare
   v_total_ends bigint;
   v_arrows_per_end bigint;
   v_target_face_id uuid;
-  v_shot_id uuid;
   v_end bigint;
+  v_shot_number bigint;
   v_score_str text;
   v_score_int bigint;
   v_has_shooter boolean;
-  v_has_shot_number boolean;
   v_shooter_id uuid;
   v_row shots%rowtype;
   v_row_found boolean;
-  v_reviving boolean;
-  v_shot_number bigint;
-  v_set_shot_number boolean;
   v_applied text[];
-  v_rejected jsonb;
   v_keys text[];
   v_new_revision bigint;
   v_event_revision bigint;
@@ -724,7 +718,7 @@ declare
   v_results jsonb := '[]'::jsonb;
   v_uuid_re constant text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
 begin
-  -- 契約の検証。shot_idの無い要素は拒否する。
+  -- 契約の検証。マス(end_number、shot_number)の無い要素と旧い形(shot_id)の要素は拒否する。
   if p_shots is null or jsonb_typeof(p_shots) <> 'array' or jsonb_array_length(p_shots) > 100 then
     raise exception '矢の記録は100件以下の配列で指定してください。' using errcode = 'PT422';
   end if;
@@ -733,24 +727,19 @@ begin
     if jsonb_typeof(v_shot) <> 'object'
       or coalesce(jsonb_typeof(v_shot -> 'distance_id'), '') <> 'string'
       or coalesce(jsonb_typeof(v_shot -> 'shot_event_id'), '') <> 'string'
-      or coalesce(jsonb_typeof(v_shot -> 'shot_id'), '') <> 'string'
       or coalesce(jsonb_typeof(v_shot -> 'end_number'), '') <> 'number'
+      or coalesce(jsonb_typeof(v_shot -> 'shot_number'), '') <> 'number'
       or coalesce(jsonb_typeof(v_shot -> 'score_str'), '') <> 'string'
       or coalesce(jsonb_typeof(v_shot -> 'score_int'), '') <> 'number'
       or coalesce((v_shot ->> 'distance_id') !~ v_uuid_re, true)
       or coalesce((v_shot ->> 'shot_event_id') !~ v_uuid_re, true)
-      or coalesce((v_shot ->> 'shot_id') !~ v_uuid_re, true)
       or coalesce((v_shot #>> '{end_number}') !~ '^[1-9][0-9]{0,15}$', true)
+      or coalesce((v_shot #>> '{shot_number}') !~ '^[1-9][0-9]{0,15}$', true)
       or coalesce((v_shot #>> '{score_int}') !~ '^-?[0-9]{1,15}$', true)
       or (v_shot ->> 'score_str') = ''
       or (
         v_shot ? 'shooter_id'
         and (jsonb_typeof(v_shot -> 'shooter_id') <> 'string' or coalesce((v_shot ->> 'shooter_id') !~ v_uuid_re, true))
-      )
-      or (
-        v_shot ? 'shot_number'
-        and jsonb_typeof(v_shot -> 'shot_number') <> 'null'
-        and (jsonb_typeof(v_shot -> 'shot_number') <> 'number' or (v_shot #>> '{shot_number}') !~ '^-?[0-9]{1,9}$')
       ) then
       raise exception '矢の記録の指定が不正です。' using errcode = 'PT422';
     end if;
@@ -776,12 +765,11 @@ begin
   for v_shot in select * from jsonb_array_elements(p_shots)
   loop
     v_distance_id := (v_shot ->> 'distance_id')::uuid;
-    v_shot_id := (v_shot ->> 'shot_id')::uuid;
     v_end := (v_shot ->> 'end_number')::bigint;
+    v_shot_number := (v_shot ->> 'shot_number')::bigint;
     v_score_str := v_shot ->> 'score_str';
     v_score_int := (v_shot ->> 'score_int')::bigint;
     v_has_shooter := v_shot ? 'shooter_id';
-    v_has_shot_number := v_shot ? 'shot_number';
 
     select d.round_id, d.disabled_at, d.total_ends, d.arrows_per_end, d.target_face_id, r.disabled_at
       into v_round_id, v_distance_disabled_at, v_total_ends, v_arrows_per_end, v_target_face_id, v_round_disabled_at
@@ -801,13 +789,10 @@ begin
     select revision, set_fields into v_event_revision, v_event_set_fields
     from shot_events where event_id = (v_shot ->> 'shot_event_id')::uuid;
     if found then
-      v_applied := coalesce(v_event_set_fields, array['score', 'shooter_id', 'shot_number']);
+      v_applied := coalesce(v_event_set_fields, array['score', 'shooter_id']);
       v_keys := array['score'];
       if v_has_shooter then
         v_keys := array_append(v_keys, 'shooter_id');
-      end if;
-      if v_has_shot_number then
-        v_keys := array_append(v_keys, 'shot_number');
       end if;
       v_results := v_results || jsonb_build_object(
         'revision', v_event_revision,
@@ -843,25 +828,7 @@ begin
       continue;
     end if;
 
-    -- 矢を距離・エンドの間で移す操作は無い。別の距離・エンドの同じIDは契約の不一致とする。
-    select * into v_row from shots where id = v_shot_id;
-    v_row_found := found;
-    if v_row_found and v_row.distance_id <> v_distance_id then
-      raise exception '矢の距離が記録と一致しません。' using errcode = 'PT422';
-    end if;
-    if v_row_found and v_row.end_number <> v_end then
-      raise exception '矢のエンドが記録と一致しません。' using errcode = 'PT422';
-    end if;
-
-    -- 記録後の射順（キーが無ければ行の値）で、構成に収まるかを判定する。
-    if v_has_shot_number then
-      v_shot_number := (v_shot ->> 'shot_number')::bigint;
-    elsif v_row_found then
-      v_shot_number := v_row.shot_number;
-    else
-      v_shot_number := null;
-    end if;
-
+    -- 現在の構成に収まらないマス・点数は効かせない。射数/エンドの上限は、この範囲の判定と主キーで守る。
     if not shot_fits(v_target_face_id, v_total_ends, v_arrows_per_end, v_end, v_shot_number, v_score_str, v_score_int) then
       v_results := v_results || jsonb_build_object(
         'revision', null::bigint, 'applied', false, 'applied_fields', null::text[],
@@ -870,72 +837,36 @@ begin
       continue;
     end if;
 
-    v_reviving := not v_row_found or v_row.disabled_at is not null;
-    v_set_shot_number := v_has_shot_number;
-    v_rejected := '[]'::jsonb;
+    select * into v_row from shots
+    where distance_id = v_distance_id and end_number = v_end and shot_number = v_shot_number;
+    v_row_found := found;
 
-    -- 射順が同じエンドの他の生きている矢と重なるなら、射順の項目だけを効かせない。
-    if v_has_shot_number and v_shot_number is not null and exists (
-      select 1 from shots
-      where distance_id = v_distance_id and end_number = v_end and disabled_at is null
-        and shot_number = v_shot_number and id <> v_shot_id
-    ) then
-      v_rejected := v_rejected || jsonb_build_object('field', 'shot_number', 'reason', 'UNFIT');
-      v_set_shot_number := false;
-      v_shot_number := case when v_row_found then v_row.shot_number end;
-    end if;
-
-    -- 消した矢の復活で、行の射順が他の生きている矢と重なるなら、射順をnullにして復活させる。
-    if v_reviving and not v_set_shot_number and v_shot_number is not null and exists (
-      select 1 from shots
-      where distance_id = v_distance_id and end_number = v_end and disabled_at is null
-        and shot_number = v_shot_number and id <> v_shot_id
-    ) then
-      v_set_shot_number := true;
-      v_shot_number := null;
-    end if;
-
-    -- 生きている矢を増やす記録（新しい矢、復活）は、エンドに空きがあるときだけ効かせる。
-    if v_reviving and (
-      select count(*) from shots
-      where distance_id = v_distance_id and end_number = v_end and disabled_at is null
-    ) >= v_arrows_per_end then
-      v_results := v_results || jsonb_build_object(
-        'revision', null::bigint, 'applied', false, 'applied_fields', null::text[],
-        'rejected_fields', '[]'::jsonb, 'reason', 'UNFIT'
-      );
-      continue;
-    end if;
-
-    -- 新しい矢では射手を必ず決めるため、射手は効いた属性になる。
+    -- 行の無いマスでは射手を必ず決めるため、射手は効いた属性になる。
     v_applied := array['score'];
     if v_has_shooter or not v_row_found then
       v_applied := array_append(v_applied, 'shooter_id');
-    end if;
-    if v_set_shot_number then
-      v_applied := array_append(v_applied, 'shot_number');
     end if;
 
     if not v_has_shooter then
       v_shooter_id := case when v_row_found then v_row.shooter_id else auth.uid() end;
     end if;
 
-    -- 矢のイベントと射影の両方のrevisionを見て採番する。
+    -- マスの履歴と射影の両方のrevisionを見て採番する。
     select greatest(
-      (select max(e.revision) from shot_events e where e.shot_id = v_shot_id),
-      (select s.revision from shots s where s.id = v_shot_id),
+      (select max(e.revision) from shot_events e
+        where e.distance_id = v_distance_id and e.end_number = v_end and e.shot_number = v_shot_number),
+      (select s.revision from shots s
+        where s.distance_id = v_distance_id and s.end_number = v_end and s.shot_number = v_shot_number),
       0
     ) + 1 into v_new_revision;
 
     insert into shot_events (
-      event_id, distance_id, shot_id, type, author_id, revision, end_number,
-      shooter_id, score_str, score_int, shot_number, set_fields
+      event_id, distance_id, end_number, shot_number, type, author_id, revision,
+      shooter_id, score_str, score_int, set_fields
     )
     values (
-      (v_shot ->> 'shot_event_id')::uuid, v_distance_id, v_shot_id, 'RECORDED', auth.uid(), v_new_revision, v_end,
-      v_shooter_id, v_score_str, v_score_int,
-      case when v_set_shot_number then v_shot_number end,
-      v_applied
+      (v_shot ->> 'shot_event_id')::uuid, v_distance_id, v_end, v_shot_number, 'RECORDED', auth.uid(), v_new_revision,
+      v_shooter_id, v_score_str, v_score_int, v_applied
     );
 
     if v_row_found then
@@ -944,18 +875,17 @@ begin
         score_str = v_score_str,
         score_int = v_score_int,
         shooter_id = v_shooter_id,
-        shot_number = case when v_set_shot_number then v_shot_number else shot_number end,
         revision = v_new_revision,
         disabled_at = null
-      where id = v_shot_id;
+      where distance_id = v_distance_id and end_number = v_end and shot_number = v_shot_number;
     else
-      insert into shots (id, distance_id, end_number, shooter_id, score_str, score_int, shot_number, revision)
-      values (v_shot_id, v_distance_id, v_end, v_shooter_id, v_score_str, v_score_int, v_shot_number, v_new_revision);
+      insert into shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int, revision)
+      values (v_distance_id, v_end, v_shot_number, v_shooter_id, v_score_str, v_score_int, v_new_revision);
     end if;
 
     v_results := v_results || jsonb_build_object(
       'revision', v_new_revision, 'applied', true, 'applied_fields', to_jsonb(v_applied),
-      'rejected_fields', v_rejected, 'reason', null::text
+      'rejected_fields', '[]'::jsonb, 'reason', null::text
     );
   end loop;
 
@@ -967,12 +897,15 @@ $_$;
 ALTER FUNCTION "public"."record_shots"("p_shots" "jsonb") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."shot_fits"("p_target_face_id" "uuid", "p_total_ends" bigint, "p_arrows_per_end" bigint, "p_end" bigint, "p_shot_number" bigint, "p_score_str" "text", "p_score_int" bigint) RETURNS boolean
-    LANGUAGE "sql" STABLE
-    SET "search_path" TO 'public'
-    AS $$
+create or replace function public.shot_fits(
+  p_target_face_id uuid, p_total_ends bigint, p_arrows_per_end bigint, p_end bigint, p_shot_number bigint,
+  p_score_str text, p_score_int bigint
+) returns boolean
+language sql stable
+set search_path to 'public'
+as $$
   select p_end between 1 and p_total_ends
-    and (p_shot_number is null or p_shot_number between 1 and p_arrows_per_end)
+    and p_shot_number between 1 and p_arrows_per_end
     and (
       (p_score_str = 'M' and p_score_int = 0)
       or exists (
@@ -995,7 +928,7 @@ ALTER FUNCTION "public"."shot_fits"("p_target_face_id" "uuid", "p_total_ends" bi
 
 
 
-CREATE OR REPLACE FUNCTION "public"."update_distance"("p_distance_event_id" "uuid", "p_distance_id" "uuid", "p_changes" "jsonb") RETURNS "jsonb"
+create or replace function "public"."update_distance"("p_distance_event_id" "uuid", "p_distance_id" "uuid", "p_changes" "jsonb") RETURNS "jsonb"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $_$
@@ -1162,17 +1095,12 @@ begin
   end if;
 
   if p_changes ? 'config' then
+    -- 射数/エンドの上限は、各矢が新しい範囲のマスにあることで守る(マスごとに1行)。
     if exists (
       select 1 from shots s
       where s.distance_id = p_distance_id
         and s.disabled_at is null
         and not shot_fits(v_new_target_face_id, v_new_total_ends, v_new_arrows_per_end, s.end_number, s.shot_number, s.score_str, s.score_int)
-    ) or exists (
-      select 1 from shots s
-      where s.distance_id = p_distance_id
-        and s.disabled_at is null
-      group by s.end_number
-      having count(*) > v_new_arrows_per_end
     ) then
       v_rejected := v_rejected || jsonb_build_object('field', 'config', 'reason', 'UNFIT');
     else
@@ -1589,7 +1517,7 @@ GRANT SELECT ON TABLE "public"."shot_events" TO "authenticated";
 
 GRANT SELECT ON TABLE "public"."shots" TO "authenticated";
 
--- Supabaseの既定権限から、旧最終状態では不要な権限を除く。
+-- Supabaseの既定権限から、不要な権限を除く。
 REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."rounds" FROM "service_role";
 REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."distances" FROM "service_role";
 REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."shots" FROM "service_role";

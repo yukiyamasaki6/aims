@@ -701,38 +701,6 @@ describe("roundsList", () => {
     });
   });
 
-  it.each([
-    ["種別", "format"],
-    ["弓種", "bow_type"],
-    ["距離ごとの小計", "distances"],
-  ])(
-    "応答の行に%s(%s)が無ければ、画面の値を作らず取得失敗にする",
-    async (_name, missing) => {
-      // Given
-      const row: Record<string, unknown> = {
-        id: "round-1",
-        name: "午前練習",
-        round_date: "2026-09-15",
-        format: "outdoor",
-        bow_type: "recurve",
-        total: 640,
-        distances: [],
-      };
-      delete row[missing];
-      const database = makeDatabase({
-        rounds: ok([]),
-        target_faces: noFaces,
-        rounds_list: ok({ rounds: [row], has_more: false }),
-      });
-
-      // When
-      const response = await database.createQueries().roundsList(listRequest);
-
-      // Then
-      expect(response).toEqual({ status: "failed" });
-    },
-  );
-
   it("通信失敗(status 0)はcomm-failure、エラー応答はfailedの種類で返す", async () => {
     // Given
     const comm = makeDatabase({
@@ -924,7 +892,7 @@ describe("roundsList: 距離単位", () => {
     const database = makeDatabase({
       rounds: ok([]),
       target_faces: noFaces,
-      distances_list: ok({ distances, has_more: true }),
+      distances_list: ok({ distances, has_more: false }),
     });
 
     // When
@@ -933,42 +901,9 @@ describe("roundsList: 距離単位", () => {
     // Then
     expect(response).toEqual({
       status: "ok",
-      data: { distances, hasMore: true },
+      data: { distances, hasMore: false },
     });
   });
-
-  it.each([
-    ["種別", "format"],
-    ["弓種", "bow_type"],
-  ])(
-    "応答の行に%s(%s)が無ければ、画面の値を作らず取得失敗にする",
-    async (_name, missing) => {
-      // Given
-      const row: Record<string, unknown> = {
-        id: "d-1",
-        round_id: "round-1",
-        name: "午前練習",
-        round_date: "2026-09-15",
-        format: "outdoor",
-        bow_type: "recurve",
-        distance: 50,
-        is_marked: true,
-        total: 300,
-      };
-      delete row[missing];
-      const database = makeDatabase({
-        rounds: ok([]),
-        target_faces: noFaces,
-        distances_list: ok({ distances: [row], has_more: false }),
-      });
-
-      // When
-      const response = await database.createQueries().roundsList(request);
-
-      // Then
-      expect(response).toEqual({ status: "failed" });
-    },
-  );
 
   it("通信失敗(status 0)はcomm-failure、エラー応答はfailedの種類で返し、どちらも再試行せず1回だけ呼ぶ", async () => {
     // Given

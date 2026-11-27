@@ -54,7 +54,7 @@ Googleで作った、またはGoogleが結び付いたアカウントも、同�
 | `src/features/auth/ui/delete-account-form.tsx` | 意思確認とコード入力の画面、統合サインインと共通のOTP部品、意思の明示、設定パネルへの処理中通知 |
 | `src/features/auth/domain/auth-code.ts` | コード入力と60秒の再送待機の共通規則 |
 | `src/features/auth/application/session.ts` | 削除のネットワーク実行中の保持、成功後のサインアウトと遷移 |
-| `supabase/migrations/`の追加migration | 削除RPCのOTP認可と対象ID契約。既存の削除・匿名化を継承する |
+| `supabase/migrations/20261127010006_delete_account.sql` | 削除RPCのOTP認可と対象ID契約、削除・匿名化、削除記録の同期書込み |
 
 意思確認の削除ボタンではDBへ削除を試行せず、続けてコード送信を行う。送信時にgetUserで対象IDと現在のメールを確定する。ブラウザの時計やJWT解析で認可や省略を決めない。
 送信は`signInWithOtp`のshouldCreateUser:falseとcaptchaToken、確認は`verifyOtp`のtype:emailを用いる。
@@ -67,7 +67,7 @@ Googleで作った、またはGoogleが結び付いたアカウントも、同�
 ### RPC契約
 
 `delete_account(expected_user_id uuid)`は対象の取り違えを防ぐため、要求IDがauth.uidと一致し、利用者が実在し、匿名化の置き先でないことを要求する。
-削除対象は常にauth.uidから決め、引数を他人の削除権限として使わない。旧引数なし関数は残さず、旧呼出しで認可を迂回できないようにする。
+削除対象は常にauth.uidから決め、引数を他人の削除権限として使わない。
 SECURITY DEFINER、search_pathは空、statement_timeoutは60秒、EXECUTEはauthenticatedだけに与える。
 public.usersの行をロックした後、最初のデータ変更の直前にDBのclock_timestampを1回読み、amr内のmethod=otpの数値timestampが「現在時刻−60秒以上、現在時刻以下」であることを検査する。
 60秒ちょうどを許容し、パスワードだけ・欠落・不正な形・古い時刻・未来の時刻を拒否する。JWT発行時刻、更新時刻、利用者全体の最終ログイン時刻で代用しない。

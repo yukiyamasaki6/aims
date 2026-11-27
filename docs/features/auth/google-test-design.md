@@ -32,7 +32,7 @@ OTP、メールアドレス変更、アカウント削除そのものの既存�
 
 ### 変更 `auth.sql`(Hook)
 
-Hookの方式の行列(`hook_cases`)に、`"oauth"`を許可(claimsを保つ)として足す。`"id_token"`は拒否(403`authentication_method_not_allowed`)として足す。`password`、`recovery`など既存の拒否の行は変えない。引数なしの旧`delete_account()`が無いことなど、既存の確認は維持する。
+Hookの方式の行列(`hook_cases`)に、`"oauth"`を許可(claimsを保つ)として足す。`"id_token"`は拒否(403`authentication_method_not_allowed`)として足す。`password`、`recovery`など既存の拒否の行は変えない。他の既存の確認は維持する。
 
 ### 新規 `google_identities.sql`(`ensure_email_identity()`とトリガー`keep_email_identity`)
 
@@ -81,7 +81,7 @@ Hookの方式の行列(`hook_cases`)に、`"oauth"`を許可(claimsを保つ)と
 ### 変更 `rls_matrix.sql`、`migrations_final_state.sql`
 
 - 関数のEXECUTEの期待値表に、`ensure_email_identity()`(`anon`偽、`authenticated`真)と、トリガー関数(`anon`・`authenticated`とも偽)の行を足す。期待値の方針のコメントのトリガー関数に新しい関数を含める。
-- `migrations_final_state.sql`は、新しいmigrationが加える関数・トリガーの存在と、既存の最終状態が変わらないことの確認だけ追従する。
+- `migrations_final_state.sql`は、`ensure_email_identity()`・`keep_email_identity()`の関数と、有効なトリガーの存在を確かめる。
 - 削除する: `password_email_identity.sql`と、`rls_matrix.sql`のパスワードのトリガー関数の行(パスワードのトリガーは作らないため)。
 
 ## 単体・コンポーネントテスト(Vitest)
