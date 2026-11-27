@@ -3,15 +3,22 @@ import type { Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
+  prepareConfirmedUserSession,
   SHARED_AUTH_STATE_PATH,
   signOutFromSettings,
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
+import { isCurrentRefreshToken } from "../helpers/auth-db";
 import { comeBackOnline, goOffline } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
 import { revokeAllSessions } from "../helpers/session-revoke";
 import { homeHeading } from "../helpers/settings";
+import {
+  AUTH_COOKIE,
+  expireStoredSession,
+  readChunkedTokens,
+} from "../helpers/stored-session";
 
 const introductionText = translatorFor("introduction");
 const navigationText = translatorFor("navigation");
@@ -75,6 +82,49 @@ test.describe("未認証のガード", () => {
     await page.goto("/rounds/new");
 
     await expect(page).toHaveURL(/\/signin\?returnTo=%2Frounds%2Fnew$/);
+  });
+});
+
+test.describe("転送でのセッションの更新", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("更新の対象のセッションでサインインを要求すると、最初の転送だけでブラウザが認証サービスの現在のトークンを保存し、ホームを利用できる", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    if (!baseURL) throw new Error("Missing application URL in e2e test.");
+    // 実SDKが作ったセッションの期限の記録だけを過去にして、画面を開く前に、更新の対象の状態を作る。
+    await prepareConfirmedUserSession(context, baseURL, {
+      email: `nav-redirect-refresh-${randomUUID()}@aims.test`,
+      password: "unused",
+    });
+    await expireStoredSession(context);
+    const before = await readChunkedTokens(context);
+
+    // 画面を開かずにサインインを要求し、最初の転送だけで現在のトークンが保存された状態へ進む。
+    // 転送先の応答でもセッションは回復しうるため、転送を追わず、ほかの要求を送る前に照合する。
+    const response = await context.request.get("/signin", { maxRedirects: 0 });
+    expect(response.status()).toBe(307);
+    const destination = new URL(response.headers().location, baseURL);
+    expect(destination.href).toBe(new URL("/rounds", baseURL).href);
+    // 失敗の表示にトークンを出さないため、真偽にしてから確かめる。
+    const writesSession = response
+      .headersArray()
+      .some(
+        ({ name, value }) =>
+          name.toLowerCase() === "set-cookie" && value.startsWith(AUTH_COOKIE),
+      );
+    expect(writesSession, "最初の転送がセッションのCookieを書く").toBe(true);
+    const stored = await readChunkedTokens(context);
+    expect(stored.refreshToken !== before.refreshToken).toBe(true);
+    expect(await isCurrentRefreshToken(stored)).toBe(true);
+
+    // 転送先を開いて、ホームを使う。
+    await page.goto(destination.href);
+    await waitForHydration(page);
+    await expect(page).toHaveURL(/\/rounds$/);
+    await expect(homeHeading(page)).toBeVisible();
   });
 });
 

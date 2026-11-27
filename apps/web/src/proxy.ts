@@ -1,18 +1,17 @@
-import { type NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { redirectFor } from "@/features/auth/domain/auth-routes";
 import { updateSession } from "@/lib/supabase/infrastructure/session";
 
 export async function proxy(request: NextRequest) {
-  const { signedIn, response } = await updateSession(request);
+  const { signedIn, respond } = await updateSession(request);
   const destination = redirectFor({
     signedIn,
     pathname: request.nextUrl.pathname,
     search: request.nextUrl.search,
   });
-  if (destination !== null) {
-    return NextResponse.redirect(new URL(destination, request.url));
-  }
-  return response;
+  return respond(
+    destination === null ? null : new URL(destination, request.url),
+  );
 }
 
 // matcherはNext.jsがビルド時に静的に読み、定数を参照できない(変数は無視される)ため、経路の持ち主(経路表)を文字列で再掲する。経路を導けるのはこの設定だけである。
