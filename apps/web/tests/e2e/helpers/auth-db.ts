@@ -54,6 +54,36 @@ export function backdateOtpEvidence(email: string) {
   );
 }
 
+// 更新トークンが、認証サービスが持つそのセッションの現在のトークンかを、当該の利用者とセッションの行だけを読んで照合する。
+// 照合できるのは、更新トークンを行で持つ方式だけである。回数で管理する方式のセッションと、対象の行が無いときは、照合せずに通さないため例外にする。
+export function isCurrentRefreshToken(input: {
+  userId: string;
+  sessionId: string;
+  refreshToken: string;
+}): Promise<boolean> {
+  const target = [input.sessionId, input.userId];
+  return withLocalDb(async (client) => {
+    const sessions = await client.query<{ counter: string | null }>(
+      `select refresh_token_counter as counter
+         from auth.sessions
+        where id = $1 and user_id = $2`,
+      target,
+    );
+    if (sessions.rows.length !== 1) throw new Error("no auth session row");
+    if (sessions.rows[0].counter !== null)
+      throw new Error("unsupported refresh token method");
+    const current = await client.query<{ token: string }>(
+      `select token
+         from auth.refresh_tokens
+        where session_id = $1 and user_id = $2 and revoked is false`,
+      target,
+    );
+    if (current.rows.length !== 1)
+      throw new Error("no single current refresh token row");
+    return current.rows[0].token === input.refreshToken;
+  });
+}
+
 export type GoogleLinkedUser = {
   id: string;
   email: string;
