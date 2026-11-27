@@ -66,7 +66,7 @@ export function getSharedEmail(): string {
 export async function createConfirmedUser(input: {
   email: string;
   password?: string;
-  legacyPassword?: string;
+  storedPassword?: string;
 }): Promise<void> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -80,7 +80,7 @@ export async function createConfirmedUser(input: {
 
   const { error } = await supabase.auth.admin.createUser({
     email: input.email,
-    ...(input.legacyPassword ? { password: input.legacyPassword } : {}),
+    ...(input.storedPassword ? { password: input.storedPassword } : {}),
     email_confirm: true,
   });
   if (error && !/already been registered|already exists/i.test(error.message)) {

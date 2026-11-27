@@ -19,7 +19,9 @@ const DB_VERSION = 6;
 const STORE_NAME = "ops";
 const BASE_STORE_NAME = "bases";
 
-type StoredBase<Base> = StreamBase<Base> & {
+type StoredBase<Base> = {
+  startedAt: number;
+  base: Base;
   userId: string;
   streamId: string;
 };
@@ -117,7 +119,8 @@ export function createIndexedDbOpLogStore<Op extends OpBase, Base>(
             await bases.put({
               userId: entry.userId,
               streamId: entry.streamId,
-              ...base,
+              startedAt: base.startedAt,
+              base: base.base,
             });
           }
           return seq;
@@ -212,9 +215,7 @@ function isStaleFetch<Op extends OpBase, Base>(
   // 保存済みより古い取得。
   if (stored.startedAt > startedAt) return true;
   // 開始時刻が新しくても、保存済みのベースよりrevisionが古い状態を返した取得は、何も変えない。
-  return (
-    stored.base != null && base !== null && rules.isOlder(stored.base, base)
-  );
+  return base !== null && rules.isOlder(stored.base, base);
 }
 
 // 保持の規則に当たらない組は、未送信の操作が無い(あれば必ず当たる)ため、ベースも操作も丸ごと消す。

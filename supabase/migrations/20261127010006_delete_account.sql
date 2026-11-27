@@ -1,16 +1,11 @@
--- アカウント削除の記録(docs/backup.md)のDB側。
---   - purge_account(target_user_id): delete_accountの削除・匿名化の本体。認可を持たず、実行権限を誰にも与えない(所有者のpostgresだけが呼べる)
---     復元の手順(docs/backup.md)が、取得の後に削除された利用者を削除の後と同じ状態に戻すために使う。利用者が居なければ何もしない
---   - delete_account(expected_user_id): 認可とロックの後にpurge_accountを呼び、最後に削除の記録(利用者ID)をhttp拡張で同期にWorkerへ送る
---     送れない・2xx以外・時間切れ(接続3秒、全体5秒)・記録先の設定が無いときは例外にして、削除を取り消す
---   - 記録先はVaultのaccount_deletion_log_endpoint(WorkerのURL)とaccount_deletion_log_key(Workerの鍵)
---     endpointが'disabled'のときは記録しない。ローカルとプレビューのシード(supabase/seed.sql)だけが設定し、本番には置かない
---   - 戻すときは、delete_accountを20261119000001の定義へ戻し、purge_accountを消す追加のmigrationで行う
-
 begin;
 
 set lock_timeout = '1s';
 set statement_timeout = '5s';
+
+INSERT INTO "auth"."users" ("instance_id", "id", "aud", "role", "banned_until", "created_at", "updated_at")
+VALUES ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated', 'infinity', now(), now())
+ON CONFLICT ("id") DO NOTHING;
 
 CREATE EXTENSION IF NOT EXISTS "http" WITH SCHEMA "extensions";
 

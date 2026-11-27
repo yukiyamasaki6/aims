@@ -2,7 +2,7 @@
 --   - record_shotsはマスの行を足す・置き換える・生き返らせ、効いた属性をset_fieldsとapplied_fieldsに残す
 --   - 同じマスへの記録は、別のevent_idでも1行に置き換わり、2本の矢にならない
 --   - 範囲外のマス・的に無い点数の記録は効かない（UNFIT）。射数/エンドの上限は、この範囲と主キーで守る
---   - マスの無い要素と旧い形（shot_id）の要素は契約の不一致（PT422）で拒否する
+--   - マスの無い要素と、shot_idで矢を指しshot_numberが無い要素は契約の不一致（PT422）で拒否する
 --   - 構成の変更は、生きている矢が全て新しい範囲に収まるときだけ効く
 -- RPC × 観点（権限、入力検証、冪等性）はrpc_matrix.sqlで固定している。
 
@@ -265,7 +265,7 @@ select is(
     || ',' || pg_temp.code('clear_shots', jsonb_build_array(
     jsonb_build_object('shot_event_id', pg_temp.ev(47), 'shot_id', pg_temp.ev(46), 'distance_id', pg_temp.id('DB')))),
   'PT422,PT422',
-  '旧い形（shot_idで矢を指し、shot_numberが無い）の記録と取り消しは契約の不一致で拒否する'
+  'shot_idで矢を指しshot_numberが無い要素の記録と取り消しは契約の不一致で拒否する'
 );
 select is(
   (select count(*) from public.shots where distance_id = pg_temp.id('DB')) || ' ' || pg_temp.events('DB'),

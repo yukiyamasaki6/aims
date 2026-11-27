@@ -183,7 +183,7 @@ INSERT INTO "public"."preset_distances" ("id", "preset_id", "distance", "total_e
 	('b40050a4-13a0-4bbe-a0fb-b7c957c5e99d', 'a3000000-0000-0000-0000-000000000009', 18, 10, 3, 'a1000000-0000-0000-0000-000000000007', '2026-09-14 15:04:23.770849+00', '2026-09-14 15:04:25.713607+00', true, '000000000002'),
 	('86a3eb50-89a8-4498-a58e-66ab1f49f052', 'a3000000-0000-0000-0000-000000000010', 18, 10, 3, 'a1000000-0000-0000-0000-000000000007', '2026-09-14 15:04:23.770849+00', '2026-09-14 15:04:25.713612+00', true, '000000000001');
 
--- Supabaseの既定権限から、旧最終状態では不要な権限を除く。
+-- Supabaseの既定権限から、不要な権限を除く。
 REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."preset_rounds" FROM "service_role";
 REVOKE REFERENCES, TRIGGER, TRUNCATE, MAINTAIN ON TABLE "public"."preset_distances" FROM "service_role";
 

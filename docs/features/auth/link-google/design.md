@@ -51,7 +51,7 @@
 | `src/app/(main)/layout.tsx`(入口) | 読み込み後に1回、クエリを`linkGoogle.capture(search)`に渡し、預けられたら戻りを外したクエリへ書き換え(`PageAddress.rewrite`)、設定パネルを分類「アカウント」で開く |
 | `src/app/(main)/settings-panel-entry.tsx`(入口) | 「Google認証」の行の値と操作として`LinkGoogleRow`を設定パネルへ渡す |
 | `src/routes.ts` | 追加の印のクエリ名`LINK_GOOGLE_PARAM` |
-| `supabase/migrations/`の追加migration | `ensure_email_identity()`と、メールの手段の削除を拒否するトリガー`keep_email_identity` |
+| `supabase/migrations/20261127010001_users.sql` | `ensure_email_identity()`と、メールの手段の削除を拒否するトリガー`keep_email_identity` |
 
 追加の流れ:
 

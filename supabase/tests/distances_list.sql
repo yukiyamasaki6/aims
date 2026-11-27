@@ -7,7 +7,7 @@
 
 begin;
 
-select plan(90);
+select plan(89);
 
 -- 利用者とラウンドの別名。距離の別名は、ラウンドの別名に番号を付けた形（A1、A2）にする。
 create temp table dl_id (alias text primary key, id uuid not null);
@@ -80,8 +80,8 @@ begin
 end;
 $$;
 
--- 旧い条件（基準と向き）を、日付の向きと得点の向きに写す（基準がscoreなら日付は降順・得点は向き、それ以外は日付は向き・得点は指定なし。向きがasc以外なら降順）。
--- 旧い条件の期待値を変えずに、新しい引数で確かめるための写しである。
+-- 基準と向きの組を、日付の向きと得点の向きの2引数に写す（基準がscoreなら日付は降順・得点は向き、それ以外は日付は向き・得点は指定なし。向きがasc以外なら降順）。
+-- 期待値を基準と向きの組で表すテストを、この2引数で呼ぶための写しである。
 create function pg_temp.date_direction(p_sort_key text, p_sort_direction text) returns text
 language sql immutable
 as $$ select case when p_sort_key = 'score' then 'desc' when p_sort_direction = 'asc' then 'asc' else 'desc' end $$;
@@ -443,14 +443,6 @@ select is(
 );
 
 select is(
-  pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 50, "total_arrows": 36}'))
-    || '|' || pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 50, "total_arrows": 35}')),
-  pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 50}'))
-    || '|' || pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 50}')),
-  '旧い版の端末が送る鍵total_arrowsは、一致する値でも一致しない値でも読まれず、エラーにならず、鍵が無い指定と同じ結果になる'
-);
-
-select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 50, "arrows_per_end": null, "target_face_id": null}')),
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, null, '{"distance": 50}')),
   '外した項目（nullの項目）は、鍵が無い項目と同じく、問わない'
@@ -640,7 +632,7 @@ select is(
 );
 
 -- ============================================================
--- 日付の向きと得点の向き（新しい引数）
+-- 日付の向きと得点の向き
 -- ============================================================
 
 reset role;

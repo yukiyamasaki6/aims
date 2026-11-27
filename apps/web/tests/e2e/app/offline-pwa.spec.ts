@@ -11,7 +11,7 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import { collectHydrationErrors } from "../helpers/hydration";
-import { expectPendingOps } from "../helpers/op-log";
+import { expectNoPendingOps, expectNoUnackedOps } from "../helpers/op-log";
 import { openOtherDevice } from "../helpers/other-device";
 import { expectRoundBasesFetched } from "../helpers/reference-data";
 import { addRound, createPreparedUser } from "../helpers/round-fixtures";
@@ -171,7 +171,7 @@ const OUTDOOR_80CM_FIVE_ZONE_DESCRIPTION = targetFaceDescription({
   placement: "single",
 });
 
-// 配置を持たず名称を持っていた、旧版の的の取得のselect。
+// 現在と取得する項目の並びが違う的の取得のselect(配置が無く、名称を持つ)。
 const TARGET_FACE_SELECT_WITH_NAME =
   "id, name, size, format, bow_type, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index, score_str, score_int))";
 
@@ -188,8 +188,8 @@ async function openRoundSavedOnDevice(page: Page) {
   return { credentials, roundId };
 }
 
-// 端末の的の保存を、旧版が保存した形(旧selectのshapeで、的は名称を持ち配置が無い)へ書き換える。
-async function replaceSavedTargetFacesWithOldShape(page: Page) {
+// 端末の的の保存を、取得する項目の並びが違う形(別のselectのshapeで、的は名称を持ち配置が無い)へ書き換える。
+async function replaceSavedTargetFacesWithDifferentShape(page: Page) {
   await page.evaluate((shape) => {
     for (const [key, value] of Object.entries(localStorage)) {
       if (!key.startsWith("aims:reference:target-faces:")) continue;
@@ -199,7 +199,7 @@ async function replaceSavedTargetFacesWithOldShape(page: Page) {
       };
       const data = stored.data.map(({ placement: _, ...face }) => ({
         ...face,
-        name: "旧形式の的",
+        name: "項目の並びが違う的",
       }));
       localStorage.setItem(key, JSON.stringify({ ...stored, shape, data }));
     }
@@ -225,7 +225,7 @@ async function savedDistance(supabase: SupabaseClient, roundId: string) {
   };
 }
 
-test("新形式の的を端末に保存していると、オフラインで的を選び直して点数を記録でき、オンラインに戻ると保存される", async ({
+test("的の一覧を端末に保存していると、オフラインで的を選び直して点数を記録でき、オンラインに戻ると保存される", async ({
   page,
   context,
 }) => {
@@ -276,29 +276,45 @@ test("新形式の的を端末に保存していると、オフラインで的�
     });
 });
 
-test("旧形式の的の保存しかない端末は、オフラインではラウンド詳細に「ネットワークに接続されていません」が表示されて入力できず、オンラインに戻ると未送信の記録を保って入力を再開できる", async ({
+test("取得する項目の並びが違う的の保存しかない端末は、オフラインではラウンド詳細に「ネットワークに接続されていません」が表示されて入力できず、オンラインに戻ると内容が表示されて入力を再開できる", async ({
   page,
   context,
 }) => {
   const { credentials, roundId } = await openRoundSavedOnDevice(page);
+  const { supabase } = await openOtherDevice(
+    credentials.email,
+    credentials.password,
+  );
 
-  // オフラインでラウンドを開き直し、1本記録して未送信の操作を端末に残す。
-  await goOffline(context);
-  await page.goto(`/rounds/${roundId}`);
-  await waitForHydration(page);
+  // オンラインで1本記録し、サーバーに保存されて、端末が送信の確定を保存するまで進む。
   await page.getByTestId("score-button-9").click();
   await expectCells(page, 1, 1, ["9", null, null]);
-  await expectPendingOps(page, roundId, 1);
+  await expect
+    .poll(() => savedDistance(supabase, roundId), { timeout: 30_000 })
+    .toEqual({ targetFaceId: OUTDOOR_122CM_FACE_ID, shots: ["1-1:9"] });
+  await expectNoUnackedOps(page, roundId);
 
-  // 的の保存を旧形式にして読み込み直し、内容とテンキーが表示されないことを確かめる。
-  await replaceSavedTargetFacesWithOldShape(page);
+  // オンラインのまま読み込み直し、開く取得が確定済みの操作を端末の列から外すまで進む。
+  await page.reload();
+  await waitForHydration(page);
+  await expectNoPendingOps(page, roundId);
+
+  // オフラインで詳細を開き直し、端末の内容が表示されることを確かめる。
+  await goOffline(context);
+  // オンラインの文書を破棄し、遅れた的の取得が次の書き換えを戻さないようにする。
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+  await expect(page.getByTestId("round-summary")).toBeVisible();
+
+  // 的の保存を項目の並びが違う形にして読み込み直し、内容とテンキーが表示されないことを確かめる。
+  await replaceSavedTargetFacesWithDifferentShape(page);
   // 内容を出さない間は水和の属性が付かないため、水和を待たない。
   await page.reload();
   await expect(page.getByText(roundsText("fetchOffline"))).toBeVisible();
   await expect(page.getByTestId("round-summary")).toHaveCount(0);
   await expect(page.getByTestId(/^score-button-/)).toHaveCount(0);
 
-  // オンラインに戻り、未送信だった記録を含む内容が表示されることを確かめる。
+  // オンラインに戻り、記録を含む内容が表示されて、次のマスから入力できることを確かめる。
   await comeBackOnline(context, page);
   await expect(page.getByTestId("round-summary")).toBeVisible();
   await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
@@ -308,10 +324,6 @@ test("旧形式の的の保存しかない端末は、オフラインではラ�
   // 2本目を記録し、2本とも保存されることを確かめる。
   await page.getByTestId("score-button-8").click();
   await expectCells(page, 1, 1, ["9", "8", null]);
-  const { supabase } = await openOtherDevice(
-    credentials.email,
-    credentials.password,
-  );
   await expect
     .poll(() => savedDistance(supabase, roundId), { timeout: 30_000 })
     .toEqual({

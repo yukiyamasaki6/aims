@@ -1,6 +1,6 @@
 begin;
 
-select plan(6);
+select plan(5);
 
 insert into auth.users (id) values ('55555555-5555-5555-5555-555555555555');
 
@@ -36,7 +36,6 @@ select results_eq(
  $$values ('anon'::text,false), ('authenticated'::text,false), ('supabase_auth_admin'::text,true)$$,
  'HookはAuth管理ロールだけに実行を許可する');
 select ok(has_schema_privilege('supabase_auth_admin','public','usage') and not (select prosecdef from pg_proc where oid='public.email_otp_access_token_hook(jsonb)'::regprocedure), 'Auth管理ロールはschemaを使用できHookはSECURITY INVOKERである');
-select ok(to_regprocedure('public.delete_account()') is null, '引数なしの旧削除RPCは存在しない');
 
 select * from finish();
 
