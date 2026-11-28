@@ -10,8 +10,8 @@ values ('d0000000-0000-0000-0000-000000000002', 'updated_at round', current_date
 insert into public.round_users (id, round_id, user_id, role)
 values ('d0000000-0000-0000-0000-000000000003', 'd0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000001', 'editor');
 
-insert into public.target_faces (id, name, size, format, bow_type)
-values ('d0000000-0000-0000-0000-000000000004', 'updated_at target', 80, 'outdoor', array['recurve']);
+insert into public.target_faces (id, placement, size, format, bow_type)
+values ('d0000000-0000-0000-0000-000000000004', 'single', 80, 'outdoor', array['recurve']);
 
 insert into public.target_face_spots (id, target_face_id, center_x, center_y)
 values ('d0000000-0000-0000-0000-000000000005', 'd0000000-0000-0000-0000-000000000004', 0, 0);
@@ -41,7 +41,7 @@ update public.distances set updated_at = '2000-01-01', distance = 60
   where id = 'd0000000-0000-0000-0000-000000000007';
 update public.shots set updated_at = '2000-01-01', score_str = '9', score_int = 9
   where distance_id = 'd0000000-0000-0000-0000-000000000007' and end_number = 1 and shot_number = 1;
-update public.target_faces set updated_at = '2000-01-01', name = 'updated target'
+update public.target_faces set updated_at = '2000-01-01', size = 60
   where id = 'd0000000-0000-0000-0000-000000000004';
 update public.target_face_spots set updated_at = '2000-01-01', center_x = 1
   where id = 'd0000000-0000-0000-0000-000000000005';

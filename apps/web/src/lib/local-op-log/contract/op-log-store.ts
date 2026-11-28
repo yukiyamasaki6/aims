@@ -25,7 +25,7 @@ type NewOpLogEntry<Op extends OpBase> = Omit<
 >;
 
 // 取得して得た、列の対象の状態(ベース)。`base`がnullは、サーバーに無い(削除された)ことの印。
-// nullは保存には書かれない。以前の版が書いた行を読むときだけ現れる。
+// nullの印は保存せず、ベースの行を消す。
 // `startedAt`は取得の開始時刻で、古い取得の結果で新しい保存を上書きしないために使う。
 export type StreamBase<Base> = { startedAt: number; base: Base | null };
 

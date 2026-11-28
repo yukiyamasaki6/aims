@@ -62,10 +62,9 @@ SDKのセッション・JWT・エラーの語彙はinfrastructureで内側の型
 
 Custom Access Token Hookは`event jsonb -> jsonb`のSECURITY INVOKER関数とする。
 今回の発行方式が`otp`・`token_refresh`・`email_change`・`oauth`ならclaimsをそのまま返し、password・その他(`id_token`を含む)・欠落なら403で発行を拒否する。
-`oauth`は、Googleでのサインイン(PKCEの交換)と、手動の結合の戻りの交換の方式である(偽のGoogleでの実測。どちらも`authentication_method`は`oauth`で、`amr`は`[{method: oauth}]`)。関数の名前(`email_otp_access_token_hook`)は変えない。名前を変えると、migrationの適用から設定の反映までの間、発行が止まるため。
-`amr`にpasswordが残る既存セッションも、今回の方式がtoken_refreshなら更新を許可する。
+`oauth`は、Googleでのサインイン(PKCEの交換)と、手動の結合の戻りの交換の方式である(偽のGoogleでの実測。どちらも`authentication_method`は`oauth`で、`amr`は`[{method: oauth}]`)。認証設定は`email_otp_access_token_hook`を指定する。
+今回の発行方式が`token_refresh`なら、セッション更新を許可する。
 関数と必要なschemaの権限は`supabase_auth_admin`にだけ付与し、PUBLIC・anon・authenticatedの実行を拒否する。
-ハッシュ・セッション・利用者IDを書き換えず、署名鍵・Cookie名・セッション期限も変更しない。
 直接のパスワード更新要求そのものは追加で禁止しないが、更新後もHookでパスワードによる新規認証を拒否する。
 メールはコード・15分の期限・心当たりがない場合の案内を示し、認証成立リンクやパスワード操作への導線を持たない。
 confirmation・magic_link・recoveryは共通の`supabase/templates/email-otp.html`を使い、旧用途別のsignup.html・already-signup.html・reset-password.htmlは廃止する。

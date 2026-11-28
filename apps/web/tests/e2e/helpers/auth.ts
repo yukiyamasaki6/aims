@@ -66,7 +66,7 @@ export function getSharedEmail(): string {
 export async function createConfirmedUser(input: {
   email: string;
   password?: string;
-  legacyPassword?: string;
+  storedPassword?: string;
 }): Promise<void> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secretKey = process.env.SUPABASE_SECRET_KEY;
@@ -80,7 +80,7 @@ export async function createConfirmedUser(input: {
 
   const { error } = await supabase.auth.admin.createUser({
     email: input.email,
-    ...(input.legacyPassword ? { password: input.legacyPassword } : {}),
+    ...(input.storedPassword ? { password: input.storedPassword } : {}),
     email_confirm: true,
   });
   if (error && !/already been registered|already exists/i.test(error.message)) {
@@ -156,11 +156,45 @@ function cookieSessionClient(appUrl: string) {
   return { supabase, cookies };
 }
 
+let preparationOrder = 0;
+// contextごとの、保存を空にする指定を持つ最新の準備の順番。
+const clearingOrders = new WeakMap<BrowserContext, number>();
+
+// 端末の利用者の記憶が空か別の利用者のままだと、アプリが利用者の切り替えとして最初の画面を読み込み直し、テストの操作と競合する。
+// 記憶は準備の後に最初に読み込む文書で1回だけ書き、アプリがサインアウトで消した記憶は戻さない。
+// Playwrightは初期化スクリプトの実行順を定めないため、後の準備の優先と保存の消去は、準備の順番で判定する。
+async function rememberLocalUser(
+  context: BrowserContext,
+  appUrl: string,
+  userId: string,
+  clearStorage: boolean,
+): Promise<void> {
+  const order = ++preparationOrder;
+  if (clearStorage) clearingOrders.set(context, order);
+  await context.addInitScript(
+    ({ origin, userId, order, clearBefore }) => {
+      if (location.origin !== origin) return;
+      const applied = Number(localStorage.getItem("aims:e2e-prepared") ?? 0);
+      if (applied >= order) return;
+      if (applied < clearBefore) localStorage.clear();
+      localStorage.setItem("aims:e2e-prepared", String(order));
+      localStorage.setItem("aims:local-user-id", userId);
+    },
+    {
+      origin: new URL(appUrl).origin,
+      userId,
+      order,
+      clearBefore: clearingOrders.get(context) ?? 0,
+    },
+  );
+}
+
 // UI認証が検証対象でないケースの新しいcontextへ、実SDKが作ったセッションを渡す。
 export async function prepareConfirmedUserSession(
   context: BrowserContext,
   appUrl: string,
   input: { email: string; password: string },
+  options?: { clearStorage?: boolean },
 ): Promise<string> {
   await createConfirmedUser(input);
   const { supabase, cookies } = cookieSessionClient(appUrl);
@@ -171,6 +205,12 @@ export async function prepareConfirmedUserSession(
         `OTP verification failed: ${error?.code ?? "missing user"}`,
       );
     await context.addCookies([...cookies.values()]);
+    await rememberLocalUser(
+      context,
+      appUrl,
+      data.user.id,
+      options?.clearStorage ?? false,
+    );
     await rememberTestSession(context, input.email);
     return data.user.id;
   } finally {
@@ -190,20 +230,12 @@ export async function injectStoredSession(
   const { supabase, cookies } = cookieSessionClient(appUrl);
   try {
     const { data, error } = await supabase.auth.setSession(stored);
-    if (error) throw new Error(`Session injection failed: ${error.code}`);
+    if (error || !data.user)
+      throw new Error(
+        `Session injection failed: ${error?.code ?? "missing user"}`,
+      );
     await context.addCookies([...cookies.values()]);
-    // 端末の記憶が空だと、アプリが利用者の切り替えとして最初の画面を読み込み直し、直後の操作と競合する。
-    // 端末に別の利用者の記憶があるときは、切り替えとして扱わせるため、空のときだけ設定する。
-    await context.addInitScript(
-      ({ origin, userId }) => {
-        if (
-          location.origin === origin &&
-          localStorage.getItem("aims:local-user-id") === null
-        )
-          localStorage.setItem("aims:local-user-id", userId);
-      },
-      { origin: new URL(appUrl).origin, userId: data.user?.id ?? "" },
-    );
+    await rememberLocalUser(context, appUrl, data.user.id, false);
     await rememberTestSession(context, email);
   } finally {
     await supabase.auth.stopAutoRefresh();

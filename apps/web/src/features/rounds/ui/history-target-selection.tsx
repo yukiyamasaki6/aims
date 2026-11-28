@@ -9,7 +9,12 @@ import { lookupTargetFace, type TargetFaceOption } from "../domain/target-face";
 import { FILTER_ALL, filterTargetFaces } from "../domain/target-face-filter";
 import { useRoundProcedures } from "./rounds-context";
 import { TargetFaceInfo } from "./target-face-info";
-import { TargetFaceFilters, TargetFaceList } from "./target-face-picker";
+import {
+  TargetFaceFilters,
+  TargetFaceList,
+  targetFaceTriggerLabel,
+} from "./target-face-picker";
+import { useTargetFaceLabel } from "./use-target-face-label";
 
 // 的の選択欄の既定にする、編集中の種別・弓種。
 export type TargetFilter = Pick<HistoryInput, "format" | "bowType">;
@@ -35,6 +40,7 @@ function TargetFaceChoice({
   targetFaces,
   filter,
   onSelect,
+  description,
   children,
 }: {
   testId: string;
@@ -42,6 +48,7 @@ function TargetFaceChoice({
   targetFaces: TargetFaceOption[];
   filter: TargetFilter;
   onSelect: (id: string | null) => void;
+  description: string;
   children: ReactNode;
 }) {
   const t = useTranslations("rounds");
@@ -57,12 +64,16 @@ function TargetFaceChoice({
       <DialogTrigger
         id={testId}
         data-testid={testId}
+        aria-describedby={`${testId}-description`}
         className={cn(
           "flex shrink-0 items-center justify-center rounded-lg border border-border bg-background p-2 outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
         )}
       >
         {children}
       </DialogTrigger>
+      <span id={`${testId}-description`} className="sr-only">
+        {description}
+      </span>
       <DialogContent
         nested
         className="flex h-[70vh] flex-col overflow-y-hidden"
@@ -96,7 +107,7 @@ function TargetFaceChoice({
   );
 }
 
-// 的の指定。未指定なら「指定なし」、指定済みなら的の表示を、同じ大きさの領域に出す。押すと選び直し、または外す。
+// 的の指定。未指定なら「指定なし」、指定済みなら的の表示を、同じ大きさの領域に出す。押すと選び直し、または外す。ボタンの名前は呼び出し側の`label`が与え、指定の状態は説明で伝える。
 export function TargetFaceSelection({
   testId,
   targetFaceId,
@@ -111,6 +122,9 @@ export function TargetFaceSelection({
   onSelect: (id: string | null) => void;
 }) {
   const t = useTranslations("rounds");
+  const describe = useTargetFaceLabel();
+  const selected =
+    targetFaceId === null ? null : lookupTargetFace(targetFaces, targetFaceId);
   return (
     <TargetFaceChoice
       testId={testId}
@@ -118,14 +132,19 @@ export function TargetFaceSelection({
       targetFaces={targetFaces}
       filter={filter}
       onSelect={onSelect}
+      description={
+        selected === null
+          ? t("targetFaceTriggerNone")
+          : targetFaceTriggerLabel(t, describe, selected, false)
+      }
     >
       <TargetSlot>
-        {targetFaceId === null ? (
+        {selected === null ? (
           <span className="text-muted-foreground">
             {t("historyFilterNone")}
           </span>
         ) : (
-          <TargetFaceInfo face={lookupTargetFace(targetFaces, targetFaceId)} />
+          <TargetFaceInfo face={selected} />
         )}
       </TargetSlot>
     </TargetFaceChoice>

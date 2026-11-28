@@ -8,6 +8,7 @@ import type {
 import type { RoundConfigError } from "../domain/round-config";
 import type { BowTypeOption, FormatOption } from "../domain/round-constants";
 import { NAME_MAX_LENGTH } from "../domain/round-constants";
+import type { PlacementOption } from "../domain/target-face";
 import type { PresetDeleteFailure } from "../domain/write-result";
 import type { PresetDialogError } from "./save-preset-dialog-state";
 
@@ -172,6 +173,19 @@ export const roundsMessages = {
     targetFaceTrigger: "{name}（タップで変更）",
     targetFaceTriggerLocked: "{name}（スコア記録済みのため変更不可）",
     targetFaceTriggerMissing: "的データを取得できません（タップで変更）",
+    targetFaceTriggerNone: "指定なし（タップで選択）",
+    targetFaceDescription:
+      "{format}、{size}cm、{bowTypes}、{scoring}、{placement}",
+    targetFaceBowTypeSeparator: "・",
+    targetFaceScoreRange: "{min}〜{max}点",
+    targetFaceHasX: "Xあり",
+    targetFaceTenRadius: "10点半径{radius}cm",
+    targetFaceScoringSeparator: "、",
+    targetFacePlacement: {
+      single: "単一",
+      triangle: "三角三つ目",
+      vertical: "縦三つ目",
+    } satisfies Record<PlacementOption, string>,
     targetFaceFilterNone: "指定なし",
     // スコア入力
     keypadClose: "テンキーを閉じる",

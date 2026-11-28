@@ -1,4 +1,4 @@
-// 図の中の的の輪の色。アプリの的の定義(target_face_rings。supabase/migrations/20261117000002_target_faces.sql)の色と同じで、画面の配色(テーマ)に依存しない。
+// 図の中の的の輪の色。アプリの的の定義(target_face_rings。supabase/migrations/20261127010002_target_faces.sql)の色と同じで、画面の配色(テーマ)に依存しない。
 export const WHITE = "#FFFFFF";
 export const BLACK = "#231F20";
 export const BLUE = "#00B4E4";

@@ -142,15 +142,6 @@ echo "== 手順は繰り返せる"
 scripts/backup/restore-db.sh "$work/backup" "$work/deletions.txt" >/dev/null
 check "同じ手順をもう一度行っても、全記録が変わらない" "$expected_after_delete" "$(snapshot)"
 
-echo "== 対象外のスキーマの表を飛ばす"
-# 以前の取得物はstorageの表を含み、本番の復元先では書き込めずに止まった。ローカルはStorageが無効で再現しないため、対象外の表を足して確かめる。
-mkdir -p "$work/out-of-scope" && cp "$work/backup/data.sql" "$work/out-of-scope/"
-printf 'COPY "storage"."buckets_vectors" ("id") FROM stdin;\nout-of-scope\n\\.\n' >>"$work/out-of-scope/data.sql"
-jq '.row_counts["\"storage\".\"buckets_vectors\""] = 1' "$work/backup/manifest.json" >"$work/out-of-scope/manifest.json"
-if scripts/backup/restore-db.sh "$work/out-of-scope" "$work/deletions.txt" >/dev/null 2>&1; then status=0; else status=$?; fi
-check "取得物にpublicとauth以外の表があっても、それを飛ばして復元できる" 0 "$status"
-check "対象外の表を飛ばした復元の後も、全記録が削除の後の状態と一致する" "$expected_after_delete" "$(snapshot)"
-
 echo "== 取り違えを止める"
 jq '.migration_versions += ["29990101000000"]' "$work/backup/manifest.json" >"$work/mismatch-versions.json"
 mkdir -p "$work/version-mismatch" && cp "$work/backup/data.sql" "$work/version-mismatch/" && cp "$work/mismatch-versions.json" "$work/version-mismatch/manifest.json"

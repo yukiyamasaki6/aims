@@ -120,7 +120,7 @@ function setOnline(online: boolean) {
 
 const targetFaceX: TargetFaceOption = {
   id: "face-x",
-  name: "10点的",
+  placement: "single",
   size: 122,
   format: "outdoor",
   bow_type: ["recurve", "compound"],
@@ -160,7 +160,7 @@ const targetFaceX: TargetFaceOption = {
 
 const targetFaceNoX: TargetFaceOption = {
   id: "face-no-x",
-  name: "6点的",
+  placement: "single",
   size: 60,
   format: "field",
   bow_type: ["recurve"],
@@ -497,7 +497,7 @@ describe("ScorecardClient 初期表示・集計", () => {
     // When
     const targetFaceBlank: TargetFaceOption = {
       id: "face-blank",
-      name: "未設定の的",
+      placement: "single",
       size: 40,
       format: "outdoor",
       bow_type: ["recurve"],
@@ -1070,13 +1070,13 @@ describe("ScorecardClient マスを指す・点数を書く", () => {
     // When
     const targetFaceTriple: TargetFaceOption = {
       id: "face-triple",
-      name: "トリプルスポット",
+      placement: "vertical",
       size: 40,
       format: "indoor",
       bow_type: ["recurve"],
-      target_face_spots: [0, 1].map((index) => ({
-        center_x: index,
-        center_y: 0,
+      target_face_spots: [22, 0, -22].map((centerY) => ({
+        center_x: 0,
+        center_y: centerY,
         target_face_rings: [
           {
             radius: 1,

@@ -7,49 +7,60 @@ import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { DISTANCE_LIMITS } from "../domain/round-constants";
 import type { Distance, Shot } from "../domain/scorecard-types";
+import { seedTargetFace } from "../domain/target-face-test-helpers";
 import { DistanceEditFields } from "./distance-edit-fields";
 import { createFakeRoundProcedures } from "./round-stores-test-helpers";
 import { RoundProceduresProvider } from "./rounds-context";
-
-// 輪を1つだけ持つ的。的の表示は輪を持つ的を前提にする。
-const SINGLE_RING_SPOTS = [
-  {
-    center_x: 0,
-    center_y: 0,
-    target_face_rings: [
-      {
-        radius: 1,
-        color: "#FFFFFF",
-        line_color: null,
-        z_index: 1,
-        score_str: "M",
-        score_int: 0,
-      },
-    ],
-  },
-];
+import { targetFaceDescription } from "./target-face-label-test-helpers";
 
 const roundsText = translatorFor("rounds");
 
-const targetFaceOutdoorRecurve: TargetFaceOption = {
-  id: "face-outdoor-recurve",
-  name: "10点的アウトドア",
-  size: 122,
-  format: "outdoor",
-  bow_type: ["recurve", "compound"],
-  target_face_spots: SINGLE_RING_SPOTS,
-};
-
-const targetFaceIndoorCompound: TargetFaceOption = {
-  id: "face-indoor-compound",
-  name: "5点的インドア",
-  size: 40,
-  format: "indoor",
-  bow_type: ["compound"],
-  target_face_spots: SINGLE_RING_SPOTS,
-};
+// 公式の的の実データ。
+const targetFaceOutdoorRecurve = seedTargetFace("A1");
+const targetFaceIndoorCompound = seedTargetFace("B2");
 
 const targetFaces = [targetFaceOutdoorRecurve, targetFaceIndoorCompound];
+
+const OUTDOOR_DESCRIPTION = targetFaceDescription({
+  format: "outdoor",
+  size: 122,
+  bowTypes: ["recurve", "compound", "barebow"],
+  minScore: 1,
+  maxScore: 10,
+  hasX: true,
+  tenRadius: 6.1,
+  placement: "single",
+});
+
+// 同じサイズの単一、三角三つ目、縦三つ目の公式の的と、その説明。
+const sameSizeFaces = [
+  seedTargetFace("A4"),
+  seedTargetFace("A5"),
+  seedTargetFace("A6"),
+];
+const SAME_SIZE_ATTRIBUTES = {
+  format: "indoor",
+  size: 60,
+  bowTypes: ["recurve", "barebow"],
+  maxScore: 10,
+  hasX: false,
+  tenRadius: 3,
+} as const;
+const SINGLE_DESCRIPTION = targetFaceDescription({
+  ...SAME_SIZE_ATTRIBUTES,
+  minScore: 1,
+  placement: "single",
+});
+const TRIANGLE_DESCRIPTION = targetFaceDescription({
+  ...SAME_SIZE_ATTRIBUTES,
+  minScore: 6,
+  placement: "triangle",
+});
+const VERTICAL_DESCRIPTION = targetFaceDescription({
+  ...SAME_SIZE_ATTRIBUTES,
+  minScore: 6,
+  placement: "vertical",
+});
 
 const baseDistance: Distance = {
   id: "distance-1",
@@ -71,6 +82,14 @@ const recordedShots: Shot[] = [1, 2, 3].map((n) => ({
 }));
 
 const EVENT_ID = "00000000-0000-4000-8000-000000000001";
+
+// 同じサイズの3つの的から選ぶ、インドアのリカーブの距離。
+const sameSizeProps = {
+  targetFaces: sameSizeFaces,
+  distance: { ...baseDistance, target_face_id: sameSizeFaces[0].id },
+  roundFormat: "indoor",
+  roundBowType: "recurve",
+};
 
 // 種別・弓種の選択欄を開き、名前の選択肢を選ぶ。
 async function chooseFilter(
@@ -164,6 +183,22 @@ describe("DistanceEditFields", () => {
       });
     });
 
+    describe("スコアが未記録の場合", () => {
+      it("的の選択中ボタンの名前は、的の説明に変更の案内を添えたものになる", () => {
+        // Given
+
+        // When
+        setup();
+
+        // Then
+        expect(
+          screen.getByTestId("target-face-picker-trigger"),
+        ).toHaveAccessibleName(
+          roundsText("targetFaceTrigger", { name: OUTDOOR_DESCRIPTION }),
+        );
+      });
+    });
+
     describe("スコアが記録済みの場合", () => {
       it("的が編集不可になり、射数/エンド・エンド数・距離は編集できる", () => {
         // Given
@@ -219,17 +254,17 @@ describe("DistanceEditFields", () => {
         expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       });
 
-      it("的選択トリガーのラベルに変更不可の理由を示す", () => {
+      it("的の選択中ボタンの名前は、的の説明に変更不可の理由を添えたものになる", () => {
         // Given
         // When
         setup({ shots: recordedShots });
 
         // Then
         expect(
-          screen.getByLabelText(
-            `${targetFaceOutdoorRecurve.name}（スコア記録済みのため変更不可）`,
-          ),
-        ).toBeInTheDocument();
+          screen.getByTestId("target-face-picker-trigger"),
+        ).toHaveAccessibleName(
+          roundsText("targetFaceTriggerLocked", { name: OUTDOOR_DESCRIPTION }),
+        );
       });
 
       it("選択中の的が存在しなければ、ラベルは「的（スコア記録済みのため変更不可）」になる", () => {
@@ -340,7 +375,7 @@ describe("DistanceEditFields", () => {
           distance: 50,
           total_ends: 12,
           arrows_per_end: 3,
-          target_face_id: "face-outdoor-recurve",
+          target_face_id: "a1000000-0000-0000-0000-000000000001",
           is_marked: true,
         });
         expect(enqueue).toHaveBeenCalledWith({
@@ -352,7 +387,7 @@ describe("DistanceEditFields", () => {
             config: {
               totalEnds: 12,
               arrowsPerEnd: 3,
-              targetFaceId: "face-outdoor-recurve",
+              targetFaceId: "a1000000-0000-0000-0000-000000000001",
             },
           },
         });
@@ -719,7 +754,7 @@ describe("DistanceEditFields", () => {
             config: {
               totalEnds: 3,
               arrowsPerEnd: 3,
-              targetFaceId: "face-outdoor-recurve",
+              targetFaceId: "a1000000-0000-0000-0000-000000000001",
             },
           },
         }),
@@ -1020,12 +1055,7 @@ describe("DistanceEditFields", () => {
       it("種別だけを「指定なし」にすると、弓種だけで絞り込む", async () => {
         // Given
         const user = userEvent.setup();
-        const targetFaceIndoorRecurve: TargetFaceOption = {
-          ...targetFaceIndoorCompound,
-          id: "face-indoor-recurve",
-          name: "5点的インドア(リカーブ)",
-          bow_type: ["recurve"],
-        };
+        const targetFaceIndoorRecurve = seedTargetFace("A7");
         setup({ targetFaces: [...targetFaces, targetFaceIndoorRecurve] });
         await user.click(screen.getByTestId("target-face-picker-trigger"));
 
@@ -1052,10 +1082,10 @@ describe("DistanceEditFields", () => {
       it("弓種だけを「指定なし」にすると、種別だけで絞り込む", async () => {
         // Given
         const user = userEvent.setup();
+        // 公式の屋外の的は全て全弓種に対応するため、リカーブの絞り込みで外れる屋外の的は合成する。
         const targetFaceOutdoorBarebow: TargetFaceOption = {
           ...targetFaceOutdoorRecurve,
           id: "face-outdoor-barebow",
-          name: "10点的アウトドア(ベアボウ)",
           bow_type: ["barebow"],
         };
         setup({ targetFaces: [...targetFaces, targetFaceOutdoorBarebow] });
@@ -1148,14 +1178,7 @@ describe("DistanceEditFields", () => {
       it("選んだ種別・弓種に対応する的だけを表示する", async () => {
         // Given
         const user = userEvent.setup();
-        const targetFaceField: TargetFaceOption = {
-          id: "face-field-recurve",
-          name: "フィールド的",
-          size: 80,
-          format: "field",
-          bow_type: ["recurve"],
-          target_face_spots: SINGLE_RING_SPOTS,
-        };
+        const targetFaceField = seedTargetFace("A10");
         setup({ targetFaces: [...targetFaces, targetFaceField] });
         await user.click(screen.getByTestId("target-face-picker-trigger"));
 
@@ -1215,6 +1238,25 @@ describe("DistanceEditFields", () => {
         ).not.toBeInTheDocument();
       });
 
+      it("的を選ぶと、選択中のボタンの名前が選んだ的の説明に変わる", async () => {
+        // Given
+        const user = userEvent.setup();
+        setup(sameSizeProps);
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+        // When
+        await user.click(
+          screen.getByTestId(`target-face-option-${sameSizeFaces[1].id}`),
+        );
+
+        // Then
+        expect(
+          screen.getByTestId("target-face-picker-trigger"),
+        ).toHaveAccessibleName(
+          roundsText("targetFaceTrigger", { name: TRIANGLE_DESCRIPTION }),
+        );
+      });
+
       it("的を選んで保存すると、選んだ的で同期操作を登録する", async () => {
         // Given
         const user = userEvent.setup();
@@ -1255,34 +1297,26 @@ describe("DistanceEditFields", () => {
     });
 
     describe("一覧の並べ方", () => {
-      it("一覧は、絞り込んだ的を並び順で並べ、選択中の的を押された状態で示す", async () => {
+      it("一覧は、的の説明を名前に持つ候補を渡された順に並べ、選択中の的を押された状態で示す", async () => {
         // Given
         const user = userEvent.setup();
-        setup();
-        await user.click(screen.getByTestId("target-face-picker-trigger"));
+        setup(sameSizeProps);
 
         // When
-        await chooseFilter(
-          user,
-          "target-face-format-select",
-          roundsText("targetFaceFilterNone"),
-        );
-        await chooseFilter(
-          user,
-          "target-face-bow-type-select",
-          roundsText("targetFaceFilterNone"),
-        );
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
 
         // Then
         const items = screen.getAllByTestId(/^target-face-option-/);
-        expect(items.map((i) => i.getAttribute("aria-label"))).toEqual(
-          targetFaces.map((f) => f.name),
-        );
+        expect(items).toHaveLength(3);
+        expect(items[0]).toHaveAccessibleName(SINGLE_DESCRIPTION);
+        expect(items[1]).toHaveAccessibleName(TRIANGLE_DESCRIPTION);
+        expect(items[2]).toHaveAccessibleName(VERTICAL_DESCRIPTION);
         for (const item of items) {
           expect(item.tagName).toBe("BUTTON");
         }
         expect(items[0]).toHaveAttribute("aria-pressed", "true");
         expect(items[1]).toHaveAttribute("aria-pressed", "false");
+        expect(items[2]).toHaveAttribute("aria-pressed", "false");
       });
     });
   });

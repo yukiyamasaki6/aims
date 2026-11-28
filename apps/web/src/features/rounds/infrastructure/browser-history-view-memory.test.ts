@@ -84,19 +84,26 @@ describe("createBrowserHistoryViewMemory", () => {
     });
 
     it.each(["round", "distance"])(
-      "距離単位の範囲を持たない旧い保存値(単位が%s)は、scoreMin・scoreMaxをラウンド単位の範囲として読み、距離単位の範囲は指定なしにする",
+      "距離単位の範囲の項目が無い保存値(単位が%s)は、scoreMin・scoreMaxをラウンド単位の範囲として読み、距離単位の範囲は指定なしにする",
       (unit) => {
         // Given
         const {
           distanceScoreMin: _min,
           distanceScoreMax: _max,
-          ...old
+          ...withoutDistanceRange
         } = saved.input;
         window.sessionStorage.setItem(
           "aims:history-view",
           JSON.stringify({
             userId: "user-1",
-            state: { input: { ...old, unit, scoreMin: 100, scoreMax: 500 } },
+            state: {
+              input: {
+                ...withoutDistanceRange,
+                unit,
+                scoreMin: 100,
+                scoreMax: 500,
+              },
+            },
           }),
         );
 
@@ -112,9 +119,9 @@ describe("createBrowserHistoryViewMemory", () => {
       },
     );
 
-    it("旧い形の保存値(condition・sortKey・unit・distanceRow・filterOpen・distanceRowInput)は、読み替えず、既定の状態で返す", () => {
+    it("型に無い項目だけの保存値(condition・sortKey・unit・distanceRow・filterOpen・distanceRowInput)は、読み替えず、既定の状態で返す", () => {
       // Given
-      // 旧い形を読み替えない規則の全組はdomainで確かめる。ここでは、読み出しがその規則を通ることを確かめる。
+      // 型に無い項目を読み替えない規則の全組はdomainで確かめる。ここでは、読み出しがその規則を通ることを確かめる。
       window.sessionStorage.setItem(
         "aims:history-view",
         JSON.stringify({
@@ -142,7 +149,7 @@ describe("createBrowserHistoryViewMemory", () => {
       expect(state).toEqual(DEFAULT_HISTORY_VIEW_STATE);
     });
 
-    it("旧い保存値に矢の総数(totalArrows)が入っていても、他の項目は保ち、総数だけを捨てて読み、再保存すると鍵が消える", () => {
+    it("保存値に型に無い項目の矢の総数(totalArrows)が入っていても、他の項目は保ち、総数だけを捨てて読み、再保存すると鍵が消える", () => {
       // Given
       window.sessionStorage.setItem(
         "aims:history-view",
@@ -185,7 +192,7 @@ describe("createBrowserHistoryViewMemory", () => {
       );
     });
 
-    it("距離の行を持つ入力値を書いて読むと、同じ距離の行が返り、旧い距離の行の入力の鍵は書かない", () => {
+    it("距離の行を持つ入力値を書いて読むと、同じ距離の行が返り、型に無い距離の行の入力の鍵は書かない", () => {
       // Given
       const memory = createBrowserHistoryViewMemory(identityReader);
 

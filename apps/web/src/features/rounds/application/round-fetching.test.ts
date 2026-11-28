@@ -18,6 +18,7 @@ import type { QueryFailure, QueryOutcome } from "../domain/query-outcome";
 import type { ServerHistoryPage } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { TargetFaceOption } from "../domain/target-face";
+import { seedTargetFace } from "../domain/target-face-test-helpers";
 import { createRoundQueries } from "../infrastructure/round-queries";
 import type { RoundsDbSchema } from "../infrastructure/rounds-db-schema";
 import { createContentFetcher } from "./content-fetcher";
@@ -33,7 +34,7 @@ function face(
 ): TargetFaceOption {
   return {
     id,
-    name: id,
+    placement: "single",
     size: 122,
     format: "outdoor",
     bow_type: ["recurve"],
@@ -584,7 +585,7 @@ describe("fetchTargetFaces", () => {
     const { fetching, queries, saved } = setup({
       queries: {
         targetFaces: vi.fn(async () =>
-          okResponse([face("b", { size: 40 }), face("a", { size: 122 })]),
+          okResponse([seedTargetFace("A3"), seedTargetFace("A2")]),
         ),
       },
     });
@@ -596,8 +597,14 @@ describe("fetchTargetFaces", () => {
     expect(queries.targetFaces).toHaveBeenCalledExactlyOnceWith();
     expect(queries.roundDetails).not.toHaveBeenCalled();
     if (result.status !== "ok") throw new Error("not ok");
-    expect(result.data.map((item) => item.id)).toEqual(["a", "b"]);
-    expect(idsOf(saved.get("user-1")?.data)).toEqual(["a", "b"]);
+    expect(result.data.map((item) => item.id)).toEqual([
+      "a1000000-0000-0000-0000-000000000002",
+      "a1000000-0000-0000-0000-000000000003",
+    ]);
+    expect(idsOf(saved.get("user-1")?.data)).toEqual([
+      "a1000000-0000-0000-0000-000000000002",
+      "a1000000-0000-0000-0000-000000000003",
+    ]);
   });
 
   it("的が0件でも、空の一覧を保存する", async () => {
@@ -683,7 +690,7 @@ describe("fetchRoundDetails", () => {
               { ...serverRound, id: uuid1, status: "in_progress" as const },
               serverRound,
             ],
-            targetFaces: [face("g")],
+            targetFaces: [seedTargetFace("A3"), seedTargetFace("A2")],
           }),
         ),
       },
@@ -705,7 +712,10 @@ describe("fetchRoundDetails", () => {
       startedAt: result.data.startedAt,
     });
     expect(result.data.startedAt).toBe(1000);
-    expect(idsOf(saved.get("user-1")?.data)).toEqual(["g"]);
+    expect(idsOf(saved.get("user-1")?.data)).toEqual([
+      "a1000000-0000-0000-0000-000000000002",
+      "a1000000-0000-0000-0000-000000000003",
+    ]);
   });
 
   it("サインインが必要なときは、取得せずに約束の文言のerrorを返す", async () => {

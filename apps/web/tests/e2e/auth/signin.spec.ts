@@ -49,7 +49,7 @@ test("確認済み利用者がOTPでログインすると、設定項目付き�
 }) => {
   // メールを送付してコード入力へ進む。
   const email = `signin-${randomUUID()}@aims.test`;
-  await createConfirmedUser({ email, legacyPassword: "old-password1" });
+  await createConfirmedUser({ email, storedPassword: "stored-password1" });
   const previous = await mailIds(email);
   await page.goto(`/signin?returnTo=${encodeURIComponent(destination)}`);
   await waitForHydration(page);
@@ -268,9 +268,9 @@ test("未登録メールもコード入力へ進むが誤コードで保護画�
   await expect(page).toHaveURL(/\/signin$/);
 });
 
-test("直接のパスワードgrantは正しい旧パスワードでもトークンを発行しない", async () => {
+test("直接のパスワードgrantは正しいパスワードでもトークンを発行しない", async () => {
   const email = `password-denied-${randomUUID()}@aims.test`;
-  await createConfirmedUser({ email, legacyPassword: "old-password1" });
+  await createConfirmedUser({ email, storedPassword: "stored-password1" });
   const client = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
@@ -279,7 +279,7 @@ test("直接のパスワードgrantは正しい旧パスワードでもトーク
   try {
     const { data, error } = await client.auth.signInWithPassword({
       email,
-      password: "old-password1",
+      password: "stored-password1",
       options: { captchaToken: "test-captcha-token" },
     });
     expect(error !== null).toBe(true);
@@ -293,7 +293,7 @@ test("直接のパスワードgrantは正しい旧パスワードでもトーク
 
 test("OTP後に直接パスワードを更新しても新しいパスワード認証は復活しない", async () => {
   const email = `updated-password-${randomUUID()}@aims.test`;
-  await createConfirmedUser({ email, legacyPassword: "old-password1" });
+  await createConfirmedUser({ email, storedPassword: "stored-password1" });
   const client = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
@@ -335,13 +335,13 @@ test("直接password signupを要求してもパスワードのセッション�
   try {
     const registered = await client.auth.signUp({
       email,
-      password: "old-password1",
+      password: "signup-password1",
       options: { captchaToken: "test-captcha-token" },
     });
     expect(registered.data.session === null).toBe(true);
     const attempt = await client.auth.signInWithPassword({
       email,
-      password: "old-password1",
+      password: "signup-password1",
       options: { captchaToken: "test-captcha-token" },
     });
     expect(attempt.data.session === null && attempt.error !== null).toBe(true);
@@ -355,7 +355,7 @@ test("直接password signupを要求してもパスワードのセッション�
 
 test("直接回復要求のメールはコードだけで、回復コードの確認後に直接パスワードを更新してもそのパスワードでは認証できない", async () => {
   const email = `recovery-${randomUUID()}@aims.test`;
-  await createConfirmedUser({ email, legacyPassword: "old-password1" });
+  await createConfirmedUser({ email, storedPassword: "stored-password1" });
   const previous = await mailIds(email);
   const options = { auth: { persistSession: false, autoRefreshToken: false } };
   const client = createClient(

@@ -33,8 +33,8 @@ insert into auth.users (id) values
 -- handle_new_userで自動生成されるpublic.usersを消し、INSERTが成功し得る状態のidを作る。
 delete from public.users where id = 'b0000000-0000-0000-0000-000000000004';
 
-insert into public.target_faces (id, name, size, format, bow_type)
-values ('b0000000-0000-0000-0000-000000000010', 'Matrix Target', 80, 'outdoor', array['recurve']);
+insert into public.target_faces (id, placement, size, format, bow_type)
+values ('b0000000-0000-0000-0000-000000000010', 'single', 80, 'outdoor', array['recurve']);
 
 insert into public.target_face_spots (id, target_face_id, center_x, center_y)
 values ('b0000000-0000-0000-0000-000000000011', 'b0000000-0000-0000-0000-000000000010', 0, 0);
@@ -119,8 +119,8 @@ insert into rls_stmt (tbl, op, stmt) values
   ('users', 'delete', $q$delete from public.users where id = 'b0000000-0000-0000-0000-000000000006'$q$),
 
   ('target_faces', 'select', $q$select 1 from public.target_faces where id = 'b0000000-0000-0000-0000-000000000010'$q$),
-  ('target_faces', 'insert', $q$insert into public.target_faces (id, name, size, format, bow_type) values ('b0000000-0000-0000-0000-000000000090', 'New Target', 80, 'outdoor', array['recurve'])$q$),
-  ('target_faces', 'update', $q$update public.target_faces set name = 'changed' where id = 'b0000000-0000-0000-0000-000000000010'$q$),
+  ('target_faces', 'insert', $q$insert into public.target_faces (id, placement, size, format, bow_type) values ('b0000000-0000-0000-0000-000000000090', 'single', 80, 'outdoor', array['recurve'])$q$),
+  ('target_faces', 'update', $q$update public.target_faces set placement = 'vertical' where id = 'b0000000-0000-0000-0000-000000000010'$q$),
   ('target_faces', 'delete', $q$delete from public.target_faces where id = 'b0000000-0000-0000-0000-000000000010'$q$),
 
   ('target_face_spots', 'select', $q$select 1 from public.target_face_spots where id = 'b0000000-0000-0000-0000-000000000011'$q$),

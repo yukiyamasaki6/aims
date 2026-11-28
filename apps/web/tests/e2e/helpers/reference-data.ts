@@ -1,10 +1,14 @@
 import { expect, type Page } from "@playwright/test";
+import { TARGET_FACE_SELECT } from "@/features/rounds/infrastructure/reference-query-constants";
 import { getSharedEmail, SHARED_PASSWORD, waitForHydration } from "./auth";
 import { createRound } from "./rounds";
 import { goOffline, waitForServiceWorkerControl } from "./service-worker";
 
 // 取得のselectが`/`を含みglobの`*`に合わないため、正規表現で指定する。
 export const TARGET_FACES_REST = /\/rest\/v1\/target_faces\?/;
+
+// 保存済みの的に必ず含まれる公式の的(アウトドア・122cmの1〜10点)。
+const OFFICIAL_FACE_ID = "a1000000-0000-0000-0000-000000000001";
 
 // 文書を読み込むたびに、端末に保存された的の一覧を消す。
 // 共有ユーザーの認証状態には、準備のときに保存された的が含まれる。
@@ -45,12 +49,24 @@ export async function saveTargetFacesOnDevice(page: Page) {
   await waitForServiceWorkerControl(page);
 }
 
-// 的の一覧が端末(localStorage)に保存されたか。
+// 現在の形の的の一覧が端末(localStorage)に保存されたか。取得のselectが同じで、全ての的が配置を持ち、公式の的を含む。
+// キーがあるだけの保存は、読めない形の場合があるため、保存の完了にしない。
 function targetFacesSaved(page: Page): Promise<boolean> {
-  return page.evaluate(() =>
-    Object.keys(localStorage).some((key) =>
-      key.startsWith("aims:reference:target-faces:"),
-    ),
+  return page.evaluate(
+    ({ shape, faceId }) =>
+      Object.entries(localStorage).some(([key, value]) => {
+        if (!key.startsWith("aims:reference:target-faces:")) return false;
+        const stored = JSON.parse(value) as {
+          shape: string;
+          data: { id: string; placement?: string }[];
+        };
+        return (
+          stored.shape === shape &&
+          stored.data.every((face) => face.placement !== undefined) &&
+          stored.data.some((face) => face.id === faceId)
+        );
+      }),
+    { shape: TARGET_FACE_SELECT, faceId: OFFICIAL_FACE_ID },
   );
 }
 

@@ -52,7 +52,6 @@
 | 同上 | 古いotpと新しいpassword、iat・refresh・利用者全体の最終ログインだけが新しい | 同上 |
 | anon、auth.uidなし、利用者不在、匿名化先 | 新しいotp | 拒否し変更なし |
 | authenticated、expected_user_idが別人またはnull | 新しいotp | 通常の拒否。別人を消さず、データを変更しない |
-| 旧引数なしRPC呼出し | 新しいotp | 関数不在で失敗 |
 
 `rls_matrix.sql`等の既存EXECUTE行列でauthenticatedだけを許可し、PUBLIC・anonを拒否する。
 SECURITY DEFINER・空search_path・60秒statement_timeoutの属性も維持する。
@@ -79,7 +78,7 @@ SECURITY DEFINER・空search_path・60秒statement_timeoutの属性も維持す�
 
 ## 削除・匿名化と原子性の回帰
 
-既存delete_account.sqlのデータ形とスナップショット比較を再利用し、成功前提のpasswordをotpへ更新する。
+既存delete_account.sqlのデータ形とスナップショット比較を再利用し、成功の前提の認証方式はotpにする。
 
 - プロフィール・個人プリセット・編集/閲覧の参加・auth.usersと認証セッション等が消える。
 - 進行中・完了・論理削除済み、残る者が閲覧者だけの場合を含め、他の編集者がいないラウンドの距離・矢・全履歴まで消える。

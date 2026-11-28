@@ -1,4 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
+import { targetFaceDescription } from "@/features/rounds/ui/target-face-label-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, testWithoutTurnstile as it, test } from "../fixtures";
 import {
@@ -24,9 +25,19 @@ import {
 const navigationText = translatorFor("navigation");
 const roundsText = translatorFor("rounds");
 
-// 公式の的: 10点的(アウトドア・122cm)と10点的(アウトドア・80cm)。
+// 公式の的: アウトドア・122cmと、アウトドア・80cmの1〜10点。
 const LARGE_FACE_ID = "a1000000-0000-0000-0000-000000000001";
 const SMALL_FACE_ID = "a1000000-0000-0000-0000-000000000002";
+const LARGE_FACE_DESCRIPTION = targetFaceDescription({
+  format: "outdoor",
+  size: 122,
+  bowTypes: ["recurve", "compound", "barebow"],
+  minScore: 1,
+  maxScore: 10,
+  hasX: true,
+  tenRadius: 6.1,
+  placement: "single",
+});
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -543,19 +554,20 @@ test.describe("履歴", () => {
     await expect(cards).toHaveText([/的違いの五十/, /五十だけ/]);
 
     // 的を選んで適用すると、その的のラウンドだけに絞られる。的の一覧は端末に保存済みであることを待ち、パネルを開き直して読み込む。
-    await expect
-      .poll(() =>
-        page.evaluate(() =>
-          Object.keys(localStorage).some((key) =>
-            key.startsWith("aims:reference:target-faces:"),
-          ),
-        ),
-      )
-      .toBe(true);
+    await expectRoundBasesFetched(page);
     await openFilter(page);
     await summaries.nth(0).click();
-    await page.getByTestId("history-distance-dialog-target").click();
-    await page.getByTestId(`target-face-option-${LARGE_FACE_ID}`).click();
+    const targetButton = page.getByTestId("history-distance-dialog-target");
+    await targetButton.click();
+    await page
+      .getByRole("button", { name: LARGE_FACE_DESCRIPTION, exact: true })
+      .click();
+    await expect(targetButton).toHaveAccessibleName(
+      roundsText("historyFilterTarget"),
+    );
+    await expect(targetButton).toHaveAccessibleDescription(
+      roundsText("targetFaceTrigger", { name: LARGE_FACE_DESCRIPTION }),
+    );
     await confirmDistance.click();
     await expect(confirmDistance).toHaveCount(0);
     await applyFilter(page);

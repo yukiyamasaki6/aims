@@ -103,14 +103,14 @@ describe("reference-snapshot", () => {
     expect(loaded).toBeNull();
   });
 
-  it("owner_idを含む削除前の的のselectで保存した一覧は、無いものとして扱う", () => {
+  it("owner_idを含み、取得する項目の並びが違う的のselectで保存した一覧は、無いものとして扱う", () => {
     // Given
-    const selectBeforeRemovingOwnerId =
+    const selectWithOwnerId =
       "id, name, size, format, bow_type, owner_id, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index, score_str, score_int))";
     localStorage.setItem(
       "aims:reference:target-faces:user-1",
       JSON.stringify({
-        shape: selectBeforeRemovingOwnerId,
+        shape: selectWithOwnerId,
         startedAt: 1,
         data: [{ id: "face-1" }],
       }),
@@ -121,6 +121,52 @@ describe("reference-snapshot", () => {
 
     // Then
     expect(loaded).toBeNull();
+  });
+
+  it("nameを含みplacementの無い、取得する項目の並びが違う的のselectで保存した一覧は、無いものとして扱う", () => {
+    // Given
+    const selectWithName =
+      "id, name, size, format, bow_type, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index, score_str, score_int))";
+    localStorage.setItem(
+      "aims:reference:target-faces:user-1",
+      JSON.stringify({
+        shape: selectWithName,
+        startedAt: 1,
+        data: [{ id: "face-1", name: "項目の並びが違う的" }],
+      }),
+    );
+
+    // When
+    const loaded = snapshots.load("target-faces");
+
+    // Then
+    expect(loaded).toBeNull();
+  });
+
+  it("取得する項目の並びが違う的の保存がある状態で、より新しい取得を保存すると読める", () => {
+    // Given
+    localStorage.setItem(
+      "aims:reference:target-faces:user-1",
+      JSON.stringify({
+        shape:
+          "id, name, size, format, bow_type, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index, score_str, score_int))",
+        startedAt: 1,
+        data: [{ id: "face-1", name: "項目の並びが違う的" }],
+      }),
+    );
+
+    // When
+    snapshots.save(
+      "target-faces",
+      "user-1",
+      [{ id: "face-1", placement: "single" }],
+      2,
+    );
+
+    // Then
+    expect(snapshots.load("target-faces")).toEqual([
+      { id: "face-1", placement: "single" },
+    ]);
   });
 
   it("shapeが一致するものは読める", () => {

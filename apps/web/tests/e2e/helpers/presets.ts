@@ -1,6 +1,6 @@
 import { signInAsTestUser } from "./rounds";
 
-const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点的（アウトドア・122cm）
+const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // アウトドア・122cmの1〜10点の的
 
 // 個人プリセットが必要なテストのGiven用。プリセット保存のUI操作を経由せず、
 // 本番アプリにテスト専用のAPIを持たせないため、supabase-jsから対象ユーザーで

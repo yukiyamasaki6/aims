@@ -710,7 +710,7 @@ describe("historyViewStateOf", () => {
     ["数値", 36],
     ["不正な値", "abc"],
   ])(
-    "旧い保存値の矢の総数(%s)は、エラーにも全体の破棄にもせず、総数だけを捨てて他の項目は保つ",
+    "型に無い項目の矢の総数(%s)が入った保存値は、エラーにも全体の破棄にもせず、総数だけを捨てて他の項目は保つ",
     (_name, totalArrows) => {
       // Given
       const raw = {
@@ -765,7 +765,7 @@ describe("historyViewStateOf", () => {
     },
   );
 
-  it("旧い形の保存値(sortKey、sortDirection、condition、filterOpen、distanceRowInput)は読み替えず、項目ごとに既定の入力値にする", () => {
+  it("型に無い項目だけの保存値(sortKey、sortDirection、condition、filterOpen、distanceRowInput)は読み替えず、項目ごとに既定の入力値にする", () => {
     // Given
     const raw = {
       condition: { sortKey: "score", sortDirection: "asc", unit: "distance" },
@@ -784,7 +784,7 @@ describe("historyViewStateOf", () => {
     expect(state.input.scoreDirection).toBeNull();
   });
 
-  it("旧い項目と新しい項目が同居しても、旧い項目は無視し、新しい項目だけを採り、結果に旧い鍵を残さない", () => {
+  it("型に無い項目と型の項目が同居しても、型に無い項目は無視し、型の項目だけを採り、結果に型に無い鍵を残さない", () => {
     // Given
     const raw = {
       input: {
@@ -947,11 +947,17 @@ describe("historyViewStateOf", () => {
   });
 
   it.each(["round", "distance"])(
-    "距離単位の範囲の項目が無い旧い保存値(保存されていた単位が%s)は、scoreMin・scoreMaxをラウンド単位の範囲として読み、距離単位の範囲を指定なしにする",
+    "距離単位の範囲の項目が無い保存値(保存されていた単位が%s)は、scoreMin・scoreMaxをラウンド単位の範囲として読み、距離単位の範囲を指定なしにする",
     (unit) => {
       // Given
-      const { distanceScoreMin: _min, distanceScoreMax: _max, ...old } = stored;
-      const raw = { input: { ...old, unit, scoreMin: 300, scoreMax: 600 } };
+      const {
+        distanceScoreMin: _min,
+        distanceScoreMax: _max,
+        ...withoutDistanceRange
+      } = stored;
+      const raw = {
+        input: { ...withoutDistanceRange, unit, scoreMin: 300, scoreMax: 600 },
+      };
 
       // When
       const input = inputOf(raw);
