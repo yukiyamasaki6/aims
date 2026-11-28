@@ -717,7 +717,10 @@ export type Database = {
         Returns: Json;
       };
       email_otp_access_token_hook: { Args: { event: Json }; Returns: Json };
-      ensure_email_identity: { Args: never; Returns: undefined };
+      ensure_email_identity: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
       history_rounds: {
         Args: {
           p_bow_type: string;
@@ -747,7 +750,7 @@ export type Database = {
       };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
-      member_round_ids: { Args: never; Returns: string[] };
+      member_round_ids: { Args: Record<PropertyKey, never>; Returns: string[] };
       purge_account: { Args: { target_user_id: string }; Returns: undefined };
       record_shots: { Args: { p_shots: Json }; Returns: Json };
       rounds_list: {
