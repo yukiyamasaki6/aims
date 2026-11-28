@@ -159,15 +159,8 @@ otp_expiry = 900
 # メールアドレスの変更で、現在と新しいメールアドレスの両方の認証コードを要する。無効にすると新しいアドレス宛ての1通で完了するため、明示して固定する。
 double_confirm_changes = true
 
-# Use a production-ready SMTP server
-# [auth.email.smtp]
-# enabled = true
-# host = "smtp.sendgrid.net"
-# port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# 本番のSMTPは[remotes.production.auth.email.smtp]で宣言する。
+# ここ(ルート)はローカル・CI・プレビューにも効くため宣言しない。
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
@@ -260,6 +253,16 @@ skip_nonce_check = false
 
 [remotes.production.auth.email]
 max_frequency = "60s"
+
+# パスワードは、cd.ymlがGitHubのSecretsのSMTP_PROD_PASSWORDから渡す。
+[remotes.production.auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(SMTP_PASSWORD)"
+admin_email = "noreply@aims-archery.com"
+sender_name = "AIMS"
 
 [remotes.preview]
 project_id = "ywrkmawovwceedzzhgwk"

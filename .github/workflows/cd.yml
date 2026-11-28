@@ -27,6 +27,7 @@ jobs:
       TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_PROD_SECRET_KEY }}
       GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_PROD_CLIENT_ID }}
       GOOGLE_OAUTH_SECRET: ${{ secrets.GOOGLE_OAUTH_PROD_CLIENT_SECRET }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PROD_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
