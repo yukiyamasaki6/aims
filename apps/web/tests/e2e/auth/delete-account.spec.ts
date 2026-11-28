@@ -142,7 +142,7 @@ test("Googleで作ったアカウントは、メールのコードの流れで�
 
 test("実AuthのOTPで署名されたJWTは本人の削除を許し改ざんJWTと別人IDを拒否する", async () => {
   const email = `delete-api-${randomUUID()}@aims.test`;
-  await createConfirmedUser({ email, password: "old-password1" });
+  await createConfirmedUser({ email });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
   const client = createClient(url, key, {

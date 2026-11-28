@@ -238,7 +238,7 @@
   - 矢の`round_id`と距離のラウンドは、`(round_id, distance_id)`の複合外部キーが一致させる。矢の読める範囲は、距離のラウンドに参加していることと同じである。削除済み(`disabled_at`)の行の扱いはポリシーに無い。
   - `round_users`・`round_events`・`distance_events`は`is_round_member`を直接呼ぶ。このため、表によってポリシーの書き方が3通りある。
   - 書き込みは`SECURITY DEFINER`のRPCが表の所有者として行い、RLSを通らないため影響しない。`authenticated`の表の権限はSELECTだけで変えない。
-- 索引の2文には、それぞれ直前の行に`-- squawk-ignore require-concurrent-index-creation`を書き、その上に理由のコメントを書く(配置先: `20261127010005_history.sql`)。理由: `create index concurrently`はトランザクションの中で使えず、索引・ポリシー・関数を1つのトランザクションで原子的に適用するため。書き込みの停止は`lock_timeout`で上限を付け、作成時間は合成データ(距離約9万行)で数十ミリ秒だった。`pnpm lint:sql`(squawk)は、この2文を無視の指定なしでは`require-concurrent-index-creation`で失敗し、指定すると通る(同じ形の下書きで確かめた。`ALTER POLICY`と`CREATE OR REPLACE FUNCTION`は検出されない)。
+- 索引の2文には、それぞれ直前の行に`-- squawk-ignore require-concurrent-index-creation`を書き、その上に理由のコメントを書く(配置先: `20261127010005_history.sql`)。理由: `create index concurrently`はトランザクションの中で使えず、索引と関数を1つのトランザクションで原子的に適用するため。書き込みの停止は`lock_timeout`で上限を付け、作成時間は合成データ(距離約9万行)で数十ミリ秒だった。`pnpm lint:sql`(squawk)は、この2文を無視の指定なしでは`require-concurrent-index-creation`で失敗し、指定すると通る(同じ形の下書きで確かめた。`CREATE OR REPLACE FUNCTION`は検出されない)。
 - 条件の評価の順(事実。PostgreSQL 16の実行計画):
   - 1つの表を読むときの`where`の条件は、書いた順でなく、プランナーが見積もった1行あたりの費用の安い順に並べ替えて評価される。絞り込む量(選択率)は順の決定に使われない。費用が同じ条件は書いた順のまま並んだ。RLSの条件は、leakproofでない条件より先に評価される(比較の演算子のようなleakproofの条件は前に出られる)。PostgreSQLの文書は、式の評価の順を保証しない。
   - 結ぶ表や集計に依る条件は、計画の形で順が決まる。ラウンド構成の判定はラウンドを読むときの副問い合わせで、得点の範囲は合計点の集計の後にしか評価できない。

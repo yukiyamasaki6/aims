@@ -689,7 +689,7 @@ select is(
 -- A6 削除の記録(docs/backup.md)と、復元で使う内部関数purge_account
 -- ============================================================
 
--- P: 自分だけのラウンドと、他の射つ人Bが残るラウンドを持つ。復元の手順5と同じ入力(削除の後の状態へ戻す利用者)に使う。
+-- P: 自分だけのラウンドと、他の射つ人Bが残るラウンドを持つ。復元で削除の記録を適用するときと同じ入力(削除の後の状態へ戻す利用者)に使う。
 select pg_temp.mk_user('P', 'pat@example.test', 'Pat Archer');
 select pg_temp.mk_round('P1', 'P');
 select pg_temp.mk_shot('P1', 1, 1, 'P');
@@ -781,7 +781,7 @@ begin
 end;
 $$;
 
--- 復元の手順5(purge_account)は、認可もWorkerへの記録も行わず、同じ利用者にdelete_accountが成功した後と同じ状態にする。
+-- 復元で削除の記録の適用に使うpurge_accountは、認可もWorkerへの記録も行わず、同じ利用者にdelete_accountが成功した後と同じ状態にする。
 select is(
   pg_temp.snapshot_after('purge', pg_temp.uid('P')),
   pg_temp.snapshot_after('delete', pg_temp.uid('P')),
@@ -837,7 +837,7 @@ select public.purge_account(pg_temp.uid('P'));
 select is(
   pg_temp.snapshot(),
   (select snap from da_before_twice),
-  'purge_accountを同じ利用者に再び実行しても、状態は変わらない(復元の手順を繰り返せる)'
+  'purge_accountを同じ利用者に再び実行しても、状態は変わらない'
 );
 
 -- 記録先の設定が無い、または記録を送れないとき、削除は全体が取り消される。

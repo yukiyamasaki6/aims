@@ -4,7 +4,7 @@ import type { CallResult } from "../application/call-result";
 import type { EmailIdentityPreparation } from "../application/link-google";
 import { UNREACHABLE } from "../domain/auth-failure";
 
-// DB関数の部分。引数の無い関数で、生成した型は`Args: never`のため、呼び出しの型は空の引数の形で書く。
+// DB関数の部分。引数の無い関数で、生成した型は`Args: Record<PropertyKey, never>`のため、呼び出しの型は空の引数の形で書く。
 export type EmailIdentityDbSchema = {
   Functions: { ensure_email_identity: { Args: object; Returns: undefined } };
   Tables: Record<never, never>;

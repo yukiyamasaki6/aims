@@ -300,7 +300,7 @@ test("すでに別の利用者が使っているアドレスを入力すると�
   // 別の利用者のアドレスを送って、使えない旨の表示へ進む。
   const email = uniqueEmail("change-email-taken");
   const taken = uniqueEmail("change-email-taken-owner");
-  await createConfirmedUser({ email: taken, password: PASSWORD });
+  await createConfirmedUser({ email: taken });
   await signUpAndSignIn(page, { email, password: PASSWORD });
   await openChangeEmail(page);
   await sendNewEmail(page, taken);

@@ -243,7 +243,8 @@ deno_version = 2
 [analytics]
 enabled = false
 
-# 本番・プレビュー用の上書き（supabase config pushで反映、上のルート値はローカル用）。
+# 本番・プレビュー用の上書き（上のルート値はローカル用）。
+# supabase config pushは認証などの設定を反映する。db.vaultはconfig pushでは反映されず、supabase db reset --remoteや未適用のmigrationがあるsupabase db pushなどで反映される。
 [remotes.production]
 project_id = "lsqbiaosjkcwntewjhzv"
 
@@ -262,6 +263,11 @@ max_frequency = "60s"
 
 [remotes.preview]
 project_id = "ywrkmawovwceedzzhgwk"
+
+# プレビューはseedを適用しないため、アカウント削除の記録(docs/backup.md)を送らない設定をここで登録する。
+# 全環境共通の[db.vault]に置くと本番の記録先も上書きするため、置かない。
+[remotes.preview.db.vault]
+account_deletion_log_endpoint = "disabled"
 
 [remotes.preview.auth.email]
 max_frequency = "60s"
