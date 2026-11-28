@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 復元の機構(docs/backup.md)を、ローカルのSupabaseの捨てDBで検証する。
-# 取得(dump-db.sh)→DBの初期化→復元(restore-db.sh)を行い、取得の時点の状態へ戻ること、
-# 取得の後に削除したアカウントが削除の後と同じ状態になること、射手の番号が保たれること、手順が繰り返せること、取り違えを止めることを確かめる。
+# 未適用のmigrationを含むcommitを記録した取得(dump-db.sh)から、取得の版のmigrationだけを準備して(prepare-restore.py)
+# 空のDBへ適用し、復元(restore-db.sh)する。取得の時点の状態へ戻ること、取得の後に削除したアカウントが削除の後と同じ状態になること、
+# 射手の番号が保たれること、データのある復元先と取り違えを、データを変えずに止めることを確かめる。
 # 本番・外部サービスは使わない。ローカルのDBの中身は入れ替わり、成否にかかわらず最後にpnpm db:resetで初期状態へ戻す。
 # CIでは、DBテストのジョブ(.github/workflows/ci.ymlのDB Test)で実行する。
 #
@@ -56,6 +57,65 @@ shooter_numbers() { # shooter_numbers <ラウンドIDの条件のSQL>
     (select string_agg(round_id || ':' || id || ':' || shooter_number, ',' order by round_id, shooter_number) from public.round_users where shooter_number is not null and round_id $1),
     (select string_agg(distance_id || ':' || end_number || ':' || shot_number || ':' || shooter_number, ',' order by distance_id, end_number, shot_number) from public.shots where round_id $1),
     (select string_agg(event_id || ':' || shooter_number, ',' order by event_id) from public.shot_events where round_id $1))"
+}
+
+# 出力は、失敗したときだけ表示する。
+run_quietly() {
+  if ! "$@" >"$work/command.log" 2>&1; then
+    cat "$work/command.log" >&2
+    return 1
+  fi
+}
+
+migration_history_count() {
+  if [[ $(psql_value "select to_regclass('supabase_migrations.schema_migrations') is null") == t ]]; then
+    echo 0
+  else
+    psql_value "select count(*) from supabase_migrations.schema_migrations"
+  fi
+}
+
+# 復元先を、取得の版のmigrationだけを適用した空の状態にする。適用は運用の手順(docs/backup.md)と同じコマンドで行う。
+# 初期化(db reset)は、このCI専用のDBを空にするためだけに使う。
+reset_empty() {
+  echo "-- 空の復元先を用意する"
+  run_quietly pnpm --silent exec supabase db reset --workdir "$work/empty" --no-seed
+  check "適用の前の復元先に、migration履歴の行が無い" 0 "$(migration_history_count)"
+  check "適用の前の復元先に、アプリの表が無い" t \
+    "$(psql_value "select to_regclass('public.users') is null and to_regclass('public.rounds') is null")"
+  run_quietly pnpm --silent exec supabase db push --workdir "$work/migrations" --remote="$database_url" --skip-vault --yes
+  check "適用した版が、取得の記録の版と一致する" \
+    "$(jq -r '.migration_versions | sort | join(",")' "$work/backup/manifest.json")" \
+    "$(psql_value "select string_agg(version, ',' order by version) from supabase_migrations.schema_migrations")"
+  check "取得のcommitだけにある未適用のmigrationは、適用されない" t "$(psql_value "select to_regclass('public.verify_unapplied') is null")"
+  check "適用の後の利用者は、匿名化先だけである" 00000000-0000-4000-8000-000000000001 \
+    "$(psql_value "select string_agg(id::text, ',') from auth.users")"
+}
+
+# 取得の記録だけをjqの式で変えた取得を作り、そのディレクトリを返す。
+altered_backup() { # altered_backup <ディレクトリ名> <jqの式>
+  local dir=$work/$1
+  mkdir "$dir"
+  cp "$work/backup/data.sql" "$dir/"
+  jq "$2" "$work/backup/manifest.json" >"$dir/manifest.json"
+  echo "$dir"
+}
+
+# 失敗するはずの復元を行い、失敗すること、理由、データが変わらないことを確かめる。標準エラーは$work/restore.errに残る。
+check_rejected() { # check_rejected <名前> <理由の文言> <restore-db.shの引数>...
+  local name=$1 reason=$2 before status=0 reason_found=false
+  shift 2
+  before=$(snapshot)
+  scripts/backup/restore-db.sh "$@" >/dev/null 2>"$work/restore.err" || status=$?
+  if grep -qF -- "$reason" "$work/restore.err"; then
+    reason_found=true
+  fi
+  check "$name: 復元は失敗する" true "$([[ $status -ne 0 ]] && echo true || echo false)"
+  check "$name: 理由が分かる" true "$reason_found"
+  if [[ $reason_found == false ]]; then
+    cat "$work/restore.err" >&2
+  fi
+  check "$name: データは変わらない" "$before" "$(snapshot)"
 }
 
 # 失敗や中断のときも、作業の平文を消し、DBを初期状態へ戻す。終了コードは元のまま返す。
@@ -152,8 +212,26 @@ surviving="<> '00000000-0000-4000-8000-0000000000b1'"
 numbers_before=$(shooter_numbers "$surviving")
 users_before=$(psql_value "select count(*) from auth.users")
 
+# 取得に記録するcommitは、取得元へまだ適用していないmigrationを含む(migrationの適用の直前の取得の形)。
+# その後のcommitでmigrationを消し、準備がHEADや作業ツリーではなく、記録のcommitを読むことを確かめる。
+backup_repo=$work/repo
+temp_git() {
+  git -C "$backup_repo" -c user.name=verify -c user.email=verify@example.test -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
+}
+mkdir -p "$backup_repo/supabase" "$backup_repo/scripts/backup"
+cp -r supabase/migrations "$backup_repo/supabase/"
+cp scripts/backup/prepare-restore.py "$backup_repo/scripts/backup/"
+# 版は、以後に足すmigrationより新しいままにするため、遠い未来の値にする。
+echo 'create table public.verify_unapplied (id integer);' >"$backup_repo/supabase/migrations/29980101000000_verify_unapplied.sql"
+temp_git init -q
+temp_git add .
+temp_git commit -qm "add unapplied migration"
+backup_commit=$(temp_git rev-parse HEAD)
+temp_git rm -qr supabase/migrations
+temp_git commit -qm "remove migrations"
+
 echo "== 取得"
-scripts/backup/dump-db.sh "$work/backup" >/dev/null
+BACKUP_COMMIT=$backup_commit scripts/backup/dump-db.sh "$work/backup" >/dev/null
 manifest_tables=$(jq -r '.row_counts | length' "$work/backup/manifest.json")
 check "取得の記録に表ごとの行数が入っている" true "$([[ $manifest_tables -ge 20 ]] && echo true || echo false)"
 check "取得の記録のauth.usersの行数が、取得したDBの行数と一致する" "$users_before" "$(jq -r '.row_counts["\"auth\".\"users\""]' "$work/backup/manifest.json")"
@@ -167,29 +245,42 @@ check "削除の後も、残るラウンドの射手の行のIDと番号、矢�
 # 削除の記録は、実行と逆の順に並べる。
 printf '%s\n' "$gone2_id" "$gone_id" >"$work/deletions.txt"
 
+echo "== 取得の版のmigrationを準備する"
+(cd "$backup_repo" && python3 scripts/backup/prepare-restore.py "$work/backup" "$work/migrations") >/dev/null
+# 空の復元先を作るための作業ディレクトリ。起動中のローカルの設定だけを持ち、migrationとseedを持たない。
+mkdir -p "$work/empty/supabase"
+cp -r supabase/config.toml supabase/templates "$work/empty/supabase/"
+
 echo "== 復元(削除の記録なし)は、取得の時点の状態に戻す"
-reset_db
+reset_empty
 scripts/backup/restore-db.sh "$work/backup" >/dev/null
 check "復元(削除の記録なし)の後の全記録が、取得の時点と一致する" "$before_all" "$(snapshot)"
 
+echo "== データのある復元先は、書き換えずに止める"
+# 取得に無い状態を作る。入れ直した後に失敗する誤りは、同じ内容に戻ると指紋で気付けないためである。
+psql_value "update public.rounds set name = 'changed after restore' where id = '00000000-0000-4000-8000-0000000000a1'" >/dev/null
+check_rejected "データのある復元先への再実行" "空でない表" "$work/backup" "$work/deletions.txt"
+check "データのある復元先で止まったとき、理由の表示にメールアドレスが出ない" 0 "$(grep -c '@example\.test' "$work/restore.err" || true)"
+
+echo "== migrationの版の取り違えを止める"
+reset_empty
+extra_version=$(altered_backup extra-version '.migration_versions += ["29990101000000"]')
+check_rejected "復元先に足りない版がある" "migrationの版が取得と一致しません" "$extra_version"
+missing_version=$(altered_backup missing-version '.migration_versions |= (sort | .[:-1])')
+check_rejected "復元先に余分な版がある" "migrationの版が取得と一致しません" "$missing_version"
+
+echo "== 行数の取り違えは、確定せずに止める"
+reset_empty
+count_mismatch=$(altered_backup count-mismatch '.row_counts["\"public\".\"users\""] += 1')
+check_rejected "取得の記録と行数が違う" "行数が一致しません" "$count_mismatch"
+
 echo "== 復元(削除の記録あり)は、削除の後と同じ状態にする"
-# 空のDBから削除の記録ありで復元する、運営者の実際の手順に近い経路を確かめるため、復元の前に初期化する。
-reset_db
+reset_empty
 scripts/backup/restore-db.sh "$work/backup" "$work/deletions.txt" >/dev/null
 check "復元(削除の記録あり)の後の全記録が、取得の後に削除した状態と一致する" "$expected_after_delete" "$(snapshot)"
 
-echo "== 手順は繰り返せる"
-scripts/backup/restore-db.sh "$work/backup" "$work/deletions.txt" >/dev/null
-check "同じ手順をもう一度行っても、全記録が変わらない" "$expected_after_delete" "$(snapshot)"
-
-echo "== 取り違えを止める"
-jq '.migration_versions += ["29990101000000"]' "$work/backup/manifest.json" >"$work/mismatch-versions.json"
-mkdir -p "$work/version-mismatch" && cp "$work/backup/data.sql" "$work/version-mismatch/" && cp "$work/mismatch-versions.json" "$work/version-mismatch/manifest.json"
-if scripts/backup/restore-db.sh "$work/version-mismatch" >/dev/null 2>&1; then status=0; else status=$?; fi
-check "migrationの版が取得と違うと、復元は失敗する" 1 "$status"
-check "版の不一致で止まったとき、データは変わらない" "$expected_after_delete" "$(snapshot)"
-
 echo "== 削除の記録だけが残り、削除が取り消された利用者を含めて復元する"
+reset_empty
 printf '%s\n' "$cancelled_id" "$gone2_id" "$gone_id" >"$work/deletions-with-cancelled.txt"
 scripts/backup/restore-db.sh "$work/backup" "$work/deletions-with-cancelled.txt" >/dev/null
 check "削除が取り消された利用者の射手は、紐づけと役割だけが外れる" "4:-:-" \
@@ -201,12 +292,6 @@ keep_again=$(sign_in keep@example.test)
 check "取得時点の利用者が、メールOTPで同じ利用者IDのままサインインできる" "$keep_id" "$keep_again"
 gone_again=$(sign_in gone@example.test)
 check "削除した利用者のメールアドレスは、旧データを引き継がない新しい利用者になる" true "$([[ $gone_again != "$gone_id" ]] && echo true || echo false)"
-
-# 行数の確認は、データを入れた後に行う。失敗したときは、削除の記録を適用していない状態でDBに残るため、最後に行う。
-jq '.row_counts["\"public\".\"users\""] += 1' "$work/backup/manifest.json" >"$work/mismatch-counts.json"
-mkdir -p "$work/count-mismatch" && cp "$work/backup/data.sql" "$work/count-mismatch/" && cp "$work/mismatch-counts.json" "$work/count-mismatch/manifest.json"
-if scripts/backup/restore-db.sh "$work/count-mismatch" >/dev/null 2>&1; then status=0; else status=$?; fi
-check "取得の記録と行数が違うと、復元は失敗する" 1 "$status"
 
 if ((failures > 0)); then
   echo "失敗: $failures 件" >&2
