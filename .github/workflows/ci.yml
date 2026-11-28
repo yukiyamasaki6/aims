@@ -209,7 +209,8 @@ jobs:
       - name: Run pgTAP Tests
         run: pnpm test:db
 
-      # 復元の仕組み(docs/backup.md)の検証。取得→初期化→復元をローカルのDBで行う。psqlとjqはランナーのものを使う。
+      # 復元の仕組み(docs/backup.md)の検証。取得→取得の版のmigrationだけを適用した空のDBの用意→復元をローカルのDBで行う。
+      # psql、jq、git、Python(3.11以上)はランナーのものを使う。
       - name: Run Restore Check
         run: scripts/backup/tests/verify-restore.sh
 
