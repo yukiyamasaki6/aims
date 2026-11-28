@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 復元の機構(docs/backup.md)を、ローカルのSupabaseの捨てDBで検証する。
 # 取得(dump-db.sh)→DBの初期化→復元(restore-db.sh)を行い、取得の時点の状態へ戻ること、
-# 取得の後に削除したアカウントが削除の後と同じ状態になること、手順が繰り返せること、取り違えを止めることを確かめる。
+# 取得の後に削除したアカウントが削除の後と同じ状態になること、射手の番号が保たれること、手順が繰り返せること、取り違えを止めることを確かめる。
 # 本番・外部サービスは使わない。ローカルのDBの中身は入れ替わり、成否にかかわらず最後にpnpm db:resetで初期状態へ戻す。
 # CIでは、DBテストのジョブ(.github/workflows/ci.ymlのDB Test)で実行する。
 #
@@ -50,6 +50,14 @@ reset_db() {
   pnpm --silent db:reset >/dev/null 2>&1
 }
 
+# 指定したラウンドの射手の行(行のIDと番号)と、矢と矢の履歴の射手番号。
+shooter_numbers() { # shooter_numbers <ラウンドIDの条件のSQL>
+  psql_value "select concat_ws(' / ',
+    (select string_agg(round_id || ':' || id || ':' || shooter_number, ',' order by round_id, shooter_number) from public.round_users where shooter_number is not null and round_id $1),
+    (select string_agg(distance_id || ':' || end_number || ':' || shot_number || ':' || shooter_number, ',' order by distance_id, end_number, shot_number) from public.shots where round_id $1),
+    (select string_agg(event_id || ':' || shooter_number, ',' order by event_id) from public.shot_events where round_id $1))"
+}
+
 # 失敗や中断のときも、作業の平文を消し、DBを初期状態へ戻す。終了コードは元のまま返す。
 cleanup() {
   local status=$?
@@ -78,41 +86,70 @@ sign_in() {
     -d "{\"type\":\"email\",\"email\":\"$email\",\"token\":\"$code\"}" | jq -r '.user.id'
 }
 
-echo "== 準備: 利用者3人(取得の後に削除する利用者を含む)と、記録を作る"
+echo "== 準備: 利用者5人(取得の後に削除する利用者と、削除が取り消される利用者を含む)と、記録を作る"
 reset_db
 keep_id=$(sign_in keep@example.test)
 gone_id=$(sign_in gone@example.test)
-shared_id=$(sign_in shared@example.test)
-psql "$database_url" -X -q -v ON_ERROR_STOP=1 <<SQL
+gone2_id=$(sign_in gone2@example.test)
+delegate_id=$(sign_in delegate@example.test)
+cancelled_id=$(sign_in cancelled@example.test)
+# 射つ人の検査はコミットの時点で働くため、1トランザクションで作る。
+psql "$database_url" -X -q --single-transaction -v ON_ERROR_STOP=1 <<SQL
 set search_path = public;
-create temp table ids as select '$keep_id'::uuid as keep, '$gone_id'::uuid as gone, '$shared_id'::uuid as shared;
--- gone: 自分だけのラウンドと、shared(他の編集者)と共有するラウンド。keep: 自分だけのラウンド。
+create temp table ids as select '$keep_id'::uuid as keep, '$gone_id'::uuid as gone, '$gone2_id'::uuid as gone2,
+  '$delegate_id'::uuid as delegate, '$cancelled_id'::uuid as cancelled;
+-- a1: keepだけのラウンド。b1: goneだけが射つ人のラウンド。
+-- b2: 射つ人keep・gone・gone2、代理の人delegate、欠番(4)のある紐づかない射手5がいるラウンド。
+-- b5: 射つ人keepとcancelledのラウンド(射手は1と4)。
 insert into rounds (id, name, round_date, format, bow_type, status) values
   ('00000000-0000-4000-8000-0000000000a1', 'keep round', '2026-09-10', 'outdoor', 'recurve', 'in_progress'),
   ('00000000-0000-4000-8000-0000000000b1', 'gone solo', '2026-09-10', 'outdoor', 'recurve', 'completed'),
-  ('00000000-0000-4000-8000-0000000000b2', 'gone shared', '2026-09-10', 'outdoor', 'recurve', 'completed');
-insert into round_users (round_id, user_id, role)
-select '00000000-0000-4000-8000-0000000000a1'::uuid, keep, 'editor' from ids
-union all select '00000000-0000-4000-8000-0000000000b1'::uuid, gone, 'editor' from ids
-union all select '00000000-0000-4000-8000-0000000000b2'::uuid, gone, 'editor' from ids
-union all select '00000000-0000-4000-8000-0000000000b2'::uuid, shared, 'editor' from ids;
+  ('00000000-0000-4000-8000-0000000000b2', 'gone shared', '2026-09-10', 'outdoor', 'recurve', 'completed'),
+  ('00000000-0000-4000-8000-0000000000b5', 'cancelled shared', '2026-09-10', 'outdoor', 'recurve', 'completed');
+insert into round_users (round_id, user_id, role, shooter_number)
+select '00000000-0000-4000-8000-0000000000a1'::uuid, keep, 'owner', 1 from ids
+union all select '00000000-0000-4000-8000-0000000000b1'::uuid, gone, 'owner', 1 from ids
+union all select '00000000-0000-4000-8000-0000000000b2'::uuid, keep, 'owner', 1 from ids
+union all select '00000000-0000-4000-8000-0000000000b2'::uuid, gone, 'owner', 2 from ids
+union all select '00000000-0000-4000-8000-0000000000b2'::uuid, gone2, 'owner', 3 from ids
+union all select '00000000-0000-4000-8000-0000000000b2'::uuid, delegate, 'editor', null from ids
+union all select '00000000-0000-4000-8000-0000000000b2'::uuid, null, null, 5 from ids
+union all select '00000000-0000-4000-8000-0000000000b5'::uuid, keep, 'owner', 1 from ids
+union all select '00000000-0000-4000-8000-0000000000b5'::uuid, cancelled, 'owner', 4 from ids;
 insert into distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked)
 select d.id::uuid, d.round_id::uuid, 'a', 70, 12, 3, (select id from target_faces order by id limit 1), true
 from (values
   ('00000000-0000-4000-8000-0000000000a2', '00000000-0000-4000-8000-0000000000a1'),
   ('00000000-0000-4000-8000-0000000000b3', '00000000-0000-4000-8000-0000000000b1'),
-  ('00000000-0000-4000-8000-0000000000b4', '00000000-0000-4000-8000-0000000000b2')) as d(id, round_id);
-insert into shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
-select '00000000-0000-4000-8000-0000000000a2'::uuid, 1, 1, keep, '10', 10 from ids
-union all select '00000000-0000-4000-8000-0000000000b3'::uuid, 1, 1, gone, '9', 9 from ids
-union all select '00000000-0000-4000-8000-0000000000b4'::uuid, 1, 1, gone, '8', 8 from ids
-union all select '00000000-0000-4000-8000-0000000000b4'::uuid, 1, 2, shared, '7', 7 from ids;
-insert into shot_events (event_id, distance_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, shot_number, set_fields)
-select '00000000-0000-4000-8000-0000000000c1'::uuid, '00000000-0000-4000-8000-0000000000b4', 'RECORDED', gone, 1, 1, gone, '8', 8, 1, array['score', 'shooter_id'] from ids;
+  ('00000000-0000-4000-8000-0000000000b4', '00000000-0000-4000-8000-0000000000b2'),
+  ('00000000-0000-4000-8000-0000000000b6', '00000000-0000-4000-8000-0000000000b5')) as d(id, round_id);
+insert into shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int)
+select d.round_id, d.id, 1, v.shot_number, v.shooter_number, v.score::text, v.score
+from (values
+  ('00000000-0000-4000-8000-0000000000a2', 1, 1, 10),
+  ('00000000-0000-4000-8000-0000000000b3', 1, 1, 9),
+  ('00000000-0000-4000-8000-0000000000b4', 1, 2, 8),
+  ('00000000-0000-4000-8000-0000000000b4', 2, 1, 7),
+  ('00000000-0000-4000-8000-0000000000b4', 3, 3, 6),
+  ('00000000-0000-4000-8000-0000000000b6', 1, 4, 5)) as v(distance_id, shot_number, shooter_number, score)
+join distances d on d.id = v.distance_id::uuid;
+-- 操作者は、b2のマス1(射手2)がgone、マス2がgone2、マス3がdelegate、b6がcancelled。
+insert into shot_events (event_id, round_id, distance_id, type, author_id, revision, end_number, shooter_number, score_str, score_int, shot_number, set_fields)
+select v.event_id::uuid, d.round_id, d.id, 'RECORDED', v.author, 1, 1, v.shooter_number, v.score::text, v.score, v.shot_number, array['score', 'shooter_number']
+from ids
+cross join lateral (values
+  ('00000000-0000-4000-8000-0000000000c1', '00000000-0000-4000-8000-0000000000b4', ids.gone, 1, 2, 8),
+  ('00000000-0000-4000-8000-0000000000c2', '00000000-0000-4000-8000-0000000000b4', ids.gone2, 2, 3, 7),
+  ('00000000-0000-4000-8000-0000000000c3', '00000000-0000-4000-8000-0000000000b4', ids.delegate, 3, 3, 6),
+  ('00000000-0000-4000-8000-0000000000c4', '00000000-0000-4000-8000-0000000000b6', ids.cancelled, 1, 4, 5)
+) as v(event_id, distance_id, author, shot_number, shooter_number, score)
+join distances d on d.id = v.distance_id::uuid;
 insert into preset_rounds (id, owner_id, name, format, bow_type)
 select '00000000-0000-4000-8000-0000000000d1'::uuid, gone, 'gone preset', 'outdoor', 'recurve' from ids;
 SQL
 before_all=$(snapshot)
+surviving="<> '00000000-0000-4000-8000-0000000000b1'"
+numbers_before=$(shooter_numbers "$surviving")
 users_before=$(psql_value "select count(*) from auth.users")
 
 echo "== 取得"
@@ -122,10 +159,13 @@ check "取得の記録に表ごとの行数が入っている" true "$([[ $manif
 check "取得の記録のauth.usersの行数が、取得したDBの行数と一致する" "$users_before" "$(jq -r '.row_counts["\"auth\".\"users\""]' "$work/backup/manifest.json")"
 check "取得物はpublicとauthの表だけを含む" 0 "$(jq '[.row_counts | keys[] | select(test("^\"(public|auth)\"\\.") | not)] | length' "$work/backup/manifest.json")"
 
-echo "== 取得の後にgoneを削除した状態(期待)を作る"
+echo "== 取得の後にgone、gone2の順に削除した状態(期待)を作る"
 psql_value "select public.purge_account('$gone_id')" >/dev/null
+psql_value "select public.purge_account('$gone2_id')" >/dev/null
 expected_after_delete=$(snapshot)
-printf '%s\n' "$gone_id" >"$work/deletions.txt"
+check "削除の後も、残るラウンドの射手の行のIDと番号、矢と履歴の射手番号は変わらない" "$numbers_before" "$(shooter_numbers "$surviving")"
+# 削除の記録は、実行と逆の順に並べる。
+printf '%s\n' "$gone2_id" "$gone_id" >"$work/deletions.txt"
 
 echo "== 復元(削除の記録なし)は、取得の時点の状態に戻す"
 reset_db
@@ -148,6 +188,13 @@ mkdir -p "$work/version-mismatch" && cp "$work/backup/data.sql" "$work/version-m
 if scripts/backup/restore-db.sh "$work/version-mismatch" >/dev/null 2>&1; then status=0; else status=$?; fi
 check "migrationの版が取得と違うと、復元は失敗する" 1 "$status"
 check "版の不一致で止まったとき、データは変わらない" "$expected_after_delete" "$(snapshot)"
+
+echo "== 削除の記録だけが残り、削除が取り消された利用者を含めて復元する"
+printf '%s\n' "$cancelled_id" "$gone2_id" "$gone_id" >"$work/deletions-with-cancelled.txt"
+scripts/backup/restore-db.sh "$work/backup" "$work/deletions-with-cancelled.txt" >/dev/null
+check "削除が取り消された利用者の射手は、紐づけと役割だけが外れる" "4:-:-" \
+  "$(psql_value "select shooter_number || ':' || coalesce(user_id::text, '-') || ':' || coalesce(role, '-') from public.round_users where round_id = '00000000-0000-4000-8000-0000000000b5' and shooter_number = 4")"
+check "全ての射手の行のIDと番号、矢と履歴の射手番号は、取得の時点と同じである" "$numbers_before" "$(shooter_numbers "$surviving")"
 
 echo "== 復元した利用者のサインイン"
 keep_again=$(sign_in keep@example.test)

@@ -72,6 +72,7 @@ function shot(
     score_str: scoreStr,
     score_int: scoreInt,
     shot_number: 1,
+    shooter_number: 1,
     ...overrides,
   };
 }

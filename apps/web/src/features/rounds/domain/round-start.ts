@@ -5,16 +5,16 @@ import type { SyncOperation } from "./sync-events";
 export type RoundCreated = Extract<SyncOperation, { type: "round.created" }>;
 type CreatedDistance = RoundCreated["distances"][number];
 
-// 作成の操作から、新しく振るID(操作とラウンドと各距離のID)を除いたもの。
+// 作成の操作から、新しく振るID(操作とラウンドと各距離のID)と作成者を除いたもの。
 export type RoundCreatedDraft = Omit<
   RoundCreated,
-  "eventId" | "roundId" | "distances"
+  "eventId" | "roundId" | "creatorUserId" | "distances"
 > & {
   distances: Omit<CreatedDistance, "eventId" | "id">[];
 };
 
 // 選択したプリセット(無ければnull)から作成の内容を組み立てる。無ければ屋外・リカーブの距離無し。距離は位置の順。実施日は、nowに端末の時差(`utcOffsetMinutes`。東が正、分)を足した日付、つまり端末のローカルの日付。
-// IDは持たない(乱数は外部の値のため、手続きが振る)。
+// IDと作成者は持たない(乱数と利用者は外部の値のため、手続きが加える)。
 export function roundCreatedDraftOf(
   preset: Preset | null,
   now: number,

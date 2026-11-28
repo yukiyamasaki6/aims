@@ -1,17 +1,16 @@
 -- ラウンドの状態（rounds.status）を、update_roundの差分のキー`status`で変える振る舞いを確認する。
 --   - 既定値と、create_roundで作ったラウンドの初期状態
---   - statusが効く・不正値・削除済み・権限・冪等・他の項目との同時の変更
+--   - statusが効く・不正値・削除済み・冪等・他の項目との同時の変更
 --   - round_eventsのstatus列
 -- RPC × 観点の網羅（権限、入力検証、冪等性）はrpc_matrix.sqlで固定している。
 
 begin;
 
-select plan(20);
+select plan(18);
 
 create temp table st_id (alias text primary key, id uuid not null);
 insert into st_id (alias, id) values
   ('E',  'f0000000-0000-0000-0000-000000000001'),
-  ('V',  'f0000000-0000-0000-0000-000000000002'),
   ('R1', 'f0000000-0000-0000-0000-000000000010'),
   ('R2', 'f0000000-0000-0000-0000-000000000011'),
   ('RD', 'f0000000-0000-0000-0000-000000000012'),
@@ -35,18 +34,17 @@ create function pg_temp.status(p_alias text) returns text
 language sql stable
 as $$ select status from public.rounds where id = pg_temp.id(p_alias) $$;
 
-insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('V'));
+insert into auth.users (id) values (pg_temp.id('E'));
 
 -- 直接INSERTしたラウンドは、列の既定値の入力中になる。
 insert into public.rounds (id, name, round_date, format, bow_type) values
   (pg_temp.id('R1'), 'Status 1', '2026-01-01', 'outdoor', 'recurve'),
   (pg_temp.id('R2'), 'Status 2', '2026-01-01', 'outdoor', 'recurve'),
   (pg_temp.id('RD'), 'Status Disabled', '2026-01-01', 'outdoor', 'recurve');
-insert into public.round_users (round_id, user_id, role) values
-  (pg_temp.id('R1'), pg_temp.id('E'), 'editor'),
-  (pg_temp.id('R2'), pg_temp.id('E'), 'editor'),
-  (pg_temp.id('R2'), pg_temp.id('V'), 'viewer'),
-  (pg_temp.id('RD'), pg_temp.id('E'), 'editor');
+insert into public.round_users (round_id, user_id, role, shooter_number) values
+  (pg_temp.id('R1'), pg_temp.id('E'), 'owner', 1),
+  (pg_temp.id('R2'), pg_temp.id('E'), 'owner', 1),
+  (pg_temp.id('RD'), pg_temp.id('E'), 'owner', 1);
 
 -- 既定値
 select is(pg_temp.status('R1'), 'in_progress', 'rounds.status: 状態を指定せず作った行は入力中になる');
@@ -138,7 +136,7 @@ select throws_ok(
 );
 
 -- ============================================================
--- 削除済み・権限
+-- 削除済み
 -- ============================================================
 
 select public.disable_round(pg_temp.ev(30), pg_temp.id('RD'));
@@ -149,13 +147,6 @@ select is(
   'DISABLED/false/in_progress',
   'update_round: 削除済みのラウンドの状態の変更はDISABLEDで効かない'
 );
-
-select set_config('request.jwt.claim.sub', pg_temp.id('V')::text, true);
-select throws_ok(
-  format($$select public.update_round(%L, %L, '{"status":"completed"}')$$, pg_temp.ev(40), pg_temp.id('R2')),
-  'PT403', null, 'update_round: viewerは状態を変えられない'
-);
-select is(pg_temp.status('R2'), 'in_progress', 'update_round: 拒否された状態の変更は反映されない');
 
 select * from finish();
 

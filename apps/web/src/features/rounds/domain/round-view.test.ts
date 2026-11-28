@@ -9,6 +9,7 @@ import {
 import { selectRoundState } from "./round-tables";
 import { deriveRoundState, originOf, roundScreenState } from "./round-view";
 import type { ScoringTargetFace } from "./scorecard-scoring";
+import { shooterNumberFor } from "./shot-operations";
 import type { SyncOperation } from "./sync-events";
 
 const roundUpdated: SyncOperation = {
@@ -47,6 +48,7 @@ describe("deriveRoundState", () => {
     roundDate: "2026-09-20",
     format: "outdoor",
     bowType: "recurve",
+    creatorUserId: "user-1",
     distances: [
       {
         eventId: "cd1",
@@ -68,6 +70,7 @@ describe("deriveRoundState", () => {
     shotNumber: 1,
     scoreStr: "10",
     scoreInt: 10,
+    shooterNumber: 1,
   };
   const pending = (operation: SyncOperation) => ({
     operation,
@@ -102,6 +105,25 @@ describe("deriveRoundState", () => {
     expect(state?.roundConfig.name).toBe("作成直後");
     expect(state?.status).toBe("in_progress");
     expect(state?.shots.map((s) => s.score_int)).toEqual([10]);
+  });
+
+  it("作成の操作だけの記録は、作った利用者を射手1の射つ人だけにし、空のマスの射手は1になる", () => {
+    // Given
+
+    // When
+    const state = deriveRoundState(undefined, [pending(created)], faces);
+    if (!state) throw new Error("state");
+    const number = shooterNumberFor(
+      state,
+      { distanceId: "d1", endNumber: 1, shotNumber: 1 },
+      "user-1",
+    );
+
+    // Then
+    expect(state.shooters).toEqual([
+      { shooter_number: 1, user_id: "user-1", role: "owner" },
+    ]);
+    expect(number).toBe(1);
   });
 
   it("矢は渡した的で判定し、的に無い点数は反映しない", () => {
@@ -241,6 +263,7 @@ describe("roundScreenState", () => {
           score_str: "10",
           score_int: 10,
           shot_number: 1,
+          shooter_number: 1,
         },
       ],
     });

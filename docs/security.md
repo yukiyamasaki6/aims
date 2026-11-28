@@ -73,28 +73,31 @@ OTPの再確認は同じ利用者の新セッションを作り、古いJWTや�
 | 対象テーブル   | SELECT                          | INSERT                        | UPDATE                        | DELETE                        |
 | :------------ | :----------------------------- | :---------------------------- | :---------------------------- | :---------------------------- |
 | `users`       | RLS: `auth.uid() = id` | RLS: 不可 | RLS: `auth.uid() = id` | RLS: 不可 |
-| `rounds`      | RLS: `round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 認証済みユーザー（作成時に`editor`として登録） | RLS: 直接操作不可<br>RPC: `round_users.role = 'editor'` | RLS: 直接操作不可<br>RPC: `round_users.role = 'editor'` |
-| `round_users` | RLS: `round_users`に自分が存在する | RLS: 直接操作不可 | RLS: 直接操作不可 | RLS: 直接操作不可 |
-| `distances`   | RLS: 所属ラウンドの`round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` |
-| `shots`       | RLS: 所属ラウンドの`round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` |
-| `round_events` | RLS: `round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 作成時は認証済み、以後は`round_users.role = 'editor'` | RLS: 不可（追記専用） | RLS: 不可（追記専用） |
-| `distance_events` | RLS: 所属ラウンドの`round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 不可（追記専用） | RLS: 不可（追記専用） |
-| `shot_events` | RLS: 所属ラウンドの`round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 不可（追記専用） | RLS: 不可（追記専用） |
+| `rounds`      | RLS: `round_users`に自分の役割がある | RLS: 直接操作不可<br>RPC: 認証済みユーザー（作成時に`owner`・射手1として登録） | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role`が`owner`か`editor` | RLS: 直接操作不可<br>RPC: `owner`で、そのラウンドの`owner`が1人の場合 |
+| `round_users` | RLS: `round_users`に自分の役割がある | RLS: 直接操作不可<br>RPC: `add_round_shooter`（利用者に紐づかない射手。`owner`か`editor`） | RLS: 直接操作不可 | RLS: 直接操作不可 |
+| `distances`   | RLS: `round_users`に自分の役割がある | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role`が`owner`か`editor` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role`が`owner`か`editor` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role`が`owner`か`editor` |
+| `shots`       | RLS: `round_users`に自分の役割がある | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role`が`owner`か`editor` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role`が`owner`か`editor` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role`が`owner`か`editor` |
+| `round_events` | RLS: `round_users`に自分の役割がある | RLS: 直接操作不可<br>RPC: 作成時は認証済み、以後は`owner`か`editor`（削除は唯一の`owner`） | RLS: 不可（追記専用） | RLS: 不可（追記専用） |
+| `distance_events` | RLS: `round_users`に自分の役割がある | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role`が`owner`か`editor` | RLS: 不可（追記専用） | RLS: 不可（追記専用） |
+| `shot_events` | RLS: `round_users`に自分の役割がある | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role`が`owner`か`editor` | RLS: 不可（追記専用） | RLS: 不可（追記専用） |
 | `target_faces`, `target_face_spots`, `target_face_rings` | RLS: 認証済みユーザー全員 | RLS: 直接操作不可 | RLS: 直接操作不可 | RLS: 直接操作不可 |
 | `preset_rounds` | RLS: 認証済みユーザー全員 | RLS: `auth.uid() = owner_id` | RLS: 不可 | RLS: `auth.uid() = owner_id` |
 | `preset_distances` | RLS: 認証済みユーザー全員 | RLS: 親の`owner_id`が`auth.uid()`と一致する | RLS: 不可 | RLS: 不可（親の削除の`CASCADE`で消える） |
 
-`preset_distances`のINSERTは親の`preset_rounds.owner_id`判定に従う（親を辿ってRLSを評価する。`distances`/`shots`が`round_users`を辿るのと同じパターン）。
-`distances`のSELECTは見える`rounds`があること、`shots`のSELECTは見える`distances`があることで判定し、`is_round_member`を直接呼ぶのは`rounds`だけである（親の表のRLSを通して`round_users`を辿る）。`shot_events`・`distance_events`は`is_round_member`を直接呼ぶ。
+`preset_distances`のINSERTは親の`preset_rounds.owner_id`判定に従う（親を辿ってRLSを評価する。`distances`が`rounds`を辿るのと同じパターン）。
+`distances`のSELECTは見える`rounds`があることで判定する（親の表のRLSを通して`round_users`を辿る）。`rounds`・`round_users`・`round_events`・`distance_events`は`is_round_member`を直接呼ぶ。
+`shots`・`shot_events`のSELECTは、行の`round_id`が`member_round_ids()`の結果にあることで判定する。利用者に紐づかない射手の行は閲覧の権限を持たない。
+`member_round_ids()`は本人が参加するラウンドのIDだけを返す`SECURITY DEFINER`の関数で、EXECUTEは`authenticated`だけが持つ（`PUBLIC`・`anon`は持たない）。`add_round_shooter`も同じである。
+射手の匿名化の関数`anonymize_round_shooter`と、番号と`owner`を検査するトリガー関数は、`PUBLIC`・`anon`・`authenticated`の実行権限を持たない。
 
 「直接操作不可」はRLSポリシーとテーブルのGRANTの両方がなく、`permission denied`（42501）で拒否される。
 書き込み経路が必要になった時点で、ポリシーとGRANTを設計して追加する。
-`round_users`はメンバー管理の書き込み経路がなく、チーム機能で必要になった時点で設計する。
+`round_users`は参加者を加える・外す書き込み経路がなく、チーム機能で必要になった時点で設計する。
 `target_faces`系はシードのみで、アプリから書き込まない。
 `users`の行は`handle_new_user`トリガーが作り、`auth.users`の削除の`CASCADE`で消える。
 `delete_account(expected_user_id)`はSECURITY DEFINERで、EXECUTEは`authenticated`だけが持つ(`PUBLIC`・`anon`は持たない)。`users`の削除と、他の表の削除・匿名化は、この関数だけが行う。匿名化の置き先は「削除済みの利用者」(`00000000-0000-4000-8000-000000000001`)で、`auth.users`の行を持ち、サインインできない。
 
-ラウンド・距離・矢の変更は専用のイベントRPCだけを経由する。RPCはクライアントから受け取った識別子を権限判定の根拠としてそのまま信用せず、対象の親関係から実際のラウンドを特定し、`auth.uid()`がそのラウンドの`editor`であることを確認する。`author_id`もRPC内で`auth.uid()`から設定する。権限確認、イベント追記、`revision`採番、射影更新は同一トランザクションで行い、確定した`revision`を返す。
+ラウンド・距離・矢の変更は専用のイベントRPCだけを経由する。RPCはクライアントから受け取った識別子を権限判定の根拠としてそのまま信用せず、対象の親関係から実際のラウンドを特定し、`auth.uid()`がそのラウンドの`owner`か`editor`であること（ラウンドの削除は唯一の`owner`であること）を確認する。矢の記録は射手の番号の指定を必須とし、そのラウンドの射手であることを確認する。射手の指定は実行者の記録（`author_id`）や権限を変えない。`author_id`もRPC内で`auth.uid()`から設定する。権限確認、イベント追記、`revision`採番、射影更新は同一トランザクションで行い、確定した`revision`を返す。
 
 書き込みRPCの拒否は2種類で、認可の拒否は`PT403`、契約の不一致(引数の形や範囲の不正)は`PT422`である。`PTxyz`はPostgRESTがHTTPステータスxyzで返す独自のSQLSTATEで、Postgres自身のコード(権限不足の`42501`など)と区別できる。
 業務規則(後勝ち、削除、不変条件、構成と矢の整合)で効かない操作・項目は、拒否せず受理して応答で返す。イベントには効いた項目だけを記録し、効かなかった操作・項目と拒否した操作はどこにも記録しない。

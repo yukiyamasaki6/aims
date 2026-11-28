@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  roundBase,
   roundUpdated,
+  shooterAdded,
   shotCleared,
   shotRecorded,
 } from "../domain/round-op-test-helpers";
+import { deriveRoundState } from "../domain/round-view";
 import { roundStreamId } from "../domain/sync-events";
 import { createSenderRig, flush } from "./op-sender-test-helpers";
 import type { SendOutcome } from "./operation-sending";
@@ -662,5 +665,182 @@ describe("名前だけの更新の操作", () => {
 
     // Then
     expect(sentIds(rig)).toEqual([["u1"], ["u2"]]);
+  });
+});
+
+describe("射手の追加", () => {
+  // 射手の追加の成功の応答は、revisionを持たない。
+  const addedOutcome: SendOutcome = {
+    ok: true,
+    results: [
+      {
+        revision: null,
+        applied: true,
+        appliedFields: null,
+        hasRejectedFields: false,
+      },
+    ],
+  };
+  const ineffectiveOutcome: SendOutcome = {
+    ok: true,
+    results: [
+      {
+        revision: null,
+        applied: false,
+        appliedFields: null,
+        hasRejectedFields: false,
+      },
+    ],
+  };
+  const add = shooterAdded(2, "add");
+  const recordOf = (id: string, cell: number, shooterNumber: number) =>
+    shotRecorded({ eventId: id, shotNumber: cell, shooterNumber });
+
+  // 指定した番号の射手を持つ、取得した状態。
+  const fetchedWith = (...numbers: number[]) =>
+    roundBase({
+      shooters: numbers.map((shooterNumber) => ({
+        shooter_number: shooterNumber,
+        user_id: null,
+        role: null,
+      })),
+    });
+
+  // 画面と同じ導出で得る、射手の番号の一覧。
+  const shooterNumbers = (rig: Rig) => {
+    const { base, items } = rig.hub.record(STREAM);
+    const applied = items.map(({ operation, confirmedFields }) => ({
+      operation,
+      confirmedFields,
+    }));
+    return deriveRoundState(base, applied, [])?.shooters.map(
+      (shooter) => shooter.shooter_number,
+    );
+  };
+
+  // 射手1を取得済みのラウンドで、射手2の追加を積んで送り始めた送信器。
+  async function adding(): Promise<Rig> {
+    const rig = await started();
+    await rig.hub.commit(STREAM, fetchedWith(1), 10, "user-1");
+    await rig.hub.append(STREAM, add);
+    await flush();
+    return rig;
+  }
+
+  it("成功した追加は確定の印0で、番号を含まない取得の後も列と一覧に残り、番号を含む取得で列から外れて一覧は1つのままになる", async () => {
+    // Given
+    const rig = await adding();
+    await respond(rig, 0, addedOutcome);
+    const acked = rig.hub.record(STREAM).items[0].ackedRevision;
+
+    // When
+    await rig.hub.commit(STREAM, fetchedWith(1), 20, "user-1");
+    const without = [itemIds(rig), shooterNumbers(rig)];
+    await rig.hub.commit(STREAM, fetchedWith(1, 2), 30, "user-1");
+
+    // Then
+    expect(acked).toBe(0);
+    expect(without).toEqual([["add"], [1, 2]]);
+    expect([itemIds(rig), shooterNumbers(rig)]).toEqual([[], [1, 2]]);
+  });
+
+  it("確定した追加は、保存から開き直しても再送せず、射手の一覧は変わらない", async () => {
+    // Given
+    const first = await adding();
+    await respond(first, 0, addedOutcome);
+
+    // When
+    const reopened = await started({ shared: { store: first.store } });
+
+    // Then
+    expect(reopened.sent).toHaveLength(0);
+    expect(itemIds(reopened)).toEqual(["add"]);
+    expect(shooterNumbers(reopened)).toEqual([1, 2]);
+  });
+
+  it("番号を知った後の、番号を含まない遅い取得は反映せず、一覧を欠けさせない", async () => {
+    // Given
+    const rig = await started();
+    await rig.hub.commit(STREAM, fetchedWith(1, 2), 10, "user-1");
+
+    // When
+    await rig.hub.commit(STREAM, fetchedWith(1), 20, "user-1");
+
+    // Then
+    expect(shooterNumbers(rig)).toEqual([1, 2]);
+  });
+
+  it("応答を失った追加は再送し、同じ番号の記録は追加の成功の後に送る", async () => {
+    // Given
+    const rig = await adding();
+    await rig.hub.append(STREAM, recordOf("r2", 1, 2));
+    await flush();
+
+    // When
+    await respond(rig, 0, rpcFailure());
+    await rig.clock.advanceAsync(3000);
+    const beforeSuccess = sentIds(rig);
+    await respond(rig, 1, addedOutcome);
+
+    // Then
+    expect(beforeSuccess).toEqual([["add"], ["add"]]);
+    expect(sentIds(rig)).toEqual([["add"], ["add"], ["r2"]]);
+  });
+
+  it("適用されない追加は列から外し、再取得が要る印を付ける", async () => {
+    // Given
+    const rig = await adding();
+
+    // When
+    await respond(rig, 0, ineffectiveOutcome);
+
+    // Then
+    expect(itemIds(rig)).toEqual([]);
+    expect(rig.hub.divergedStreams().has(STREAM)).toBe(true);
+  });
+
+  it.each(["PT403", "PT422"])(
+    "%sで拒否された追加と、同じ番号の記録は破棄して再送せず、他の番号の記録は送る",
+    async (code) => {
+      // Given
+      const rig = await adding();
+      await rig.hub.append(STREAM, recordOf("r2", 1, 2));
+      await rig.hub.append(STREAM, recordOf("r1", 2, 1));
+      await flush();
+
+      // When
+      await respond(rig, 0, rpcFailure(code));
+      await respond(rig, 1, appliedOutcome(1));
+      await respond(rig, 2, rpcFailure(code));
+      await rig.clock.advanceAsync(60000);
+
+      // Then
+      expect(sentIds(rig)).toEqual([["add"], ["r1"], ["r2"]]);
+      expect(itemIds(rig)).toEqual(["r1"]);
+    },
+  );
+
+  it("同じ要求の1件の射手番号がPT403で拒否されたら、単独に切り分け、拒否された記録だけを破棄する", async () => {
+    // Given
+    const rig = await started();
+    await rig.hub.append(STREAM, recordOf("first", 1, 1));
+    await flush();
+    await rig.hub.append(STREAM, recordOf("unknown", 2, 9));
+    await rig.hub.append(STREAM, recordOf("ok", 3, 1));
+    await respond(rig, 0, appliedOutcome(1));
+
+    // When
+    await respond(rig, 1, rpcFailure("PT403"));
+    await respond(rig, 2, rpcFailure("PT403"));
+    await respond(rig, 3, appliedOutcome(1));
+
+    // Then
+    expect(sentIds(rig)).toEqual([
+      ["first"],
+      ["unknown", "ok"],
+      ["unknown"],
+      ["ok"],
+    ]);
+    expect(itemIds(rig)).toEqual(["first", "ok"]);
   });
 });

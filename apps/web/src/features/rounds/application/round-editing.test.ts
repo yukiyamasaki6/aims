@@ -52,6 +52,7 @@ function tables(status: "in_progress" | "completed"): RoundTables {
         shot_number: 1,
         score_str: "7",
         score_int: 7,
+        shooter_number: 1,
       },
     ],
   });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StreamRules } from "@/lib/local-op-log/contract/op-log-store";
 import type { RoundBaseRecord } from "./round-base";
-import { roundTablesFromServer } from "./round-op-test-helpers";
+import { roundTablesFromServer, shooterAdded } from "./round-op-test-helpers";
 import {
   isRetainedForRefresh,
   isRoundInProgress,
@@ -156,6 +156,24 @@ describe("roundStreamRules.keeps", () => {
     expect(unsentReopen).toBe(true);
   });
 
+  it("完了のベースは、確定済みの射手の追加の番号が取得に無いあいだは保持し、反映済みなら保持しない", () => {
+    // Given
+    // 取得した完了のラウンドの射手は、射手1だけである。
+    const completed = record({ status: "completed" });
+
+    // When
+    const notReflected = roundStreamRules.keeps(completed, [
+      entry(shooterAdded(2), 0),
+    ]);
+    const reflected = roundStreamRules.keeps(completed, [
+      entry(shooterAdded(1), 0),
+    ]);
+
+    // Then
+    expect(notReflected).toBe(true);
+    expect(reflected).toBe(false);
+  });
+
   it("ラウンドの削除が重なっても、未送信なら保持し、確定済みでもベースがあるあいだは(反映済みでないため)保持する", () => {
     // Given
     // When
@@ -208,6 +226,7 @@ describe("isRetainedForRefresh", () => {
       roundDate: "2026-09-20",
       format: "outdoor",
       bowType: "recurve",
+      creatorUserId: "user-1",
       distances: [],
     };
 

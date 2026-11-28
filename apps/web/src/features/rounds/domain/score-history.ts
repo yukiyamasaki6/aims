@@ -1,7 +1,7 @@
-// 取り消しの列の1件が持つ、マスの矢の状態。変えた属性(今は点数)と生死だけを持つ。
+// 取り消しの列の1件が持つ、マスの矢の状態。生死と、生きている矢の点数と射手の番号を持つ。
 export type ShotState =
   | { alive: false }
-  | { alive: true; scoreStr: string; scoreInt: number };
+  | { alive: true; scoreStr: string; scoreInt: number; shooterNumber: number };
 
 // マス1つへの1回の書き込み。戻るは`before`、進むは`after`で上書きする。
 export type HistoryEntry = {

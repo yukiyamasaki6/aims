@@ -3,6 +3,8 @@ import { planFlights } from "./op-plan";
 import { laneOf } from "./round-op-conflicts";
 import {
   distanceUpdated,
+  roundCreated,
+  shooterAdded,
   shotCleared,
   shotRecorded,
 } from "./round-op-test-helpers";
@@ -14,6 +16,8 @@ const record = (id: string, distanceId: string, shotNumber: number) =>
   shotRecorded({ eventId: id, distanceId, endNumber: 1, shotNumber });
 const clear = (id: string, distanceId: string, shotNumber: number) =>
   shotCleared({ eventId: id, distanceId, endNumber: 1, shotNumber });
+const recordOf = (id: string, shotNumber: number, shooterNumber: number) =>
+  shotRecorded({ eventId: id, shotNumber, shooterNumber });
 const updateDistance = (id: string, distanceId: string) =>
   distanceUpdated({ eventId: id, distanceId });
 
@@ -206,5 +210,56 @@ describe("planFlights", () => {
 
     // Then
     expect(ids(flights)).toEqual([["1"]]);
+  });
+
+  it("矢の記録は、同じ番号の射手の追加の確定を待ち、他の番号の記録と取り消しは先に送る", () => {
+    // Given
+    const items = [
+      item(shooterAdded(2, "add")),
+      item(recordOf("r2", 1, 2)),
+      item(recordOf("r1", 2, 1)),
+      item(clear("c", "d-1", 3)),
+    ];
+
+    // When
+    const before = planFlights(items);
+    // 追加が確定すると、追加は計画の入力から無くなる。
+    const after = planFlights(items.slice(1));
+
+    // Then
+    expect(ids(before)).toEqual([["add"], ["r1"], ["c"]]);
+    expect(ids(after)).toEqual([["r2", "r1"], ["c"]]);
+  });
+
+  it("再試行を待つ射手の追加は、同じ番号の記録だけを止める", () => {
+    // Given
+    const items = [
+      item(shooterAdded(2, "add"), "backoff"),
+      item(recordOf("r2", 1, 2)),
+      item(recordOf("r1", 2, 1)),
+    ];
+
+    // When
+    const flights = planFlights(items);
+
+    // Then
+    expect(ids(flights)).toEqual([["r1"]]);
+  });
+
+  it("未送信の作成のラウンドは、作成、射手の追加、その番号の記録の順に、前の確定を待って送る", () => {
+    // Given
+    const items = [
+      item(roundCreated({ eventId: "create" })),
+      item(shooterAdded(2, "add")),
+      item(recordOf("r2", 1, 2)),
+    ];
+
+    // When
+    const flights = [items, items.slice(1), items.slice(2)].map((rest) =>
+      ids(planFlights(rest)),
+    );
+
+    // Then
+    expect(flights).toEqual([[["create"]], [["add"]], [["r2"]]]);
   });
 });

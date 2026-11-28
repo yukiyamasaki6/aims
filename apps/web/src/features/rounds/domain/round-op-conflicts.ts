@@ -41,6 +41,18 @@ function isSameCellOperation(
   );
 }
 
+// 後の操作が、前の操作で追加する射手の矢の記録である。記録は追加の確定を待つ(列はラウンドごとで、番号だけを比べる)。
+function recordsAddedShooter(
+  previous: SyncOperation,
+  next: SyncOperation,
+): boolean {
+  return (
+    previous.type === "shooter.added" &&
+    next.type === "shot.recorded" &&
+    next.shooterNumber === previous.shooterNumber
+  );
+}
+
 // 前の操作と後の操作で、適用順により結果が変わる、またはサーバーの検証が順序に依存するとき真。
 export function conflicts(
   previous: SyncOperation,
@@ -52,6 +64,7 @@ export function conflicts(
   }
   // 削除済みのラウンドへの書き込みの扱いが、順序で変わる。
   if (previous.type === "round.disabled") return true;
+  if (recordsAddedShooter(previous, next)) return true;
   if (isRoundOperation(previous) && isRoundOperation(next)) return true;
   // 種別とUnmarkedの距離の組合せの検証が、順序に依存する。
   if (

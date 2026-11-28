@@ -105,9 +105,11 @@ type DistanceOperation = Extract<
   { type: "distance.created" | "distance.updated" | "distance.disabled" }
 >;
 
+type ShooterOperation = Extract<SyncOperation, { type: "shooter.added" }>;
+
 async function sendSingle(
   database: DatabaseGateway<RoundsDbSchema>,
-  operation: RoundOperation | DistanceOperation,
+  operation: RoundOperation | DistanceOperation | ShooterOperation,
 ): Promise<SendOutcome> {
   switch (operation.type) {
     case "round.created":
@@ -118,6 +120,13 @@ async function sendSingle(
     case "distance.updated":
     case "distance.disabled":
       return sendDistanceOperation(database, operation);
+    case "shooter.added":
+      return outcomeOf(
+        await database.rpc("add_round_shooter", {
+          p_round_id: operation.roundId,
+          p_shooter_number: operation.shooterNumber,
+        }),
+      );
   }
 }
 
@@ -202,7 +211,7 @@ async function sendDistanceOperation(
   }
 }
 
-// 矢の記録の要素。矢はマス(エンド、射順)で指す。射手は送らない(サーバーが埋める)。
+// 矢の記録の要素。矢はマス(エンド、射順)で指し、射手を番号で指定する。
 function recordedShotToJson(
   operation: Extract<SyncOperation, { type: "shot.recorded" }>,
 ): Json {
@@ -213,6 +222,7 @@ function recordedShotToJson(
     shot_number: operation.shotNumber,
     score_str: operation.scoreStr,
     score_int: operation.scoreInt,
+    shooter_number: operation.shooterNumber,
   };
 }
 

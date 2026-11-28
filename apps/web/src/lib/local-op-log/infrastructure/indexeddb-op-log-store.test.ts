@@ -618,9 +618,9 @@ describe("op log store", () => {
   });
 
   describe("保存形式の更新", () => {
-    // 前のversionのDBに、別の名前のstoreとopsの内容が残っている状態を作る。
+    // 前のversion(6)のDBに、opsとbasesの内容と、別の名前のstoreが残っている状態を作る。
     async function createPreviousVersion() {
-      const previous = await openDB("aims-sync", 5, {
+      const previous = await openDB("aims-sync", 6, {
         upgrade(database) {
           const ops = database.createObjectStore("ops", {
             keyPath: "seq",
@@ -628,10 +628,19 @@ describe("op log store", () => {
           });
           ops.createIndex("by-event-id", "eventId", { unique: true });
           ops.createIndex("by-stream", "streamId");
+          database.createObjectStore("bases", {
+            keyPath: ["userId", "streamId"],
+          });
           database.createObjectStore("other", { keyPath: "eventId" });
         },
       });
       await previous.add("ops", entry("previous"));
+      await previous.put("bases", {
+        userId: "user-1",
+        streamId: STREAM,
+        startedAt: 1,
+        base: { revision: 1, keep: true },
+      });
       await previous.put("other", { eventId: "previous" });
       previous.close();
     }

@@ -288,27 +288,30 @@ export type Database = {
         Row: {
           created_at: string;
           id: string;
-          role: string;
+          role: string | null;
           round_id: string;
+          shooter_number: number | null;
           updated_at: string;
-          user_id: string;
+          user_id: string | null;
         };
         ComputedFields: never;
         Insert: {
           created_at?: string;
           id?: string;
-          role: string;
+          role?: string | null;
           round_id: string;
+          shooter_number?: number | null;
           updated_at?: string;
-          user_id: string;
+          user_id?: string | null;
         };
         Update: {
           created_at?: string;
           id?: string;
-          role?: string;
+          role?: string | null;
           round_id?: string;
+          shooter_number?: number | null;
           updated_at?: string;
-          user_id?: string;
+          user_id?: string | null;
         };
         Relationships: [
           {
@@ -375,10 +378,11 @@ export type Database = {
           end_number: number;
           event_id: string;
           revision: number;
+          round_id: string;
           score_int: number | null;
           score_str: string | null;
           set_fields: string[] | null;
-          shooter_id: string | null;
+          shooter_number: number;
           shot_number: number;
           type: string;
           updated_at: string;
@@ -391,10 +395,11 @@ export type Database = {
           end_number: number;
           event_id: string;
           revision: number;
+          round_id: string;
           score_int?: number | null;
           score_str?: string | null;
           set_fields?: string[] | null;
-          shooter_id?: string | null;
+          shooter_number: number;
           shot_number: number;
           type: string;
           updated_at?: string;
@@ -406,10 +411,11 @@ export type Database = {
           end_number?: number;
           event_id?: string;
           revision?: number;
+          round_id?: string;
           score_int?: number | null;
           score_str?: string | null;
           set_fields?: string[] | null;
-          shooter_id?: string | null;
+          shooter_number?: number;
           shot_number?: number;
           type?: string;
           updated_at?: string;
@@ -423,11 +429,18 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "shot_events_shooter_id_fkey";
-            columns: ["shooter_id"];
+            foreignKeyName: "shot_events_round_id_distance_id_fkey";
+            columns: ["round_id", "distance_id"];
             isOneToOne: false;
-            referencedRelation: "users";
-            referencedColumns: ["id"];
+            referencedRelation: "distances";
+            referencedColumns: ["round_id", "id"];
+          },
+          {
+            foreignKeyName: "shot_events_round_id_shooter_number_fkey";
+            columns: ["round_id", "shooter_number"];
+            isOneToOne: false;
+            referencedRelation: "round_users";
+            referencedColumns: ["round_id", "shooter_number"];
           },
         ];
       };
@@ -438,9 +451,10 @@ export type Database = {
           distance_id: string;
           end_number: number;
           revision: number;
+          round_id: string;
           score_int: number;
           score_str: string;
-          shooter_id: string;
+          shooter_number: number;
           shot_number: number;
           updated_at: string;
         };
@@ -451,9 +465,10 @@ export type Database = {
           distance_id: string;
           end_number: number;
           revision?: number;
+          round_id: string;
           score_int: number;
           score_str: string;
-          shooter_id: string;
+          shooter_number: number;
           shot_number: number;
           updated_at?: string;
         };
@@ -463,26 +478,27 @@ export type Database = {
           distance_id?: string;
           end_number?: number;
           revision?: number;
+          round_id?: string;
           score_int?: number;
           score_str?: string;
-          shooter_id?: string;
+          shooter_number?: number;
           shot_number?: number;
           updated_at?: string;
         };
         Relationships: [
           {
-            foreignKeyName: "shots_distance_id_fkey";
-            columns: ["distance_id"];
+            foreignKeyName: "shots_round_id_distance_id_fkey";
+            columns: ["round_id", "distance_id"];
             isOneToOne: false;
             referencedRelation: "distances";
-            referencedColumns: ["id"];
+            referencedColumns: ["round_id", "id"];
           },
           {
-            foreignKeyName: "shots_shooter_id_fkey";
-            columns: ["shooter_id"];
+            foreignKeyName: "shots_round_id_shooter_number_fkey";
+            columns: ["round_id", "shooter_number"];
             isOneToOne: false;
-            referencedRelation: "users";
-            referencedColumns: ["id"];
+            referencedRelation: "round_users";
+            referencedColumns: ["round_id", "shooter_number"];
           },
         ];
       };
@@ -628,6 +644,14 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      add_round_shooter: {
+        Args: { p_round_id: string; p_shooter_number?: Json };
+        Returns: Json;
+      };
+      anonymize_round_shooter: {
+        Args: { p_round_id: string; p_user_id: string };
+        Returns: undefined;
+      };
       clear_shots: { Args: { p_shots: Json }; Returns: Json };
       create_distance: {
         Args: {
@@ -723,6 +747,7 @@ export type Database = {
       };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
+      member_round_ids: { Args: never; Returns: string[] };
       purge_account: { Args: { target_user_id: string }; Returns: undefined };
       record_shots: { Args: { p_shots: Json }; Returns: Json };
       rounds_list: {

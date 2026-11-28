@@ -22,7 +22,7 @@ import type { RoundsDbSchema } from "./rounds-db-schema";
 
 // 無効化した距離と取り消した矢の行も取得し、表示にはdisabled_atが無い行だけを使う。
 const ROUND_SELECT =
-  "id, name, round_date, format, bow_type, status, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(distance_id, end_number, shooter_id, score_str, score_int, shot_number, revision, disabled_at))";
+  "id, name, round_date, format, bow_type, status, revision, round_users(shooter_number, user_id, role), distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(distance_id, end_number, shooter_number, score_str, score_int, shot_number, revision, disabled_at))";
 
 // 1回の取得に並べるラウンドIDの上限。IDはGETのURLに載るため、ゲートウェイが長いURLを414で拒まない件数に分ける。50件で約3KBで、ローカルで通ることを確かめた長さ(約3.7KB)に収まる。
 const roundIdsPerRequest = 50;

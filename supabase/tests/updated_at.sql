@@ -7,8 +7,8 @@ insert into auth.users (id) values ('d0000000-0000-0000-0000-000000000001');
 insert into public.rounds (id, name, round_date, format, bow_type)
 values ('d0000000-0000-0000-0000-000000000002', 'updated_at round', current_date, 'outdoor', 'recurve');
 
-insert into public.round_users (id, round_id, user_id, role)
-values ('d0000000-0000-0000-0000-000000000003', 'd0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000001', 'editor');
+insert into public.round_users (id, round_id, user_id, role, shooter_number)
+values ('d0000000-0000-0000-0000-000000000003', 'd0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000001', 'owner', 1);
 
 insert into public.target_faces (id, placement, size, format, bow_type)
 values ('d0000000-0000-0000-0000-000000000004', 'single', 80, 'outdoor', array['recurve']);
@@ -22,8 +22,8 @@ values ('d0000000-0000-0000-0000-000000000006', 'd0000000-0000-0000-0000-0000000
 insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
 values ('d0000000-0000-0000-0000-000000000007', 'd0000000-0000-0000-0000-000000000002', 'a', 70, 6, 6, 'd0000000-0000-0000-0000-000000000004');
 
-insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
-values ('d0000000-0000-0000-0000-000000000007', 1, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10);
+insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int)
+values ('d0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000007', 1, 1, 1, 'X', 10);
 
 insert into public.preset_rounds (id, owner_id, name, format, bow_type)
 values ('d0000000-0000-0000-0000-000000000009', 'd0000000-0000-0000-0000-000000000001', 'updated_at preset', 'outdoor', 'recurve');
@@ -35,7 +35,7 @@ update public.users set updated_at = '2000-01-01', name = 'updated user'
   where id = 'd0000000-0000-0000-0000-000000000001';
 update public.rounds set updated_at = '2000-01-01', name = 'updated round'
   where id = 'd0000000-0000-0000-0000-000000000002';
-update public.round_users set updated_at = '2000-01-01', role = 'viewer'
+update public.round_users set updated_at = '2000-01-01'
   where id = 'd0000000-0000-0000-0000-000000000003';
 update public.distances set updated_at = '2000-01-01', distance = 60
   where id = 'd0000000-0000-0000-0000-000000000007';
@@ -123,13 +123,13 @@ select ok(
   'distance_eventsのupdated_atはUPDATEで更新される'
 );
 
-insert into public.shot_events (event_id, distance_id, type, author_id, revision, end_number, shot_number, shooter_id, score_str, score_int, set_fields)
-values ('d0000000-0000-0000-0000-00000000000e', 'd0000000-0000-0000-0000-000000000007', 'RECORDED', 'd0000000-0000-0000-0000-000000000001', 1, 1, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10, array['score', 'shooter_id']);
+insert into public.shot_events (event_id, round_id, distance_id, type, author_id, revision, end_number, shot_number, shooter_number, score_str, score_int, set_fields)
+values ('d0000000-0000-0000-0000-00000000000e', 'd0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000007', 'RECORDED', 'd0000000-0000-0000-0000-000000000001', 1, 1, 1, 1, 'X', 10, array['score', 'shooter_number']);
 
 select pg_sleep(0.01);
 
-insert into public.shot_events (event_id, distance_id, type, author_id, revision, end_number, shot_number, shooter_id, score_str, score_int, set_fields)
-values ('d0000000-0000-0000-0000-000000000010', 'd0000000-0000-0000-0000-000000000007', 'RECORDED', 'd0000000-0000-0000-0000-000000000001', 2, 1, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10, array['score', 'shooter_id']);
+insert into public.shot_events (event_id, round_id, distance_id, type, author_id, revision, end_number, shot_number, shooter_number, score_str, score_int, set_fields)
+values ('d0000000-0000-0000-0000-000000000010', 'd0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000007', 'RECORDED', 'd0000000-0000-0000-0000-000000000001', 2, 1, 1, 1, 'X', 10, array['score', 'shooter_number']);
 
 select ok(
   (select created_at from public.shot_events where event_id = 'd0000000-0000-0000-0000-000000000010')

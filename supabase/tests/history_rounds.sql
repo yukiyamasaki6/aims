@@ -40,7 +40,7 @@ declare
 begin
   insert into public.rounds (id, name, round_date, created_at, format, bow_type, status, disabled_at)
   values (v_round, p_alias, p_date, v_created, p_format, p_bow_type, p_status, case when p_disabled then v_created end);
-  insert into public.round_users (round_id, user_id, role) values (v_round, pg_temp.id(p_owner), 'editor');
+  insert into public.round_users (round_id, user_id, role, shooter_number) values (v_round, pg_temp.id(p_owner), 'owner', 1);
   insert into public.distances (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
   select v_round, e.ord::text, (e.v ->> 'd')::int, (e.v ->> 'e')::int, (e.v ->> 'a')::int, (e.v ->> 'f')::uuid
   from jsonb_array_elements(p_rows) with ordinality as e(v, ord);
@@ -58,8 +58,8 @@ $$;
 
 insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('N')), (pg_temp.id('W'));
 
--- Fixture: 本人Eが見えるラウンド（完了・削除されていない）は、E所有のHA・HBと、閲覧者として属するHV。
---   HA: 屋外・リカーブ・50m→30m  HB: インドア・コンパウンド・18m  HV: インドア・リカーブ・18m（Nの完了。Eは閲覧者）
+-- Fixture: 本人Eが見えるラウンド（完了・削除されていない）は、Eが射つ人のHA・HBと、代理の人として参加するHV。
+--   HA: 屋外・リカーブ・50m→30m  HB: インドア・コンパウンド・18m  HV: インドア・リカーブ・18m（Nの完了。Eは代理の人）
 -- 返さない行: HP（Eの入力中）、HX（Eの削除済み）、HN（Nだけが属する完了）。
 -- HW: Wだけが属する屋外・ベアボウの完了。
 select pg_temp.mk('HA', 'E', '2026-09-10', 'outdoor', 'recurve', 'completed',
@@ -74,7 +74,7 @@ select pg_temp.mk('HN', 'N', '2026-09-15', 'outdoor', 'recurve', 'completed',
   '[{"d":50,"e":6,"a":6,"f":"a1000000-0000-0000-0000-000000000001"}]');
 select pg_temp.mk('HV', 'N', '2026-09-11', 'indoor', 'recurve', 'completed',
   '[{"d":18,"e":10,"a":3,"f":"a1000000-0000-0000-0000-000000000004"}]');
-insert into public.round_users (round_id, user_id, role) values (pg_temp.id('HV'), pg_temp.id('E'), 'viewer');
+insert into public.round_users (round_id, user_id, role) values (pg_temp.id('HV'), pg_temp.id('E'), 'editor');
 select pg_temp.mk('HW', 'W', '2026-09-16', 'outdoor', 'barebow', 'completed',
   '[{"d":70,"e":6,"a":6,"f":"a1000000-0000-0000-0000-000000000001"},{"d":50,"e":6,"a":6,"f":"a1000000-0000-0000-0000-000000000001"}]');
 
@@ -90,7 +90,7 @@ select is(
 select is(
   (select count(*) from public.history_rounds(null, null, null, null, null) as r where r.id = pg_temp.id('HV')),
   1::bigint,
-  '閲覧者として属するラウンドも返す'
+  '代理の人として参加するラウンドも返す'
 );
 
 select is(

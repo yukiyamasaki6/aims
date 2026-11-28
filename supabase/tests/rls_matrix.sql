@@ -10,14 +10,15 @@
 -- 書き込みポリシーのない操作はGRANTも付けず、行を見る前にpermission deniedで拒否する。
 --
 -- アクター
---   editor / viewer / non_member / anon: ラウンド系。editor・viewerは対象ラウンドのメンバー
+--   shooter / delegate / non_member / no_uid / anon: ラウンド系。shooterは対象ラウンドの射つ人、delegateは代理の人、
+--   no_uidは利用者IDの無いauthenticated。対象ラウンドには利用者に紐づかない射手の行を置く。
 --   owner / other / anon: 所有者系。ownerは対象行の所有者、otherは別のauthenticatedユーザー
 --   self / other / anon: users。selfは対象行の本人、otherは別のauthenticatedユーザー
 -- INSERTは所有者（owner）または対象ラウンドに属する新規行を追加する文で、アクターだけを切り替える。
 
 begin;
 
-select plan(17);
+select plan(18);
 
 -- fixture: 各アクターに対応するユーザーと、検証対象の行を用意する。
 -- 接続ロール（RLS対象外）で直接INSERTする。
@@ -51,15 +52,16 @@ values ('b0000000-0000-0000-0000-000000000014', 'b0000000-0000-0000-0000-0000000
 insert into public.rounds (id, name, round_date, format, bow_type)
 values ('b0000000-0000-0000-0000-000000000020', 'Matrix Round', current_date, 'outdoor', 'recurve');
 
-insert into public.round_users (id, round_id, user_id, role) values
-  ('b0000000-0000-0000-0000-000000000022', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000001', 'editor'),
-  ('b0000000-0000-0000-0000-000000000023', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000002', 'viewer');
+insert into public.round_users (id, round_id, user_id, role, shooter_number) values
+  ('b0000000-0000-0000-0000-000000000022', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000001', 'owner', 1),
+  ('b0000000-0000-0000-0000-000000000023', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000002', 'editor', null),
+  ('b0000000-0000-0000-0000-000000000024', 'b0000000-0000-0000-0000-000000000020', null, null, 2);
 
 insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
 values ('b0000000-0000-0000-0000-000000000021', 'b0000000-0000-0000-0000-000000000020', 'a', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
-insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
-values ('b0000000-0000-0000-0000-000000000021', 1, 1, 'b0000000-0000-0000-0000-000000000005', 'X', 10);
+insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int)
+values ('b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000021', 1, 1, 2, 'X', 10);
 
 insert into public.round_events (event_id, round_id, type, author_id, revision, name, round_date, format, bow_type)
 values ('b0000000-0000-0000-0000-000000000030', 'b0000000-0000-0000-0000-000000000020', 'CREATED', 'b0000000-0000-0000-0000-000000000005', 1, 'Matrix Round', current_date, 'outdoor', 'recurve');
@@ -67,8 +69,8 @@ values ('b0000000-0000-0000-0000-000000000030', 'b0000000-0000-0000-0000-0000000
 insert into public.distance_events (event_id, round_id, distance_id, type, author_id, revision, position_key, distance, is_marked, total_ends, arrows_per_end, target_face_id)
 values ('b0000000-0000-0000-0000-000000000031', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000021', 'CREATED', 'b0000000-0000-0000-0000-000000000005', 1, 'a', 70, true, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
-insert into public.shot_events (event_id, distance_id, type, author_id, revision, end_number, shot_number, shooter_id, score_str, score_int, set_fields)
-values ('b0000000-0000-0000-0000-000000000032', 'b0000000-0000-0000-0000-000000000021', 'RECORDED', 'b0000000-0000-0000-0000-000000000005', 1, 1, 1, 'b0000000-0000-0000-0000-000000000005', 'X', 10, array['score', 'shooter_id']);
+insert into public.shot_events (event_id, round_id, distance_id, type, author_id, revision, end_number, shot_number, shooter_number, score_str, score_int, set_fields)
+values ('b0000000-0000-0000-0000-000000000032', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000021', 'RECORDED', 'b0000000-0000-0000-0000-000000000005', 1, 1, 1, 2, 'X', 10, array['score', 'shooter_number']);
 
 -- 検証対象のDBロール（target）と、権限を持っていてよい内部ロール（internal）。
 -- PUBLICの権限は、targetの各ロールへの実効権限として実測側に現れるため、内部ロールとして許容する。
@@ -83,9 +85,10 @@ insert into rls_role (role_name, kind) values
 -- adminは検証SQLの妥当性確認用で、テーブルには対応付けない。
 create temp table rls_actor (actor text primary key, db_role text not null references rls_role, uid uuid);
 insert into rls_actor (actor, db_role, uid) values
-  ('editor', 'authenticated', 'b0000000-0000-0000-0000-000000000001'),
-  ('viewer', 'authenticated', 'b0000000-0000-0000-0000-000000000002'),
+  ('shooter', 'authenticated', 'b0000000-0000-0000-0000-000000000001'),
+  ('delegate', 'authenticated', 'b0000000-0000-0000-0000-000000000002'),
   ('non_member', 'authenticated', 'b0000000-0000-0000-0000-000000000003'),
+  ('no_uid', 'authenticated', null),
   ('owner', 'authenticated', 'b0000000-0000-0000-0000-000000000001'),
   ('other', 'authenticated', 'b0000000-0000-0000-0000-000000000003'),
   ('self', 'authenticated', 'b0000000-0000-0000-0000-000000000006'),
@@ -104,7 +107,7 @@ from (values
   ('users', 'self')
 ) as t(tbl, kind)
 join (values
-  ('member', 'editor'), ('member', 'viewer'), ('member', 'non_member'), ('member', 'anon'),
+  ('member', 'shooter'), ('member', 'delegate'), ('member', 'non_member'), ('member', 'no_uid'), ('member', 'anon'),
   ('owner', 'owner'), ('owner', 'other'), ('owner', 'anon'),
   ('self', 'self'), ('self', 'other'), ('self', 'anon')
 ) as a(kind, actor) using (kind);
@@ -154,13 +157,13 @@ insert into rls_stmt (tbl, op, stmt) values
   ('distances', 'delete', $q$delete from public.distances where id = 'b0000000-0000-0000-0000-000000000021'$q$),
 
   ('shots', 'select', $q$select 1 from public.shots where distance_id = 'b0000000-0000-0000-0000-000000000021'$q$),
-  ('shots', 'insert', $q$insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int) values ('b0000000-0000-0000-0000-000000000021', 2, 1, 'b0000000-0000-0000-0000-000000000005', '9', 9)$q$),
+  ('shots', 'insert', $q$insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int) values ('b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000021', 2, 1, 2, '9', 9)$q$),
   ('shots', 'update', $q$update public.shots set score_int = 0 where distance_id = 'b0000000-0000-0000-0000-000000000021'$q$),
   ('shots', 'delete', $q$delete from public.shots where distance_id = 'b0000000-0000-0000-0000-000000000021'$q$),
 
   ('round_users', 'select', $q$select 1 from public.round_users where round_id = 'b0000000-0000-0000-0000-000000000020'$q$),
-  ('round_users', 'insert', $q$insert into public.round_users (id, round_id, user_id, role) values ('b0000000-0000-0000-0000-000000000097', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000003', 'viewer')$q$),
-  ('round_users', 'update', $q$update public.round_users set role = 'editor' where id = 'b0000000-0000-0000-0000-000000000023'$q$),
+  ('round_users', 'insert', $q$insert into public.round_users (id, round_id, user_id, role) values ('b0000000-0000-0000-0000-000000000097', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000003', 'editor')$q$),
+  ('round_users', 'update', $q$update public.round_users set updated_at = now() where id = 'b0000000-0000-0000-0000-000000000023'$q$),
   ('round_users', 'delete', $q$delete from public.round_users where id = 'b0000000-0000-0000-0000-000000000023'$q$),
 
   ('round_events', 'select', $q$select 1 from public.round_events where round_id = 'b0000000-0000-0000-0000-000000000020'$q$),
@@ -174,7 +177,7 @@ insert into rls_stmt (tbl, op, stmt) values
   ('distance_events', 'delete', $q$delete from public.distance_events where event_id = 'b0000000-0000-0000-0000-000000000031'$q$),
 
   ('shot_events', 'select', $q$select 1 from public.shot_events where distance_id = 'b0000000-0000-0000-0000-000000000021'$q$),
-  ('shot_events', 'insert', $q$insert into public.shot_events (event_id, distance_id, type, author_id, revision, end_number, shot_number, shooter_id, score_str, score_int, set_fields) values ('b0000000-0000-0000-0000-00000000009a', 'b0000000-0000-0000-0000-000000000021', 'RECORDED', 'b0000000-0000-0000-0000-000000000005', 2, 1, 1, 'b0000000-0000-0000-0000-000000000005', '9', 9, array['score', 'shooter_id'])$q$),
+  ('shot_events', 'insert', $q$insert into public.shot_events (event_id, round_id, distance_id, type, author_id, revision, end_number, shot_number, shooter_number, score_str, score_int, set_fields) values ('b0000000-0000-0000-0000-00000000009a', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000021', 'RECORDED', 'b0000000-0000-0000-0000-000000000005', 2, 1, 1, 2, '9', 9, array['score', 'shooter_number'])$q$),
   ('shot_events', 'update', $q$update public.shot_events set score_int = 0 where event_id = 'b0000000-0000-0000-0000-000000000032'$q$),
   ('shot_events', 'delete', $q$delete from public.shot_events where event_id = 'b0000000-0000-0000-0000-000000000032'$q$);
 
@@ -290,117 +293,145 @@ insert into rls_expected (tbl, op, actor, expected) values
   ('preset_distances',   'delete',  'owner',       'error:42501'),
   ('preset_distances',   'delete',  'other',       'error:42501'),
   ('preset_distances',   'delete',  'anon',        'error:42501'),
-  ('rounds',             'select',  'editor',      'rows:1'),
-  ('rounds',             'select',  'viewer',      'rows:1'),
+  ('rounds',             'select',  'shooter',     'rows:1'),
+  ('rounds',             'select',  'delegate',    'rows:1'),
   ('rounds',             'select',  'non_member',  'rows:0'),
+  ('rounds',             'select',  'no_uid',      'rows:0'),
   ('rounds',             'select',  'anon',        'error:42501'),
-  ('rounds',             'insert',  'editor',      'error:42501'),
-  ('rounds',             'insert',  'viewer',      'error:42501'),
+  ('rounds',             'insert',  'shooter',     'error:42501'),
+  ('rounds',             'insert',  'delegate',    'error:42501'),
   ('rounds',             'insert',  'non_member',  'error:42501'),
+  ('rounds',             'insert',  'no_uid',      'error:42501'),
   ('rounds',             'insert',  'anon',        'error:42501'),
-  ('rounds',             'update',  'editor',      'error:42501'),
-  ('rounds',             'update',  'viewer',      'error:42501'),
+  ('rounds',             'update',  'shooter',     'error:42501'),
+  ('rounds',             'update',  'delegate',    'error:42501'),
   ('rounds',             'update',  'non_member',  'error:42501'),
+  ('rounds',             'update',  'no_uid',      'error:42501'),
   ('rounds',             'update',  'anon',        'error:42501'),
-  ('rounds',             'delete',  'editor',      'error:42501'),
-  ('rounds',             'delete',  'viewer',      'error:42501'),
+  ('rounds',             'delete',  'shooter',     'error:42501'),
+  ('rounds',             'delete',  'delegate',    'error:42501'),
   ('rounds',             'delete',  'non_member',  'error:42501'),
+  ('rounds',             'delete',  'no_uid',      'error:42501'),
   ('rounds',             'delete',  'anon',        'error:42501'),
-  ('distances',          'select',  'editor',      'rows:1'),
-  ('distances',          'select',  'viewer',      'rows:1'),
+  ('distances',          'select',  'shooter',     'rows:1'),
+  ('distances',          'select',  'delegate',    'rows:1'),
   ('distances',          'select',  'non_member',  'rows:0'),
+  ('distances',          'select',  'no_uid',      'rows:0'),
   ('distances',          'select',  'anon',        'error:42501'),
-  ('distances',          'insert',  'editor',      'error:42501'),
-  ('distances',          'insert',  'viewer',      'error:42501'),
+  ('distances',          'insert',  'shooter',     'error:42501'),
+  ('distances',          'insert',  'delegate',    'error:42501'),
   ('distances',          'insert',  'non_member',  'error:42501'),
+  ('distances',          'insert',  'no_uid',      'error:42501'),
   ('distances',          'insert',  'anon',        'error:42501'),
-  ('distances',          'update',  'editor',      'error:42501'),
-  ('distances',          'update',  'viewer',      'error:42501'),
+  ('distances',          'update',  'shooter',     'error:42501'),
+  ('distances',          'update',  'delegate',    'error:42501'),
   ('distances',          'update',  'non_member',  'error:42501'),
+  ('distances',          'update',  'no_uid',      'error:42501'),
   ('distances',          'update',  'anon',        'error:42501'),
-  ('distances',          'delete',  'editor',      'error:42501'),
-  ('distances',          'delete',  'viewer',      'error:42501'),
+  ('distances',          'delete',  'shooter',     'error:42501'),
+  ('distances',          'delete',  'delegate',    'error:42501'),
   ('distances',          'delete',  'non_member',  'error:42501'),
+  ('distances',          'delete',  'no_uid',      'error:42501'),
   ('distances',          'delete',  'anon',        'error:42501'),
-  ('shots',              'select',  'editor',      'rows:1'),
-  ('shots',              'select',  'viewer',      'rows:1'),
+  ('shots',              'select',  'shooter',     'rows:1'),
+  ('shots',              'select',  'delegate',    'rows:1'),
   ('shots',              'select',  'non_member',  'rows:0'),
+  ('shots',              'select',  'no_uid',      'rows:0'),
   ('shots',              'select',  'anon',        'error:42501'),
-  ('shots',              'insert',  'editor',      'error:42501'),
-  ('shots',              'insert',  'viewer',      'error:42501'),
+  ('shots',              'insert',  'shooter',     'error:42501'),
+  ('shots',              'insert',  'delegate',    'error:42501'),
   ('shots',              'insert',  'non_member',  'error:42501'),
+  ('shots',              'insert',  'no_uid',      'error:42501'),
   ('shots',              'insert',  'anon',        'error:42501'),
-  ('shots',              'update',  'editor',      'error:42501'),
-  ('shots',              'update',  'viewer',      'error:42501'),
+  ('shots',              'update',  'shooter',     'error:42501'),
+  ('shots',              'update',  'delegate',    'error:42501'),
   ('shots',              'update',  'non_member',  'error:42501'),
+  ('shots',              'update',  'no_uid',      'error:42501'),
   ('shots',              'update',  'anon',        'error:42501'),
-  ('shots',              'delete',  'editor',      'error:42501'),
-  ('shots',              'delete',  'viewer',      'error:42501'),
+  ('shots',              'delete',  'shooter',     'error:42501'),
+  ('shots',              'delete',  'delegate',    'error:42501'),
   ('shots',              'delete',  'non_member',  'error:42501'),
+  ('shots',              'delete',  'no_uid',      'error:42501'),
   ('shots',              'delete',  'anon',        'error:42501'),
-  ('round_users',        'select',  'editor',      'rows:2'),
-  ('round_users',        'select',  'viewer',      'rows:2'),
+  ('round_users',        'select',  'shooter',     'rows:3'),
+  ('round_users',        'select',  'delegate',    'rows:3'),
   ('round_users',        'select',  'non_member',  'rows:0'),
+  ('round_users',        'select',  'no_uid',      'rows:0'),
   ('round_users',        'select',  'anon',        'error:42501'),
-  ('round_users',        'insert',  'editor',      'error:42501'),
-  ('round_users',        'insert',  'viewer',      'error:42501'),
+  ('round_users',        'insert',  'shooter',     'error:42501'),
+  ('round_users',        'insert',  'delegate',    'error:42501'),
   ('round_users',        'insert',  'non_member',  'error:42501'),
+  ('round_users',        'insert',  'no_uid',      'error:42501'),
   ('round_users',        'insert',  'anon',        'error:42501'),
-  ('round_users',        'update',  'editor',      'error:42501'),
-  ('round_users',        'update',  'viewer',      'error:42501'),
+  ('round_users',        'update',  'shooter',     'error:42501'),
+  ('round_users',        'update',  'delegate',    'error:42501'),
   ('round_users',        'update',  'non_member',  'error:42501'),
+  ('round_users',        'update',  'no_uid',      'error:42501'),
   ('round_users',        'update',  'anon',        'error:42501'),
-  ('round_users',        'delete',  'editor',      'error:42501'),
-  ('round_users',        'delete',  'viewer',      'error:42501'),
+  ('round_users',        'delete',  'shooter',     'error:42501'),
+  ('round_users',        'delete',  'delegate',    'error:42501'),
   ('round_users',        'delete',  'non_member',  'error:42501'),
+  ('round_users',        'delete',  'no_uid',      'error:42501'),
   ('round_users',        'delete',  'anon',        'error:42501'),
-  ('round_events',       'select',  'editor',      'rows:1'),
-  ('round_events',       'select',  'viewer',      'rows:1'),
+  ('round_events',       'select',  'shooter',     'rows:1'),
+  ('round_events',       'select',  'delegate',    'rows:1'),
   ('round_events',       'select',  'non_member',  'rows:0'),
+  ('round_events',       'select',  'no_uid',      'rows:0'),
   ('round_events',       'select',  'anon',        'error:42501'),
-  ('round_events',       'insert',  'editor',      'error:42501'),
-  ('round_events',       'insert',  'viewer',      'error:42501'),
+  ('round_events',       'insert',  'shooter',     'error:42501'),
+  ('round_events',       'insert',  'delegate',    'error:42501'),
   ('round_events',       'insert',  'non_member',  'error:42501'),
+  ('round_events',       'insert',  'no_uid',      'error:42501'),
   ('round_events',       'insert',  'anon',        'error:42501'),
-  ('round_events',       'update',  'editor',      'error:42501'),
-  ('round_events',       'update',  'viewer',      'error:42501'),
+  ('round_events',       'update',  'shooter',     'error:42501'),
+  ('round_events',       'update',  'delegate',    'error:42501'),
   ('round_events',       'update',  'non_member',  'error:42501'),
+  ('round_events',       'update',  'no_uid',      'error:42501'),
   ('round_events',       'update',  'anon',        'error:42501'),
-  ('round_events',       'delete',  'editor',      'error:42501'),
-  ('round_events',       'delete',  'viewer',      'error:42501'),
+  ('round_events',       'delete',  'shooter',     'error:42501'),
+  ('round_events',       'delete',  'delegate',    'error:42501'),
   ('round_events',       'delete',  'non_member',  'error:42501'),
+  ('round_events',       'delete',  'no_uid',      'error:42501'),
   ('round_events',       'delete',  'anon',        'error:42501'),
-  ('distance_events',    'select',  'editor',      'rows:1'),
-  ('distance_events',    'select',  'viewer',      'rows:1'),
+  ('distance_events',    'select',  'shooter',     'rows:1'),
+  ('distance_events',    'select',  'delegate',    'rows:1'),
   ('distance_events',    'select',  'non_member',  'rows:0'),
+  ('distance_events',    'select',  'no_uid',      'rows:0'),
   ('distance_events',    'select',  'anon',        'error:42501'),
-  ('distance_events',    'insert',  'editor',      'error:42501'),
-  ('distance_events',    'insert',  'viewer',      'error:42501'),
+  ('distance_events',    'insert',  'shooter',     'error:42501'),
+  ('distance_events',    'insert',  'delegate',    'error:42501'),
   ('distance_events',    'insert',  'non_member',  'error:42501'),
+  ('distance_events',    'insert',  'no_uid',      'error:42501'),
   ('distance_events',    'insert',  'anon',        'error:42501'),
-  ('distance_events',    'update',  'editor',      'error:42501'),
-  ('distance_events',    'update',  'viewer',      'error:42501'),
+  ('distance_events',    'update',  'shooter',     'error:42501'),
+  ('distance_events',    'update',  'delegate',    'error:42501'),
   ('distance_events',    'update',  'non_member',  'error:42501'),
+  ('distance_events',    'update',  'no_uid',      'error:42501'),
   ('distance_events',    'update',  'anon',        'error:42501'),
-  ('distance_events',    'delete',  'editor',      'error:42501'),
-  ('distance_events',    'delete',  'viewer',      'error:42501'),
+  ('distance_events',    'delete',  'shooter',     'error:42501'),
+  ('distance_events',    'delete',  'delegate',    'error:42501'),
   ('distance_events',    'delete',  'non_member',  'error:42501'),
+  ('distance_events',    'delete',  'no_uid',      'error:42501'),
   ('distance_events',    'delete',  'anon',        'error:42501'),
-  ('shot_events',        'select',  'editor',      'rows:1'),
-  ('shot_events',        'select',  'viewer',      'rows:1'),
+  ('shot_events',        'select',  'shooter',     'rows:1'),
+  ('shot_events',        'select',  'delegate',    'rows:1'),
   ('shot_events',        'select',  'non_member',  'rows:0'),
+  ('shot_events',        'select',  'no_uid',      'rows:0'),
   ('shot_events',        'select',  'anon',        'error:42501'),
-  ('shot_events',        'insert',  'editor',      'error:42501'),
-  ('shot_events',        'insert',  'viewer',      'error:42501'),
+  ('shot_events',        'insert',  'shooter',     'error:42501'),
+  ('shot_events',        'insert',  'delegate',    'error:42501'),
   ('shot_events',        'insert',  'non_member',  'error:42501'),
+  ('shot_events',        'insert',  'no_uid',      'error:42501'),
   ('shot_events',        'insert',  'anon',        'error:42501'),
-  ('shot_events',        'update',  'editor',      'error:42501'),
-  ('shot_events',        'update',  'viewer',      'error:42501'),
+  ('shot_events',        'update',  'shooter',     'error:42501'),
+  ('shot_events',        'update',  'delegate',    'error:42501'),
   ('shot_events',        'update',  'non_member',  'error:42501'),
+  ('shot_events',        'update',  'no_uid',      'error:42501'),
   ('shot_events',        'update',  'anon',        'error:42501'),
-  ('shot_events',        'delete',  'editor',      'error:42501'),
-  ('shot_events',        'delete',  'viewer',      'error:42501'),
+  ('shot_events',        'delete',  'shooter',     'error:42501'),
+  ('shot_events',        'delete',  'delegate',    'error:42501'),
   ('shot_events',        'delete',  'non_member',  'error:42501'),
+  ('shot_events',        'delete',  'no_uid',      'error:42501'),
   ('shot_events',        'delete',  'anon',        'error:42501')
 ;
 
@@ -541,18 +572,23 @@ cross join (select role_name from rls_role where kind = 'target') as r
 where p.pronamespace = 'public'::regnamespace;
 
 -- 期待値の方針:
---   RPC、アカウント削除（delete_account）、履歴の取得（rounds_list、distances_list）と、それが読むラウンドの条件の関数（history_rounds）、SELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
+--   RPC、アカウント削除（delete_account）、履歴の取得（rounds_list、distances_list）と、それが読むラウンドの条件の関数（history_rounds）、SELECTポリシーのヘルパー（is_round_member、member_round_ids）: authenticatedだけtrue。anonはfalse。
 --   distance_config_over_limit: SECURITY INVOKERのsave_round_as_presetが呼ぶ純関数のため、authenticatedだけtrue。anonはfalse。
 --   purge_account: 復元の手順（docs/backup.md）だけが所有者のpostgresで呼ぶ内部関数のため、どちらもfalse。
+--   anonymize_round_shooter: アカウント削除の本体だけが呼ぶ内部関数のため、どちらもfalse。
 --   is_round_editor、shot_fits: RPC（SECURITY DEFINER）の内部だけが呼ぶため、どちらもfalse。
 --   ensure_email_identity: authenticatedだけtrue。anonはfalse（メールの手段の作成は呼び出した本人だけ）。
---   トリガー関数（handle_new_user, set_updated_at, keep_email_identity）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
+--   トリガー関数（handle_new_user, set_updated_at, keep_email_identity, keep_shooter_number, require_round_owner）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
 -- 新しい関数を追加したら、PUBLICからREVOKEし、この表に行を追加する。
 create temp table rls_fn_expected (
   signature text, role_name text, can_execute boolean,
   primary key (signature, role_name)
 );
 insert into rls_fn_expected (signature, role_name, can_execute) values
+  ('public.add_round_shooter(uuid,jsonb)', 'anon', false),
+  ('public.add_round_shooter(uuid,jsonb)', 'authenticated', true),
+  ('public.anonymize_round_shooter(uuid,uuid)', 'anon', false),
+  ('public.anonymize_round_shooter(uuid,uuid)', 'authenticated', false),
   ('public.clear_shots(jsonb)',                                                       'anon',          false),
   ('public.clear_shots(jsonb)',                                                       'authenticated', true),
   ('public.create_distance(uuid,uuid,uuid,text,bigint,bigint,bigint,uuid,boolean)',   'anon',          false),
@@ -583,10 +619,16 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.is_round_member(uuid)',                                                    'authenticated', true),
   ('public.keep_email_identity()',                                                    'anon',          false),
   ('public.keep_email_identity()',                                                    'authenticated', false),
+  ('public.keep_shooter_number()', 'anon', false),
+  ('public.keep_shooter_number()', 'authenticated', false),
+  ('public.member_round_ids()', 'anon', false),
+  ('public.member_round_ids()', 'authenticated', true),
   ('public.purge_account(uuid)',                                                        'anon',          false),
   ('public.purge_account(uuid)',                                                        'authenticated', false),
   ('public.record_shots(jsonb)',                                                      'anon',          false),
   ('public.record_shots(jsonb)',                                                      'authenticated', true),
+  ('public.require_round_owner()', 'anon', false),
+  ('public.require_round_owner()', 'authenticated', false),
   ('public.rounds_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb)', 'anon',          false),
   ('public.rounds_list(text,text,text,text,uuid,integer,date,date,bigint,bigint,jsonb)', 'authenticated', true),
   ('public.save_round_as_preset(text,text,text,jsonb)',                               'anon',          false),
@@ -608,6 +650,39 @@ select is_empty(
     full join rls_fn_expected e on (a.signature, a.role_name) = (e.signature, e.role_name)
     where a.can_execute is distinct from e.can_execute$$,
   'publicスキーマの全関数 × anon/authenticatedの実行権限が期待値表と全件一致する'
+);
+
+-- ============================================================
+-- 関数の属性: 役割と射手が加える関数と作り直す関数
+-- ============================================================
+-- SECURITY DEFINERはトリガー関数以外に求める。purge_accountの属性はdelete_account.sqlで固定している。
+
+create temp table rls_fn_attribute (signature text primary key, needs_definer boolean not null);
+insert into rls_fn_attribute (signature, needs_definer) values
+  ('public.add_round_shooter(uuid,jsonb)', true),
+  ('public.anonymize_round_shooter(uuid,uuid)', true),
+  ('public.clear_shots(jsonb)', true),
+  ('public.create_distance(uuid,uuid,uuid,text,bigint,bigint,bigint,uuid,boolean)', true),
+  ('public.create_round(uuid,uuid,text,date,text,text,jsonb)', true),
+  ('public.disable_distance(uuid,uuid)', true),
+  ('public.disable_round(uuid,uuid)', true),
+  ('public.is_round_editor(uuid)', true),
+  ('public.is_round_member(uuid)', true),
+  ('public.keep_shooter_number()', false),
+  ('public.member_round_ids()', true),
+  ('public.record_shots(jsonb)', true),
+  ('public.require_round_owner()', false),
+  ('public.update_distance(uuid,uuid,jsonb)', true),
+  ('public.update_round(uuid,uuid,jsonb)', true);
+
+select is_empty(
+  $$select a.signature, p.prosecdef, p.proowner::regrole::text, p.proconfig
+    from rls_fn_attribute a
+    join pg_proc p on p.oid = a.signature::regprocedure
+    where (a.needs_definer and not p.prosecdef)
+      or p.proowner <> 'postgres'::regrole
+      or not exists (select 1 from unnest(p.proconfig) as c(v) where c.v like 'search\_path=%')$$,
+  '役割と射手の関数は、所有者がpostgresでsearch_pathを固定し、トリガー関数以外はSECURITY DEFINERである'
 );
 
 -- 検証対象外のロールに、publicの関数のEXECUTEが付いていない。proaclがnullの関数は既定権限で判定する。

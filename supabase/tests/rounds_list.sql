@@ -2,7 +2,7 @@
 --   - 返す行（完了かつ削除されていない）、返す項目、合計点
 --   - 並び（基準 × 向き、同値の並び）と絞り込み（種別、弓種、期間、得点の範囲、距離の構成）
 --   - ページの切り出し（has_more、起点のID、全ページの連結）と、ページの間の変更
---   - 権限（自分が属するラウンドだけ）、起点が見えない・引数が未知のとき
+--   - 権限（自分が参加するラウンドだけ）、起点が見えない・引数が未知のとき
 -- 関数の実行権限（anon、authenticated）はrls_matrix.sqlの関数表で固定している。
 
 begin;
@@ -76,13 +76,13 @@ declare
 begin
   insert into public.rounds (id, name, round_date, created_at, format, bow_type, status, disabled_at)
   values (v_round, p_alias, p_date, p_created, p_format, p_bow_type, p_status, case when p_disabled then p_created end);
-  insert into public.round_users (round_id, user_id, role) values (v_round, pg_temp.id(p_owner), 'editor');
+  insert into public.round_users (round_id, user_id, role, shooter_number) values (v_round, pg_temp.id(p_owner), 'owner', 1);
   for v_n in 1..2 loop
     v_distance := gen_random_uuid();
     insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
     values (v_distance, v_round, v_n::text, 30 * v_n, v_ends, 3, 'a1000000-0000-0000-0000-000000000001');
-    insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
-    select v_distance, (i - 1) / 3 + 1, (i - 1) % 3 + 1, pg_temp.id(p_owner),
+    insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int)
+    select v_round, v_distance, (i - 1) / 3 + 1, (i - 1) % 3 + 1, 1,
       case s when 10 then 'X' when 0 then 'M' else s::text end, s
     from generate_series(1, v_shots_per_distance) as i,
       lateral (select case
@@ -189,7 +189,7 @@ declare
 begin
   insert into public.rounds (id, name, round_date, created_at, format, bow_type, status, disabled_at)
   values (v_round, p_alias, p_date, v_created, p_format, p_bow_type, p_status, case when p_disabled then v_created end);
-  insert into public.round_users (round_id, user_id, role) values (v_round, pg_temp.id(p_owner), 'editor');
+  insert into public.round_users (round_id, user_id, role, shooter_number) values (v_round, pg_temp.id(p_owner), 'owner', 1);
   insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, disabled_at)
   select coalesce((e.v ->> 'i')::uuid, gen_random_uuid()), v_round, e.v ->> 'k', (e.v ->> 'd')::int, (e.v ->> 'e')::int, (e.v ->> 'a')::int,
     coalesce((e.v ->> 'f')::uuid, 'a1000000-0000-0000-0000-000000000001'::uuid), coalesce((e.v ->> 'm')::boolean, true),
@@ -197,8 +197,8 @@ begin
   from jsonb_array_elements(p_rows) with ordinality as e(v, ord)
   order by e.ord;
   select id into v_first from public.distances where round_id = v_round order by position_key, id limit 1;
-  insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
-  select v_first, (i - 1) / 3 + 1, (i - 1) % 3 + 1, pg_temp.id(p_owner), 'X', 10 from generate_series(1, p_tens) as i;
+  insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int)
+  select v_round, v_first, (i - 1) / 3 + 1, (i - 1) % 3 + 1, 1, 'X', 10 from generate_series(1, p_tens) as i;
 end;
 $$;
 
@@ -215,9 +215,9 @@ select pg_temp.mk('D', 'E', '2026-09-12', 'outdoor', 'recurve', 'completed', '20
 select pg_temp.mk('I', 'E', '2026-09-13', 'outdoor', 'recurve', 'completed', '2026-09-13 09:00+00', 580);
 select pg_temp.mk('F', 'E', '2026-09-14', 'indoor',  'recurve', 'completed', '2026-09-14 09:00+00', 450);
 select pg_temp.mk('G', 'E', '2026-09-14', 'outdoor', 'compound', 'completed', '2026-09-14 08:00+00', 597);
--- Eは閲覧者として属する他人（N）のラウンド。
+-- Eは代理の人として参加する他人（N）のラウンド。
 select pg_temp.mk('Z', 'N', '2026-09-11', 'indoor',  'recurve', 'completed', '2026-09-11 09:00+00', 400);
-insert into public.round_users (round_id, user_id, role) values (pg_temp.id('Z'), pg_temp.id('E'), 'viewer');
+insert into public.round_users (round_id, user_id, role) values (pg_temp.id('Z'), pg_temp.id('E'), 'editor');
 -- 返さない行: 入力中、削除済み。
 select pg_temp.mk('P', 'E', '2026-09-15', 'outdoor', 'recurve', 'in_progress', '2026-09-15 09:00+00', 300);
 select pg_temp.mk('X', 'E', '2026-09-15', 'outdoor', 'recurve', 'completed', '2026-09-15 10:00+00', 300, true);
@@ -227,9 +227,9 @@ select pg_temp.mk('Y', 'N', '2026-09-16', 'outdoor', 'recurve', 'completed', '20
 insert into public.rounds (id, name, round_date, format, bow_type, status) values
   (pg_temp.id('Q'), 'Q', '2026-09-01', 'outdoor', 'recurve', 'completed'),
   (pg_temp.id('R'), 'R', '2026-09-01', 'outdoor', 'recurve', 'completed');
-insert into public.round_users (round_id, user_id, role) values
-  (pg_temp.id('Q'), pg_temp.id('U'), 'editor'),
-  (pg_temp.id('R'), pg_temp.id('U'), 'editor');
+insert into public.round_users (round_id, user_id, role, shooter_number) values
+  (pg_temp.id('Q'), pg_temp.id('U'), 'owner', 1),
+  (pg_temp.id('R'), pg_temp.id('U'), 'owner', 1);
 insert into public.distances (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
 values (pg_temp.id('R'), '1', 70, 12, 3, 'a1000000-0000-0000-0000-000000000001');
 select pg_temp.mk('S', 'U', '2026-09-02', 'outdoor', 'recurve', 'completed', '2026-09-02 09:00+00', 300);
@@ -239,8 +239,8 @@ with disabled_distance as (
   values ('c0000000-0000-0000-0000-0000000001d1', pg_temp.id('S'), '3', 90, 12, 3, 'a1000000-0000-0000-0000-000000000001', now())
   returning id
 )
-insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
-select id, (i - 1) / 3 + 1, (i - 1) % 3 + 1, pg_temp.id('U'), 'X', 10 from disabled_distance, generate_series(1, 36) as i;
+insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int)
+select pg_temp.id('S'), id, (i - 1) / 3 + 1, (i - 1) % 3 + 1, 1, 'X', 10 from disabled_distance, generate_series(1, 36) as i;
 -- 全てのマスが埋まっているため、取り消し済みの10点の矢は、0点のマスを取り消し済みの10点に替えて作る。
 update public.shots set score_str = 'X', score_int = 10, disabled_at = now()
 where end_number = 12 and shot_number = 3
@@ -285,7 +285,7 @@ select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
 select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100)),
   'F,G,I,C,D,B,Z,H,A',
-  '完了かつ削除されていないラウンドだけを返し、入力中と削除済みを返さない（閲覧者として属するラウンドを含む）'
+  '完了かつ削除されていないラウンドだけを返し、入力中と削除済みを返さない（代理の人として参加するラウンドを含む）'
 );
 
 select is(

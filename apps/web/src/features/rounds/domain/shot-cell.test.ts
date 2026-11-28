@@ -17,6 +17,7 @@ function shot(cell: ShotCell, scoreStr = "9", scoreInt = 9): Shot {
     shot_number: cell.shotNumber,
     score_str: scoreStr,
     score_int: scoreInt,
+    shooter_number: 1,
   };
 }
 

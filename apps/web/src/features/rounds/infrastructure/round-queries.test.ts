@@ -95,7 +95,7 @@ const distanceA = {
 const shotA = {
   distance_id: "d-a",
   end_number: 1,
-  shooter_id: "user-1",
+  shooter_number: 2,
   score_str: "X",
   score_int: 10,
   shot_number: 1,
@@ -109,6 +109,10 @@ const round = {
   bow_type: "recurve",
   status: "completed",
   revision: 3,
+  round_users: [
+    { shooter_number: 1, user_id: "user-1", role: "owner" },
+    { shooter_number: 2, user_id: null, role: null },
+  ],
   distances: [
     {
       ...distanceA,
@@ -131,7 +135,7 @@ function face(id: string) {
 }
 
 describe("roundDetail", () => {
-  it("ラウンド(距離・記録を含む)だけを1回取得する", async () => {
+  it("ラウンド(射手の行・距離・射手番号を持つ記録を含む)だけを1回取得し、矢のIDは取得しない", async () => {
     // Given
     const database = makeDatabase({ rounds: ok(round), target_faces: ok([]) });
 
@@ -144,7 +148,7 @@ describe("roundDetail", () => {
       {
         table: "rounds",
         columns:
-          "id, name, round_date, format, bow_type, status, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(distance_id, end_number, shooter_id, score_str, score_int, shot_number, revision, disabled_at))",
+          "id, name, round_date, format, bow_type, status, revision, round_users(shooter_number, user_id, role), distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(distance_id, end_number, shooter_number, score_str, score_int, shot_number, revision, disabled_at))",
         filters: [
           { op: "eq", column: "id", value: "round-1" },
           { op: "is", column: "disabled_at", value: null },

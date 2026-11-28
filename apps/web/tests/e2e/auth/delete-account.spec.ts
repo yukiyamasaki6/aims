@@ -7,15 +7,31 @@ import {
   createConfirmedUser,
   signInWithEmailOtp,
   signUpAndSignIn,
+  waitForHydration,
 } from "../helpers/auth";
 import {
   backdateOtpEvidence,
   createGoogleLinkedUser,
   resetOtpSendInterval,
 } from "../helpers/auth-db";
+import {
+  addParticipant,
+  beginAs,
+  type DbSession,
+  expectWaitingForLock,
+  withDbSessions,
+  withLocalDb,
+} from "../helpers/local-db";
 import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
 import { signInOnOtherDevice } from "../helpers/other-browser-device";
-import { addRound, signInFreshUser } from "../helpers/round-fixtures";
+import { getDistanceIds } from "../helpers/other-device";
+import {
+  addRound,
+  createPreparedUser,
+  signInFreshUser,
+} from "../helpers/round-fixtures";
+import { createRound, signInAsTestUser } from "../helpers/rounds";
+import { cell, expectCells } from "../helpers/score-cells";
 import { settingsPanel } from "../helpers/settings";
 
 const t = translatorFor("auth");
@@ -270,4 +286,349 @@ test("別の端末でもサインインしている利用者がこの端末で�
   } finally {
     await other.context.close();
   }
+});
+
+// 本人の直近のOTPでサインインし、公開APIで本人のアカウントを削除する。
+async function deleteAccountOf(email: string) {
+  const client = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  try {
+    const { data } = await signInWithEmailOtp(client, email);
+    const { error } = await client.rpc("delete_account", {
+      expected_user_id: data.user?.id,
+    });
+    expect(error).toBeNull();
+  } finally {
+    await client.auth.stopAutoRefresh();
+  }
+}
+
+test("2人の射つ人のラウンドの片方がアカウントを削除した後、残る射つ人は同じ点数と合計を表示でき、削除した人のマスを直すと射手1の矢、空のマスへの記録は自分の射手の矢として保存される", async ({
+  page,
+}) => {
+  // 削除する利用者が作って記録したラウンドに、残る利用者を射手2の射つ人として加える。射つ人を加える操作は無いため、DBへ直接用意する。
+  const remaining = await createPreparedUser(page, "delete-remaining");
+  const deleted = {
+    email: `delete-shooter-${randomUUID()}@aims.test`,
+    password: "unused-password1",
+  };
+  await createConfirmedUser(deleted);
+  const roundId = await createRound({
+    ...deleted,
+    name: "2人の射つ人",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+    shots: [
+      {
+        distanceIndex: 0,
+        endNumber: 1,
+        shotNumber: 1,
+        scoreStr: "10",
+        scoreInt: 10,
+      },
+      {
+        distanceIndex: 0,
+        endNumber: 1,
+        shotNumber: 2,
+        scoreStr: "9",
+        scoreInt: 9,
+      },
+    ],
+  });
+  const { supabase, userId } = await signInAsTestUser(
+    remaining.email,
+    remaining.password,
+  );
+  await addParticipant({ roundId, userId, shooterNumber: 2 });
+  await deleteAccountOf(deleted.email);
+
+  // 残る利用者がラウンドを開くと、同じ点数と合計が表示される。
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+  await expectCells(page, 1, 1, ["10", "9", null]);
+  await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("19");
+
+  // 削除した人のマスを直し、空のマスへ記録する。
+  const [distanceId] = await getDistanceIds(supabase, roundId);
+  const savedShots = async () => {
+    const { data, error } = await supabase
+      .from("shots")
+      .select("shot_number, score_str, shooter_number")
+      .eq("distance_id", distanceId)
+      .order("shot_number");
+    if (error) throw error;
+    return data.map(
+      (s) => `${s.shot_number}:${s.score_str}:${s.shooter_number}`,
+    );
+  };
+  await cell(page, 1, 1, 1).click();
+  await page.getByTestId("score-button-7").click();
+  await expect.poll(savedShots).toEqual(["1:7:1", "2:9:1"]);
+  await cell(page, 1, 1, 3).click();
+  await page.getByTestId("score-button-8").click();
+  await expect.poll(savedShots).toEqual(["1:7:1", "2:9:1", "3:8:2"]);
+
+  // 再読み込みしても、同じ点数が表示される。
+  await page.reload();
+  await waitForHydration(page);
+  await expectCells(page, 1, 1, ["7", "9", "8"]);
+});
+
+// ここから下は、複数の接続で削除と他の操作を競合させ、ロックによる直列化を確かめる。
+// 削除は、認可と外部の記録を持たない内部関数purge_accountを直接呼ぶ。
+const DELETED_USER_ID = "00000000-0000-4000-8000-000000000001";
+const TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001";
+
+async function confirmedUserId(label: string): Promise<string> {
+  const email = `${label}-${randomUUID()}@aims.test`;
+  await createConfirmedUser({ email });
+  const { rows } = await withLocalDb((client) =>
+    client.query<{ id: string }>("select id from auth.users where email = $1", [
+      email,
+    ]),
+  );
+  return rows[0].id;
+}
+
+type SharedRound = { roundId: string; distanceId: string };
+
+// 指定した接続から、射手の番号を指定して、エンド1のその番号のマスへ記録する。
+function recordOn(
+  session: DbSession,
+  round: SharedRound,
+  shooterNumber: number,
+) {
+  return session.client.query<{ result: { reason: string | null }[] }>(
+    "select public.record_shots($1::jsonb) as result",
+    [
+      JSON.stringify([
+        {
+          shot_event_id: randomUUID(),
+          distance_id: round.distanceId,
+          end_number: 1,
+          shot_number: shooterNumber,
+          score_str: "9",
+          score_int: 9,
+          shooter_number: shooterNumber,
+        },
+      ]),
+    ],
+  );
+}
+
+// 1人目が作ったラウンドに、残りの射つ人(射手2から)と代理の人を加え、各射つ人が自分の射手の矢を記録する。
+async function createSharedRound(
+  owners: string[],
+  editor?: string,
+): Promise<SharedRound> {
+  const round = { roundId: randomUUID(), distanceId: randomUUID() };
+  await withDbSessions(1, async ([session]) => {
+    await beginAs(session, owners[0]);
+    await session.client.query(
+      `select public.create_round($1, $2, '競合', '2026-08-24', 'outdoor', 'recurve', $3::jsonb)`,
+      [
+        randomUUID(),
+        round.roundId,
+        JSON.stringify([
+          {
+            distance_event_id: randomUUID(),
+            id: round.distanceId,
+            position_key: "a",
+            distance: 18,
+            is_marked: true,
+            total_ends: 12,
+            arrows_per_end: 3,
+            target_face_id: TARGET_FACE_ID,
+          },
+        ]),
+      ],
+    );
+    await session.client.query("commit");
+  });
+  for (const [index, userId] of owners.entries()) {
+    if (index > 0) {
+      await addParticipant({
+        roundId: round.roundId,
+        userId,
+        shooterNumber: index + 1,
+      });
+    }
+  }
+  if (editor) await addParticipant({ roundId: round.roundId, userId: editor });
+  for (const [index, userId] of owners.entries()) {
+    await withDbSessions(1, async ([session]) => {
+      await beginAs(session, userId);
+      await recordOn(session, round, index + 1);
+      await session.client.query("commit");
+    });
+  }
+  return round;
+}
+
+async function beginPurge(session: DbSession, userId: string) {
+  await session.client.query("begin");
+  await session.client.query("select public.purge_account($1)", [userId]);
+}
+
+// 先の接続のトランザクションを開いたまま後の操作を呼び、ロックの待ちを確かめてから先を確定して、後の操作の結果を返して確定する。
+async function commitAfterWaiting<T>(
+  first: DbSession,
+  second: DbSession,
+  run: () => Promise<T>,
+): Promise<T> {
+  const waiting = run();
+  // 待ちの確認が先に失敗しても、接続を閉じるときの失敗を未処理にしない。
+  waiting.catch(() => undefined);
+  await expectWaitingForLock(second);
+  await first.client.query("commit");
+  const result = await waiting;
+  await second.client.query("commit");
+  return result;
+}
+
+// 2接続から2人を同時に削除する。後の削除は、先の削除の確定を待つ。
+async function purgeConcurrently(firstUser: string, secondUser: string) {
+  await withDbSessions(2, async ([first, second]) => {
+    await beginPurge(first, firstUser);
+    await second.client.query("begin");
+    await commitAfterWaiting(first, second, () =>
+      second.client.query("select public.purge_account($1)", [secondUser]),
+    );
+  });
+}
+
+// ラウンドに残る記録の件数。
+async function remainingRecords(roundId: string): Promise<number> {
+  const { rows } = await withLocalDb((client) =>
+    client.query<{ count: number }>(
+      `select ((select count(*) from public.rounds where id = $1)
+        + (select count(*) from public.round_users where round_id = $1)
+        + (select count(*) from public.distances where round_id = $1)
+        + (select count(*) from public.shots where round_id = $1)
+        + (select count(*) from public.round_events where round_id = $1)
+        + (select count(*) from public.distance_events where round_id = $1)
+        + (select count(*) from public.shot_events where round_id = $1))::int as count`,
+      [roundId],
+    ),
+  );
+  return rows[0].count;
+}
+
+// 射手の行と、矢と矢の履歴の射手番号。
+function shooterRecords(roundId: string) {
+  return withLocalDb(async (client) => {
+    const select = async (sql: string) =>
+      (await client.query(sql, [roundId])).rows;
+    return {
+      shooters: await select(
+        "select id, shooter_number, user_id, role from public.round_users where round_id = $1 order by shooter_number",
+      ),
+      shots: await select(
+        "select shot_number, shooter_number from public.shots where round_id = $1 order by shot_number",
+      ),
+      events: await select(
+        "select shot_number, shooter_number, author_id from public.shot_events where round_id = $1 order by shot_number",
+      ),
+    };
+  });
+}
+
+test("2人の射つ人が同時にアカウントを削除しても、射つ人のいないラウンドは記録を残さず消える", async () => {
+  const [a, b, editor] = await Promise.all(
+    ["race-a", "race-b", "race-editor"].map(confirmedUserId),
+  );
+  const round = await createSharedRound([a, b], editor);
+  expect(await remainingRecords(round.roundId)).toBeGreaterThan(0);
+
+  await purgeConcurrently(a, b);
+
+  expect(await remainingRecords(round.roundId)).toBe(0);
+});
+
+test("射つ人3人のうち2人が同時にアカウントを削除しても、2人の射手は番号を保って別々に残る", async () => {
+  const [a, b, c] = await Promise.all(
+    ["race-a", "race-b", "race-c"].map(confirmedUserId),
+  );
+  const round = await createSharedRound([a, b, c]);
+  const before = await shooterRecords(round.roundId);
+
+  await purgeConcurrently(a, b);
+
+  const after = await shooterRecords(round.roundId);
+  const unlinked = { user_id: null, role: null };
+  expect(after.shooters).toEqual([
+    { ...before.shooters[0], ...unlinked },
+    { ...before.shooters[1], ...unlinked },
+    before.shooters[2],
+  ]);
+  expect(after.shots).toEqual(before.shots);
+  expect(after.events).toEqual([
+    { ...before.events[0], author_id: DELETED_USER_ID },
+    { ...before.events[1], author_id: DELETED_USER_ID },
+    before.events[2],
+  ]);
+});
+
+test("他の射つ人の削除と並行するラウンドの削除は、削除の確定を待ち、残った1人の射つ人の削除として成功する", async () => {
+  const [a, b] = await Promise.all(["race-a", "race-b"].map(confirmedUserId));
+  const round = await createSharedRound([a, b]);
+
+  const result = await withDbSessions(2, async ([first, second]) => {
+    await beginPurge(first, a);
+    await beginAs(second, b);
+    return commitAfterWaiting(first, second, () =>
+      second.client.query<{ result: { applied: boolean } }>(
+        "select public.disable_round($1, $2) as result",
+        [randomUUID(), round.roundId],
+      ),
+    );
+  });
+
+  expect(result.rows[0].result.applied).toBe(true);
+  const { rows } = await withLocalDb((client) =>
+    client.query(
+      "select disabled_at is not null as disabled from public.rounds where id = $1",
+      [round.roundId],
+    ),
+  );
+  expect(rows).toEqual([{ disabled: true }]);
+});
+
+test("唯一の射つ人の削除と並行する記録は、デッドロックせず削除の確定を待ってMISSINGになる", async () => {
+  const [owner, editor] = await Promise.all(
+    ["race-owner", "race-editor"].map(confirmedUserId),
+  );
+  const round = await createSharedRound([owner], editor);
+
+  const result = await withDbSessions(2, async ([first, second]) => {
+    await beginPurge(first, owner);
+    await beginAs(second, editor);
+    return commitAfterWaiting(first, second, () => recordOn(second, round, 1));
+  });
+
+  expect(result.rows[0].result.map((r) => r.reason)).toEqual(["MISSING"]);
+  expect(await remainingRecords(round.roundId)).toBe(0);
+});
+
+test("記録の確定の前に唯一の射つ人を削除すると、削除は記録の確定を待ち、記録を残さず消す", async () => {
+  const [owner, editor] = await Promise.all(
+    ["race-owner", "race-editor"].map(confirmedUserId),
+  );
+  const round = await createSharedRound([owner], editor);
+
+  const recorded = await withDbSessions(2, async ([first, second]) => {
+    await beginAs(first, editor);
+    const record = await recordOn(first, round, 1);
+    await second.client.query("begin");
+    await commitAfterWaiting(first, second, () =>
+      second.client.query("select public.purge_account($1)", [owner]),
+    );
+    return record.rows[0].result.map((r) => r.reason);
+  });
+
+  expect(recorded).toEqual([null]);
+  expect(await remainingRecords(round.roundId)).toBe(0);
 });

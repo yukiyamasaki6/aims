@@ -1,6 +1,6 @@
 begin;
 
-select plan(15);
+select plan(20);
 
 select ok(
   exists (select 1 from auth.users where id = '00000000-0000-4000-8000-000000000001'
@@ -117,6 +117,64 @@ select is(
     and tgname = 'keep_email_identity' and not tgisinternal and tgenabled = 'O'),
   1::bigint,
   'メールの手段の削除を拒否するトリガーがauth.identitiesに1件、有効で存在する'
+);
+
+-- 射手の番号参照
+select is(
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name in ('shots', 'shot_events') and column_name = 'shooter_id'),
+  0::bigint,
+  'shotsとshot_eventsはshooter_idの列を持たない'
+);
+
+-- 外部キーを 表:列->参照先の列:削除時の動作+更新時の動作 で表す。
+create function pg_temp.fks(p_parent regclass) returns text
+language sql stable
+as $$
+  select string_agg(
+    c.conrelid::regclass::text || ':'
+      || (select string_agg(a.attname::text, ',' order by k.ord)
+            from unnest(c.conkey) with ordinality as k(attnum, ord)
+            join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum)
+      || '->'
+      || (select string_agg(a.attname::text, ',' order by k.ord)
+            from unnest(c.confkey) with ordinality as k(attnum, ord)
+            join pg_attribute a on a.attrelid = c.confrelid and a.attnum = k.attnum)
+      || ':' || c.confdeltype::text || c.confupdtype::text,
+    ' ' order by c.conrelid::regclass::text, c.conname)
+  from pg_constraint c
+  where c.contype = 'f' and c.confrelid = p_parent
+    and c.conrelid in ('public.shots'::regclass, 'public.shot_events'::regclass)
+$$;
+
+select is(
+  pg_temp.fks('public.distances'),
+  'shot_events:round_id,distance_id->round_id,id:aa shots:round_id,distance_id->round_id,id:ca',
+  'shotsとshot_eventsの距離の外部キーは(round_id, distance_id)の1本だけで、矢だけが削除に連鎖する'
+);
+
+select is(
+  pg_temp.fks('public.round_users'),
+  'shot_events:round_id,shooter_number->round_id,shooter_number:aa shots:round_id,shooter_number->round_id,shooter_number:aa',
+  'shotsとshot_eventsは射手を(round_id, shooter_number)で参照し、削除と更新に連鎖しない'
+);
+
+select is(
+  (select count(*) from pg_index i
+    where i.indrelid in ('public.shots'::regclass, 'public.shot_events'::regclass)
+      and i.indisvalid
+      and (select string_agg(a.attname::text, ',' order by k.ord)
+             from unnest(i.indkey::int2[]) with ordinality as k(attnum, ord)
+             join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.attnum) = 'round_id,shooter_number'),
+  2::bigint,
+  'shotsとshot_eventsは(round_id, shooter_number)の索引を持つ'
+);
+
+select is(
+  (select string_agg(confdeltype::text, ',') from pg_constraint
+    where conrelid = 'public.round_users'::regclass and contype = 'f' and confrelid = 'public.users'::regclass),
+  'a',
+  'round_users.user_idの外部キーは利用者の削除に連鎖しない'
 );
 
 select * from finish();

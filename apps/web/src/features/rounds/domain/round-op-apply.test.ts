@@ -13,6 +13,7 @@ import {
   roundDisabled,
   roundTablesFromServer,
   roundUpdated,
+  shooterAdded,
   shotCleared,
   shotRecorded,
 } from "./round-op-test-helpers";
@@ -668,6 +669,7 @@ const withShotRow = (
       shot_number: 1,
       score_str: "10",
       score_int: 10,
+      shooter_number: 1,
       disabled: false,
       ...overrides,
     },
@@ -683,14 +685,19 @@ describe("record_shots(shot.recorded)", () => {
   const cellsOf = (tables: RoundTables) =>
     tables.shots.map((s) => [s.end_number, s.shot_number, s.score_str]);
 
-  it("空のマスへの記録は、そのマスの行として足す。同じエンドの別のマスの記録は互いに残る", () => {
+  it("空のマスへの記録は、指定の射手を持つそのマスの行として足す。同じエンドの別のマスの記録は互いに残る", () => {
     // Given
     const first = apply(base, shotRecorded({ shotNumber: 1 }));
 
     // When
     const second = apply(
       first,
-      shotRecorded({ shotNumber: 2, scoreStr: "9", scoreInt: 9 }),
+      shotRecorded({
+        shotNumber: 2,
+        scoreStr: "9",
+        scoreInt: 9,
+        shooterNumber: 2,
+      }),
     );
 
     // Then
@@ -698,15 +705,18 @@ describe("record_shots(shot.recorded)", () => {
       [1, 1, "10"],
       [1, 2, "9"],
     ]);
-    expect(second.shots[0]).not.toHaveProperty("shooter_id");
+    expect(second.shots.map((s) => s.shooter_number)).toEqual([1, 2]);
   });
 
-  it("同じマスの記録は、点数だけを置き換え、行の射手を残す", () => {
+  it("同じマスの記録は、点数と射手を指定の値に置き換える", () => {
     // Given
-    const recorded = withShotRow(base, { shooter_id: "u-2" });
+    const recorded = withShotRow(base, { shooter_number: 2 });
 
     // When
-    const next = apply(recorded, shotRecorded({ scoreStr: "9", scoreInt: 9 }));
+    const next = apply(
+      recorded,
+      shotRecorded({ scoreStr: "9", scoreInt: 9, shooterNumber: 3 }),
+    );
 
     // Then
     expect(next.shots).toEqual([
@@ -714,26 +724,26 @@ describe("record_shots(shot.recorded)", () => {
         end_number: 1,
         shot_number: 1,
         score_str: "9",
-        shooter_id: "u-2",
+        shooter_number: 3,
       }),
     ]);
   });
 
-  it("取り消したマスへの記録は、行を復活させて新しい点数にし、行の射手を引き継ぐ", () => {
+  it("取り消したマスへの記録は、行を復活させて指定の点数と射手にする", () => {
     // Given
-    const cleared = withShotRow(base, { shooter_id: "u-2", disabled: true });
+    const cleared = withShotRow(base, { shooter_number: 2, disabled: true });
 
     // When
     const revived = apply(
       cleared,
-      shotRecorded({ scoreStr: "9", scoreInt: 9 }),
+      shotRecorded({ scoreStr: "9", scoreInt: 9, shooterNumber: 3 }),
     );
 
     // Then
     expect(revived.shots).toEqual([
       expect.objectContaining({
         score_str: "9",
-        shooter_id: "u-2",
+        shooter_number: 3,
         disabled: false,
       }),
     ]);
@@ -841,20 +851,20 @@ describe("record_shots(shot.recorded)", () => {
     });
   });
 
-  it("確定済みの矢の記録は、サーバーが他の項目を効かせても、点数だけを重ねる", () => {
+  it("確定済みの矢の記録は、効いた項目の点数と射手を重ねる", () => {
     // Given
-    const recorded = withShotRow(base, { shooter_id: "u-2" });
+    const recorded = withShotRow(base, { shooter_number: 2 });
 
     // When
     const next = applyConfirmed(
       recorded,
-      shotRecorded({ scoreStr: "9", scoreInt: 9 }),
-      ["score", "shooter_id"],
+      shotRecorded({ scoreStr: "9", scoreInt: 9, shooterNumber: 3 }),
+      ["score", "shooter_number"],
     );
 
     // Then
     expect(next.shots).toEqual([
-      expect.objectContaining({ score_str: "9", shooter_id: "u-2" }),
+      expect.objectContaining({ score_str: "9", shooter_number: 3 }),
     ]);
   });
 
@@ -896,10 +906,64 @@ describe("record_shots(shot.recorded)", () => {
   });
 });
 
+describe("add_round_shooter(shooter.added)", () => {
+  // 射手1は作成者の射つ人、射手2は利用者に紐づかない射手である。
+  const twoShooters: RoundTables = {
+    ...base,
+    shooters: [
+      ...base.shooters,
+      { shooter_number: 2, user_id: null, role: null },
+    ],
+  };
+
+  it("無い番号の追加は、利用者と役割の無い射手を1つだけ足し、欠けた番号は補わず、重ねて適用しても増えない", () => {
+    // Given
+    const added = apply(twoShooters, shooterAdded(7));
+
+    // When
+    const again = apply(added, shooterAdded(7));
+
+    // Then
+    expect(again.shooters).toEqual([
+      ...twoShooters.shooters,
+      { shooter_number: 7, user_id: null, role: null },
+    ]);
+  });
+
+  it("利用者に紐づく射手と紐づかない射手の、既にある番号の追加は、行を変えない", () => {
+    // Given
+
+    // When
+    const linked = apply(twoShooters, shooterAdded(1));
+    const unlinked = apply(twoShooters, shooterAdded(2));
+
+    // Then
+    expect(linked).toBe(twoShooters);
+    expect(unlinked).toBe(twoShooters);
+  });
+
+  it("射手の追加に続くその番号の記録は、射手の一覧と矢に反映される", () => {
+    // Given
+
+    // When
+    const next = applyOperations(
+      base,
+      [pending(shooterAdded(2)), pending(shotRecorded({ shooterNumber: 2 }))],
+      faces,
+    );
+
+    // Then
+    expect(next.shooters.map((s) => s.shooter_number)).toEqual([1, 2]);
+    expect(next.shots).toEqual([
+      expect.objectContaining({ score_str: "10", shooter_number: 2 }),
+    ]);
+  });
+});
+
 describe("clear_shots(shot.cleared)", () => {
   it("同じマスの行を、射手を残したまま削除済みにする", () => {
     // Given
-    const withShot = withShotRow(base, { shooter_id: "u-2" });
+    const withShot = withShotRow(base, { shooter_number: 2 });
 
     // When
     const next = apply(withShot, shotCleared());
@@ -910,7 +974,7 @@ describe("clear_shots(shot.cleared)", () => {
         end_number: 1,
         shot_number: 1,
         disabled: true,
-        shooter_id: "u-2",
+        shooter_number: 2,
       }),
     ]);
   });
@@ -986,6 +1050,7 @@ describe("round.created", () => {
         status: "in_progress",
         disabled: false,
       },
+      shooters: [{ shooter_number: 1, user_id: "user-1", role: "owner" }],
       distances: [
         {
           id: "d-1",

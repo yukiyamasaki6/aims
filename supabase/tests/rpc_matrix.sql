@@ -4,13 +4,13 @@
 --
 -- 観点
 --   success: 正常系。権限のある実行者が有効な入力で呼ぶ
---   unauthorized: 権限なし。ラウンドのメンバーでないか、viewerが呼ぶ
+--   unauthorized: 権限なし。ラウンドに参加していないか、役割に許されない利用者が呼ぶ
 --   invalid: 不正・無効な入力。権限のある実行者が、拒否される入力（契約の不一致はPT422）、または効かない入力（応答のreasonで返し、何も記録しない）で呼ぶ
 --   idempotent: 冪等性。同じevent_idで2回呼び、2回目も成功してイベントもrevisionも増えない
 --     save_round_as_presetはevent_idを持たないため、同じ入力の重複保存の扱いを固定する
 -- アクター
---   editor / viewer: 対象ラウンドのメンバー
---   non_member: 対象ラウンドのメンバーではない認証済みユーザー
+--   shooter: 対象ラウンドの唯一の射つ人。delegate: 代理の人
+--   non_member: 対象ラウンドに参加していない認証済みユーザー
 --   anonの実行拒否は rls_matrix.sql の関数EXECUTE表が固定済みのため、ここでは扱わない
 --
 -- 実測は 'ok' か 'error:<メッセージ>' に正規化し、呼び出し後の状態（イベント件数、revision、射影の値）と併せて期待値表と比較する。
@@ -26,8 +26,8 @@ select plan(1);
 -- fixture
 -- ============================================================
 -- 識別子は別名で扱う。呼び出しSQLと期待値では '@R1' のように別名で参照し、q() が実際のuuidへ置き換える。
---   E/V/N: editor・viewer・非メンバーのユーザー
---   R1/R2: outdoorのラウンドとfieldのラウンド（editor・viewerがメンバー）
+--   E/A/N: 射つ人・代理の人・非参加者のユーザー
+--   R1/R2: outdoorのラウンドとfieldのラウンド（射手1の射つ人E、代理の人A、利用者に紐づかない射手2）
 --   D1: R1の距離（得点なし）、D2: R1の距離（得点2件）、D3: R2のUnmarkedの距離（得点1件）
 --   RN/DN/DN2: 作成系RPCが新規に作るラウンド・距離。DEV/DEV2はその初期距離のイベントID
 --   EV1〜EV3: 呼び出しごとのevent_id。ケースは巻き戻されるため、ケース間で使い回せる
@@ -36,7 +36,7 @@ select plan(1);
 create temp table rpc_id (alias text primary key, id uuid not null);
 insert into rpc_id (alias, id) values
   ('E',       'c0000000-0000-0000-0000-000000000001'),
-  ('V',       'c0000000-0000-0000-0000-000000000002'),
+  ('A',       'c0000000-0000-0000-0000-000000000002'),
   ('N',       'c0000000-0000-0000-0000-000000000003'),
   ('R1',      'c0000000-0000-0000-0000-000000000010'),
   ('R2',      'c0000000-0000-0000-0000-000000000011'),
@@ -59,18 +59,20 @@ create function pg_temp.id(p_alias text) returns uuid
 language sql stable
 as $$ select id from rpc_id where alias = p_alias $$;
 
-insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('V')), (pg_temp.id('N'));
+insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('A')), (pg_temp.id('N'));
 
 -- 既存の状態はイベントログと射影を揃えて、RPCを経由せず接続ロールで直接INSERTする。
 insert into public.rounds (id, name, round_date, format, bow_type) values
   (pg_temp.id('R1'), 'Matrix Outdoor', '2026-01-01', 'outdoor', 'recurve'),
   (pg_temp.id('R2'), 'Matrix Field', '2026-01-01', 'field', 'recurve');
 
-insert into public.round_users (round_id, user_id, role) values
-  (pg_temp.id('R1'), pg_temp.id('E'), 'editor'),
-  (pg_temp.id('R1'), pg_temp.id('V'), 'viewer'),
-  (pg_temp.id('R2'), pg_temp.id('E'), 'editor'),
-  (pg_temp.id('R2'), pg_temp.id('V'), 'viewer');
+insert into public.round_users (round_id, user_id, role, shooter_number) values
+  (pg_temp.id('R1'), pg_temp.id('E'), 'owner', 1),
+  (pg_temp.id('R1'), pg_temp.id('A'), 'editor', null),
+  (pg_temp.id('R1'), null, null, 2),
+  (pg_temp.id('R2'), pg_temp.id('E'), 'owner', 1),
+  (pg_temp.id('R2'), pg_temp.id('A'), 'editor', null),
+  (pg_temp.id('R2'), null, null, 2);
 
 insert into public.round_events (event_id, round_id, type, author_id, revision, name, round_date, format, bow_type) values
   ('c0000000-0000-0000-0000-00000000f001', pg_temp.id('R1'), 'CREATED', pg_temp.id('E'), 1, 'Matrix Outdoor', '2026-01-01', 'outdoor', 'recurve'),
@@ -86,22 +88,22 @@ insert into public.distance_events (event_id, round_id, distance_id, type, autho
   ('c0000000-0000-0000-0000-00000000f012', pg_temp.id('R1'), pg_temp.id('D2'), 'CREATED', pg_temp.id('E'), 1, 'b', 50, true, 6, 6, pg_temp.id('F1')),
   ('c0000000-0000-0000-0000-00000000f013', pg_temp.id('R2'), pg_temp.id('D3'), 'CREATED', pg_temp.id('E'), 1, 'a', null, false, 6, 6, pg_temp.id('F1'));
 
-insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int) values
-  (pg_temp.id('D2'), 1, 1, pg_temp.id('E'), 'X', 10),
-  (pg_temp.id('D2'), 1, 2, pg_temp.id('E'), '9', 9),
-  (pg_temp.id('D3'), 1, 1, pg_temp.id('E'), '9', 9);
+insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int) values
+  (pg_temp.id('R1'), pg_temp.id('D2'), 1, 1, 1, 'X', 10),
+  (pg_temp.id('R1'), pg_temp.id('D2'), 1, 2, 1, '9', 9),
+  (pg_temp.id('R2'), pg_temp.id('D3'), 1, 1, 1, '9', 9);
 
-insert into public.shot_events (event_id, distance_id, type, author_id, revision, end_number, shot_number, shooter_id, score_str, score_int, set_fields) values
-  ('c0000000-0000-0000-0000-00000000f021', pg_temp.id('D2'), 'RECORDED', pg_temp.id('E'), 1, 1, 1, pg_temp.id('E'), 'X', 10, array['score', 'shooter_id']),
-  ('c0000000-0000-0000-0000-00000000f022', pg_temp.id('D2'), 'RECORDED', pg_temp.id('E'), 1, 1, 2, pg_temp.id('E'), '9', 9, array['score', 'shooter_id']),
-  ('c0000000-0000-0000-0000-00000000f023', pg_temp.id('D3'), 'RECORDED', pg_temp.id('E'), 1, 1, 1, pg_temp.id('E'), '9', 9, array['score', 'shooter_id']);
+insert into public.shot_events (event_id, round_id, distance_id, type, author_id, revision, end_number, shot_number, shooter_number, score_str, score_int, set_fields) values
+  ('c0000000-0000-0000-0000-00000000f021', pg_temp.id('R1'), pg_temp.id('D2'), 'RECORDED', pg_temp.id('E'), 1, 1, 1, 1, 'X', 10, array['score', 'shooter_number']),
+  ('c0000000-0000-0000-0000-00000000f022', pg_temp.id('R1'), pg_temp.id('D2'), 'RECORDED', pg_temp.id('E'), 1, 1, 2, 1, '9', 9, array['score', 'shooter_number']),
+  ('c0000000-0000-0000-0000-00000000f023', pg_temp.id('R2'), pg_temp.id('D3'), 'RECORDED', pg_temp.id('E'), 1, 1, 1, 1, '9', 9, array['score', 'shooter_number']);
 
 -- ============================================================
 -- 共通ヘルパー
 -- ============================================================
 
 create temp table rpc_actor (actor text primary key, alias text not null references rpc_id);
-insert into rpc_actor (actor, alias) values ('editor', 'E'), ('viewer', 'V'), ('non_member', 'N');
+insert into rpc_actor (actor, alias) values ('shooter', 'E'), ('delegate', 'A'), ('non_member', 'N');
 
 -- 別名 '@R1' を実際のuuidへ置き換える。長い別名から置換し、'@EV1' が '@E' に誤って一致しないようにする。
 create function pg_temp.resolve(p_text text) returns text
@@ -137,10 +139,11 @@ insert into rpc_default (fn, args, element) values
   ('disable_distance', '{"p_distance_event_id":"@EV1","p_distance_id":"@D1"}', '{}'),
   ('record_shots',
     '{"p_shots":[{}]}',
-    '{"p_shots":{"shot_event_id":"@EV1","distance_id":"@D1","end_number":1,"shot_number":1,"score_str":"9","score_int":9}}'),
+    '{"p_shots":{"shot_event_id":"@EV1","distance_id":"@D1","end_number":1,"shot_number":1,"score_str":"9","score_int":9,"shooter_number":1}}'),
   ('clear_shots',
     '{"p_shots":[{}]}',
     '{"p_shots":{"shot_event_id":"@EV1","distance_id":"@D2","end_number":1,"shot_number":1}}'),
+  ('add_round_shooter', '{"p_round_id":"@R1","p_shooter_number":3}', '{}'),
   ('save_round_as_preset',
     '{"p_name":"Matrix Preset","p_format":"field","p_bow_type":"compound","p_distances":[{},{"position_key":"b","distance":null,"is_marked":false,"total_ends":4}]}',
     '{"p_distances":{"position_key":"a","distance":50,"is_marked":true,"total_ends":6,"arrows_per_end":6,"target_face_id":"@F1"}}');
@@ -239,12 +242,12 @@ $$;
 create function pg_temp.st_create_round(p_returned text) returns text
 language sql stable
 as $$
-  select format('%s round=[%s] rounds=%s round_events=%s editors=%s distances=%s distance_events=%s list=[%s]',
+  select format('%s round=[%s] rounds=%s round_events=%s owners=%s distances=%s distance_events=%s list=[%s]',
     pg_temp.res(p_returned),
     coalesce((select format('%s/%s/%s/%s', name, round_date, format, bow_type) from rounds where id = pg_temp.id('RN')), '-'),
     (select count(*) from rounds where id = pg_temp.id('RN')),
     (select count(*) from round_events where round_id = pg_temp.id('RN')),
-    (select count(*) from round_users where round_id = pg_temp.id('RN') and user_id = pg_temp.id('E') and role = 'editor'),
+    (select count(*) from round_users where round_id = pg_temp.id('RN') and user_id = pg_temp.id('E') and role = 'owner' and shooter_number = 1),
     (select count(*) from distances where round_id = pg_temp.id('RN')),
     (select count(*) from distance_events where round_id = pg_temp.id('RN')),
     coalesce((
@@ -256,7 +259,7 @@ as $$
     ), ''))
 $$;
 
--- 矢は エンド#マスの番号:点数/射手/revision[/cleared] で表す。
+-- 矢は エンド#マスの番号:点数/s射手番号/revision[/cleared] で表す。
 create function pg_temp.st_shots(p_alias text) returns text
 language sql stable
 as $$
@@ -264,13 +267,22 @@ as $$
     (select count(*) from shot_events where distance_id = pg_temp.id(p_alias)),
     coalesce((
       select string_agg(
-        format('%s#%s:%s/%s/r%s%s', s.end_number, s.shot_number, s.score_str, coalesce(a.actor, '?'), s.revision,
+        format('%s#%s:%s/s%s/r%s%s', s.end_number, s.shot_number, s.score_str, s.shooter_number, s.revision,
           case when s.disabled_at is not null then '/cleared' else '' end),
         ' ' order by s.end_number, s.shot_number)
       from shots s
-      left join rpc_actor a on pg_temp.id(a.alias) = s.shooter_id
       where s.distance_id = pg_temp.id(p_alias)
     ), ''))
+$$;
+
+-- 射手の行は 番号:役割 で番号順に表す。利用者に紐づかない射手の役割は - で表す。
+create function pg_temp.st_shooters(p_alias text) returns text
+language sql stable
+as $$
+  select format('shooters=[%s]', coalesce((
+    select string_agg(format('%s:%s', shooter_number, coalesce(role, '-')), ' ' order by shooter_number)
+    from round_users where round_id = pg_temp.id(p_alias) and shooter_number is not null
+  ), ''))
 $$;
 
 -- プリセットは名前で特定する。ラウンドと紐付かないため、所有者と内容だけを見る。
@@ -387,6 +399,7 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
 
   -- update_round
   ('update_round', 'success', 'default', null, pg_temp.q('update_round'), 1, $$select pg_temp.st_round('R1') || ' ' || pg_temp.res($1)$$),
+  ('update_round', 'success', 'status', null, pg_temp.q('update_round', '{"p_changes":{"status":"completed"}}'), 1, $$select pg_temp.st_round('R1') || ' status=' || (select status from rounds where id = pg_temp.id('R1')) || ' ' || pg_temp.res($1)$$),
   ('update_round', 'success', 'name_only', null, pg_temp.q('update_round', '{"p_round_id":"@R1","p_round_event_id":"@EV1","p_changes":{"name":"Only Name"}}'), 1, $$select pg_temp.st_round('R1') || ' ' || pg_temp.res($1)$$),
   ('update_round', 'success', 'field_with_unmarked', null, pg_temp.q('update_round', '{"p_round_id":"@R2","p_round_event_id":"@EV1","p_changes":{"name":"Field Renamed","format":"field","bow_type":"barebow"}}'), 1, $$select pg_temp.st_round('R2') || ' ' || pg_temp.res($1)$$),
   ('update_round', 'success', 'unmarked_resolved', pg_temp.q('update_distance', '{"p_distance_id":"@D3","p_distance_event_id":"@EV2","p_changes":{"distance":60}}') || '; ' || pg_temp.q('update_distance', '{"p_distance_id":"@D3","p_distance_event_id":"@EV3","p_changes":{"is_marked":true}}'), pg_temp.q('update_round', '{"p_round_id":"@R2","p_round_event_id":"@EV1","p_changes":{"name":"Outdoor Renamed","format":"outdoor","bow_type":"recurve"}}'), 1, $$select pg_temp.st_round('R2') || ' ' || pg_temp.res($1)$$),
@@ -485,13 +498,14 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('record_shots', 'success', 'batch_overwrite_and_proxy', null, pg_temp.q('record_shots', '{"p_shots":[
       {"distance_id":"@D2"},
       {"distance_id":"@D2","shot_event_id":"@EV2","end_number":2,"score_str":"7","score_int":7},
-      {"distance_id":"@D2","shot_event_id":"@EV3","end_number":2,"shot_number":2,"score_str":"5","score_int":5,"shooter_id":"@V"}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
+      {"distance_id":"@D2","shot_event_id":"@EV3","end_number":2,"shot_number":2,"score_str":"5","score_int":5,"shooter_number":2}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'success', 'reassign_shooter', null, pg_temp.q('record_shots', '{"p_shots":[{"distance_id":"@D2","shooter_number":2}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'success', 'batch_partial_unfit', null, pg_temp.q('record_shots', '{"p_shots":[{},{"shot_event_id":"@EV2","shot_number":2,"score_str":"Z","score_int":99}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'success', 'last_cell_of_range', null, pg_temp.q('record_shots', '{"p_shots":[{"end_number":6,"shot_number":6}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'success', 'same_cell_later_event_wins', null, pg_temp.q('record_shots', '{"p_shots":[{},{"shot_event_id":"@EV2","score_str":"7","score_int":7}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'unauthorized', 'default', null, pg_temp.q('record_shots'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
-  ('record_shots', 'invalid', 'shooter_not_member', null, pg_temp.q('record_shots', '{"p_shots":[{"shooter_id":"@N"}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
-  ('record_shots', 'invalid', 'batch_with_invalid_shooter', null, pg_temp.q('record_shots', '{"p_shots":[{},{"shot_event_id":"@EV2","shot_number":2,"shooter_id":"@N"}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'invalid', 'shooter_not_in_round', null, pg_temp.q('record_shots', '{"p_shots":[{"shooter_number":9}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'invalid', 'batch_with_invalid_shooter', null, pg_temp.q('record_shots', '{"p_shots":[{},{"shot_event_id":"@EV2","shot_number":2,"shooter_number":9}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'unknown_distance', null, pg_temp.q('record_shots', '{"p_shots":[{"distance_id":"@UNKNOWN"}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'end_out_of_range', null, pg_temp.q('record_shots', '{"p_shots":[{"end_number":7}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'score_not_on_target', null, pg_temp.q('record_shots', '{"p_shots":[{"score_str":"Z","score_int":99}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
@@ -503,7 +517,7 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('record_shots', 'invalid', 'missing_shot_number', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_number":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'shot_id_without_cell', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_number":null,"shot_id":"@UNKNOWN"}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'missing_event_id', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_event_id":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
-  ('record_shots', 'invalid', 'null_shooter', null, pg_temp.q('record_shots', '{"p_shots":[{"shooter_id":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'invalid', 'null_shooter', null, pg_temp.q('record_shots', '{"p_shots":[{"shooter_number":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'zero_shot_number', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_number":0}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'negative_shot_number', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_number":-1}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'fractional_shot_number', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_number":1.5}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
@@ -523,6 +537,15 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('clear_shots', 'invalid', 'shot_id_without_cell', null, pg_temp.q('clear_shots', '{"p_shots":[{"end_number":null,"shot_number":null,"shot_id":"@UNKNOWN"}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('clear_shots', 'invalid', 'missing_event_id', null, pg_temp.q('clear_shots', '{"p_shots":[{"shot_event_id":null}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('clear_shots', 'idempotent', 'replay', null, pg_temp.q('clear_shots'), 2, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
+
+  -- add_round_shooter
+  ('add_round_shooter', 'success', 'default', null, pg_temp.q('add_round_shooter'), 1, $$select pg_temp.st_shooters('R1') || ' ' || pg_temp.res($1)$$),
+  ('add_round_shooter', 'success', 'existing_number', null, pg_temp.q('add_round_shooter', '{"p_shooter_number":2}'), 1, $$select pg_temp.st_shooters('R1') || ' ' || pg_temp.res($1)$$),
+  ('add_round_shooter', 'unauthorized', 'default', null, pg_temp.q('add_round_shooter'), 1, $$select pg_temp.st_shooters('R1') || ' ' || pg_temp.res($1)$$),
+  ('add_round_shooter', 'invalid', 'unknown_round', null, pg_temp.q('add_round_shooter', '{"p_round_id":"@UNKNOWN"}'), 1, $$select pg_temp.st_shooters('R1') || ' ' || pg_temp.res($1)$$),
+  ('add_round_shooter', 'invalid', 'round_disabled', pg_temp.q('disable_round', '{"p_round_event_id":"@EV2"}'), pg_temp.q('add_round_shooter'), 1, $$select pg_temp.st_shooters('R1') || ' ' || pg_temp.res($1)$$),
+  ('add_round_shooter', 'invalid', 'zero_number', null, pg_temp.q('add_round_shooter', '{"p_shooter_number":0}'), 1, $$select pg_temp.st_shooters('R1') || ' ' || pg_temp.res($1)$$),
+  ('add_round_shooter', 'idempotent', 'replay', null, pg_temp.q('add_round_shooter'), 2, $$select pg_temp.st_shooters('R1') || ' ' || pg_temp.res($1)$$),
 
   -- save_round_as_preset
   ('save_round_as_preset', 'success', 'default', null, pg_temp.q('save_round_as_preset'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
@@ -559,202 +582,214 @@ create temp table rpc_expected (
 );
 
 insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
-  ('create_round', 'success', 'default', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
-  ('create_round', 'success', 'field_unmarked', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/field/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:-:false:6x6:0001:40]'),
-  ('create_round', 'success', 'empty_distances', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'success', 'multi_distances', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=2 distance_events=2 list=[a:70:true:6x6:0001:40 b:50:true:6x6:0001:41]'),
-  ('create_round', 'success', 'name_50_chars', 'editor', 'ok', 'ret=applied round=[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
-  ('create_round', 'success', 'at_limit', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:100:true:60x12:0001:40]'),
-  ('create_round', 'invalid', 'missing_is_marked', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'unmarked_in_outdoor', 'editor', 'error:[PT422]Unmarkedの距離はフィールド種別でのみ使用できます。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'invalid_format', 'editor', 'error:[PT422]種別が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'invalid_bow_type', 'editor', 'error:[PT422]弓種が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'name_51_chars', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_name', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_round_date', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_format', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_bow_type', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_target_face', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_position_key', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'marked_without_distance', 'editor', 'error:[PT422]Markedの距離には距離(m)が必要です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'total_ends_zero', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'unknown_target_face', 'editor', 'error:[PT422]指定された的が存在しません。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'existing_round_id', 'editor', 'error:[PT422]既に存在するラウンドIDです。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false'),
-  ('create_round', 'unauthorized', 'replay_of_others_event', 'viewer', 'error:[PT403]このラウンドを作成した操作ではありません。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'unauthorized', 'replay_of_others_event', 'non_member', 'error:[PT403]このラウンドを作成した操作ではありません。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'event_id_of_update', 'editor', 'error:[PT422]イベントIDが作成以外の操作で使われています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'duplicate_distance_id', 'editor', 'error:[PT422]距離のID・イベントIDが重複しています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'duplicate_distance_event_id', 'editor', 'error:[PT422]距離のID・イベントIDが重複しています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'success', 'duplicate_position_key', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=2 distance_events=2 list=[a:70:true:6x6:0001:40 a:70:true:6x6:0001:41]'),
-  ('create_round', 'invalid', 'existing_distance_id', 'editor', 'error:[PT422]既に存在する距離IDです。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'existing_distance_event_id', 'editor', 'error:[PT422]既に使われている距離のイベントIDです。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'distances_not_array', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'invalid_distance_id', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'fractional_total_ends', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'distance_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'total_ends_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'arrows_per_end_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'second_distance_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'idempotent', 'replay', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
+  ('create_round', 'success', 'default', 'shooter', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 owners=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
+  ('create_round', 'success', 'field_unmarked', 'shooter', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/field/recurve] rounds=1 round_events=1 owners=1 distances=1 distance_events=1 list=[a:-:false:6x6:0001:40]'),
+  ('create_round', 'success', 'empty_distances', 'shooter', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 owners=1 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'success', 'multi_distances', 'shooter', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 owners=1 distances=2 distance_events=2 list=[a:70:true:6x6:0001:40 b:50:true:6x6:0001:41]'),
+  ('create_round', 'success', 'name_50_chars', 'shooter', 'ok', 'ret=applied round=[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/2026-01-01/outdoor/recurve] rounds=1 round_events=1 owners=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
+  ('create_round', 'success', 'at_limit', 'shooter', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 owners=1 distances=1 distance_events=1 list=[a:100:true:60x12:0001:40]'),
+  ('create_round', 'invalid', 'missing_is_marked', 'shooter', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'unmarked_in_outdoor', 'shooter', 'error:[PT422]Unmarkedの距離はフィールド種別でのみ使用できます。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'invalid_format', 'shooter', 'error:[PT422]種別が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'invalid_bow_type', 'shooter', 'error:[PT422]弓種が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'name_51_chars', 'shooter', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_name', 'shooter', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_round_date', 'shooter', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_format', 'shooter', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_bow_type', 'shooter', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_target_face', 'shooter', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_position_key', 'shooter', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'marked_without_distance', 'shooter', 'error:[PT422]Markedの距離には距離(m)が必要です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'total_ends_zero', 'shooter', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'unknown_target_face', 'shooter', 'error:[PT422]指定された的が存在しません。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'existing_round_id', 'shooter', 'error:[PT422]既に存在するラウンドIDです。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false'),
+  ('create_round', 'unauthorized', 'replay_of_others_event', 'delegate', 'error:[PT403]このラウンドを作成した操作ではありません。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'unauthorized', 'replay_of_others_event', 'non_member', 'error:[PT403]このラウンドを作成した操作ではありません。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'event_id_of_update', 'shooter', 'error:[PT422]イベントIDが作成以外の操作で使われています。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'duplicate_distance_id', 'shooter', 'error:[PT422]距離のID・イベントIDが重複しています。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'duplicate_distance_event_id', 'shooter', 'error:[PT422]距離のID・イベントIDが重複しています。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'success', 'duplicate_position_key', 'shooter', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 owners=1 distances=2 distance_events=2 list=[a:70:true:6x6:0001:40 a:70:true:6x6:0001:41]'),
+  ('create_round', 'invalid', 'existing_distance_id', 'shooter', 'error:[PT422]既に存在する距離IDです。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'existing_distance_event_id', 'shooter', 'error:[PT422]既に使われている距離のイベントIDです。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'distances_not_array', 'shooter', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'invalid_distance_id', 'shooter', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'fractional_total_ends', 'shooter', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'distance_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'total_ends_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'arrows_per_end_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'second_distance_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 owners=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'idempotent', 'replay', 'shooter', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 owners=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
 
-  ('update_round', 'success', 'default', 'editor', 'ok', 'events=2 revision=2 name=Renamed Round date=2026-02-02 format=indoor bow=compound disabled=false ret=applied fields=name,round_date,format,bow_type'),
-  ('update_round', 'success', 'name_only', 'editor', 'ok', 'events=2 revision=2 name=Only Name date=2026-01-01 format=outdoor bow=recurve disabled=false ret=applied fields=name'),
-  ('update_round', 'success', 'field_with_unmarked', 'editor', 'ok', 'events=2 revision=2 name=Field Renamed date=2026-01-01 format=field bow=barebow disabled=false ret=applied fields=name,format,bow_type'),
-  ('update_round', 'success', 'unmarked_resolved', 'editor', 'ok', 'events=2 revision=2 name=Outdoor Renamed date=2026-01-01 format=outdoor bow=recurve disabled=false ret=applied fields=name,format,bow_type'),
-  ('update_round', 'success', 'partial_invariant', 'editor', 'ok', 'events=2 revision=2 name=Partly Renamed date=2026-01-01 format=field bow=recurve disabled=false ret=applied fields=name rejected=format:INVARIANT'),
-  ('update_round', 'unauthorized', 'default', 'viewer', 'error:[PT403]このラウンドを編集する権限がありません。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'success', 'default', 'shooter', 'ok', 'events=2 revision=2 name=Renamed Round date=2026-02-02 format=indoor bow=compound disabled=false ret=applied fields=name,round_date,format,bow_type'),
+  ('update_round', 'success', 'default', 'delegate', 'ok', 'events=2 revision=2 name=Renamed Round date=2026-02-02 format=indoor bow=compound disabled=false ret=applied fields=name,round_date,format,bow_type'),
+  ('update_round', 'success', 'status', 'shooter', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false status=completed ret=applied fields=status'),
+  ('update_round', 'success', 'status', 'delegate', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false status=completed ret=applied fields=status'),
+  ('update_round', 'success', 'name_only', 'shooter', 'ok', 'events=2 revision=2 name=Only Name date=2026-01-01 format=outdoor bow=recurve disabled=false ret=applied fields=name'),
+  ('update_round', 'success', 'field_with_unmarked', 'shooter', 'ok', 'events=2 revision=2 name=Field Renamed date=2026-01-01 format=field bow=barebow disabled=false ret=applied fields=name,format,bow_type'),
+  ('update_round', 'success', 'unmarked_resolved', 'shooter', 'ok', 'events=2 revision=2 name=Outdoor Renamed date=2026-01-01 format=outdoor bow=recurve disabled=false ret=applied fields=name,format,bow_type'),
+  ('update_round', 'success', 'partial_invariant', 'shooter', 'ok', 'events=2 revision=2 name=Partly Renamed date=2026-01-01 format=field bow=recurve disabled=false ret=applied fields=name rejected=format:INVARIANT'),
   ('update_round', 'unauthorized', 'default', 'non_member', 'error:[PT403]このラウンドを編集する権限がありません。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'invalid', 'unmarked_remains', 'editor', 'ok', 'events=1 revision=1 name=Matrix Field date=2026-01-01 format=field bow=recurve disabled=false ret=none rejected=format:INVARIANT'),
-  ('update_round', 'invalid', 'round_disabled', 'editor', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=true ret=DISABLED'),
-  ('update_round', 'invalid', 'unknown_round', 'editor', 'error:[PT403]このラウンドを編集する権限がありません。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'invalid', 'invalid_format', 'editor', 'error:[PT422]種別が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'invalid', 'invalid_bow_type', 'editor', 'error:[PT422]弓種が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'invalid', 'name_51_chars', 'editor', 'error:[PT422]ラウンド名が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'invalid', 'missing_name', 'editor', 'error:[PT422]ラウンド名が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'invalid', 'missing_round_date', 'editor', 'error:[PT422]実施日が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'invalid', 'missing_format', 'editor', 'error:[PT422]種別が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'invalid', 'missing_bow_type', 'editor', 'error:[PT422]弓種が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'invalid', 'invalid_round_date', 'editor', 'error:[PT422]実施日が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'invalid', 'unknown_key', 'editor', 'error:[PT422]設定の変更に未知の項目が含まれています。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'invalid', 'empty_changes', 'editor', 'error:[PT422]設定の変更はキーを持つオブジェクトで指定してください。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
-  ('update_round', 'idempotent', 'replay', 'editor', 'ok', 'events=2 revision=2 name=Renamed Round date=2026-02-02 format=indoor bow=compound disabled=false ret=applied fields=name,round_date,format,bow_type'),
-  ('update_round', 'idempotent', 'replay_partial', 'editor', 'ok', 'events=2 revision=2 name=Partly Renamed date=2026-01-01 format=field bow=recurve disabled=false ret=applied fields=name rejected=format:REJECTED'),
+  ('update_round', 'invalid', 'unmarked_remains', 'shooter', 'ok', 'events=1 revision=1 name=Matrix Field date=2026-01-01 format=field bow=recurve disabled=false ret=none rejected=format:INVARIANT'),
+  ('update_round', 'invalid', 'round_disabled', 'shooter', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=true ret=DISABLED'),
+  ('update_round', 'invalid', 'unknown_round', 'shooter', 'error:[PT403]このラウンドを編集する権限がありません。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'invalid', 'invalid_format', 'shooter', 'error:[PT422]種別が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'invalid', 'invalid_bow_type', 'shooter', 'error:[PT422]弓種が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'invalid', 'name_51_chars', 'shooter', 'error:[PT422]ラウンド名が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'invalid', 'missing_name', 'shooter', 'error:[PT422]ラウンド名が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'invalid', 'missing_round_date', 'shooter', 'error:[PT422]実施日が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'invalid', 'missing_format', 'shooter', 'error:[PT422]種別が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'invalid', 'missing_bow_type', 'shooter', 'error:[PT422]弓種が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'invalid', 'invalid_round_date', 'shooter', 'error:[PT422]実施日が不正です。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'invalid', 'unknown_key', 'shooter', 'error:[PT422]設定の変更に未知の項目が含まれています。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'invalid', 'empty_changes', 'shooter', 'error:[PT422]設定の変更はキーを持つオブジェクトで指定してください。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false ret=-'),
+  ('update_round', 'idempotent', 'replay', 'shooter', 'ok', 'events=2 revision=2 name=Renamed Round date=2026-02-02 format=indoor bow=compound disabled=false ret=applied fields=name,round_date,format,bow_type'),
+  ('update_round', 'idempotent', 'replay_partial', 'shooter', 'ok', 'events=2 revision=2 name=Partly Renamed date=2026-01-01 format=field bow=recurve disabled=false ret=applied fields=name rejected=format:REJECTED'),
 
-  ('create_distance', 'success', 'default', 'editor', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=30 ends=4 arrows=3 face=0002 marked=true ret=applied'),
-  ('create_distance', 'success', 'unmarked_in_field', 'editor', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=- ends=4 arrows=3 face=0002 marked=false ret=applied'),
-  ('create_distance', 'success', 'at_limit', 'editor', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=100 ends=60 arrows=12 face=0002 marked=true ret=applied'),
-  ('create_distance', 'unauthorized', 'default', 'viewer', 'error:[PT403]このラウンドに距離を追加する権限がありません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'success', 'default', 'shooter', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=30 ends=4 arrows=3 face=0002 marked=true ret=applied'),
+  ('create_distance', 'success', 'default', 'delegate', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=30 ends=4 arrows=3 face=0002 marked=true ret=applied'),
+  ('create_distance', 'success', 'unmarked_in_field', 'shooter', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=- ends=4 arrows=3 face=0002 marked=false ret=applied'),
+  ('create_distance', 'success', 'at_limit', 'shooter', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=100 ends=60 arrows=12 face=0002 marked=true ret=applied'),
   ('create_distance', 'unauthorized', 'default', 'non_member', 'error:[PT403]このラウンドに距離を追加する権限がありません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'unauthorized', 'over_limit', 'viewer', 'error:[PT403]このラウンドに距離を追加する権限がありません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
   ('create_distance', 'unauthorized', 'over_limit', 'non_member', 'error:[PT403]このラウンドに距離を追加する権限がありません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'invalid', 'unmarked_in_outdoor', 'editor', 'ok', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=INVARIANT'),
-  ('create_distance', 'invalid', 'round_disabled', 'editor', 'ok', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=DISABLED'),
-  ('create_distance', 'invalid', 'unknown_round', 'editor', 'error:[PT403]このラウンドに距離を追加する権限がありません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'invalid', 'missing_is_marked', 'editor', 'error:[PT422]距離の指定が不正です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'invalid', 'missing_target_face', 'editor', 'error:[PT422]距離の指定が不正です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'invalid', 'missing_position_key', 'editor', 'error:[PT422]距離の指定が不正です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'invalid', 'marked_without_distance', 'editor', 'error:[PT422]Markedの距離には距離(m)が必要です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'invalid', 'total_ends_zero', 'editor', 'error:[PT422]距離の指定が不正です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'invalid', 'distance_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'invalid', 'total_ends_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'invalid', 'arrows_per_end_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'invalid', 'unknown_target_face', 'editor', 'error:[PT422]指定された的が存在しません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
-  ('create_distance', 'invalid', 'existing_distance_id', 'editor', 'error:[PT422]既に存在する距離IDです。', 'distances=1 distance_events=1 revision=1 position=a distance=70 ends=6 arrows=6 face=0001 marked=true ret=-'),
-  ('create_distance', 'success', 'duplicate_position_key', 'editor', 'ok', 'distances=1 distance_events=1 revision=1 position=a distance=30 ends=4 arrows=3 face=0002 marked=true ret=applied'),
-  ('create_distance', 'idempotent', 'replay', 'editor', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=30 ends=4 arrows=3 face=0002 marked=true ret=applied'),
+  ('create_distance', 'invalid', 'unmarked_in_outdoor', 'shooter', 'ok', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=INVARIANT'),
+  ('create_distance', 'invalid', 'round_disabled', 'shooter', 'ok', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=DISABLED'),
+  ('create_distance', 'invalid', 'unknown_round', 'shooter', 'error:[PT403]このラウンドに距離を追加する権限がありません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'missing_is_marked', 'shooter', 'error:[PT422]距離の指定が不正です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'missing_target_face', 'shooter', 'error:[PT422]距離の指定が不正です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'missing_position_key', 'shooter', 'error:[PT422]距離の指定が不正です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'marked_without_distance', 'shooter', 'error:[PT422]Markedの距離には距離(m)が必要です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'total_ends_zero', 'shooter', 'error:[PT422]距離の指定が不正です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'distance_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'total_ends_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'arrows_per_end_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'unknown_target_face', 'shooter', 'error:[PT422]指定された的が存在しません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'existing_distance_id', 'shooter', 'error:[PT422]既に存在する距離IDです。', 'distances=1 distance_events=1 revision=1 position=a distance=70 ends=6 arrows=6 face=0001 marked=true ret=-'),
+  ('create_distance', 'success', 'duplicate_position_key', 'shooter', 'ok', 'distances=1 distance_events=1 revision=1 position=a distance=30 ends=4 arrows=3 face=0002 marked=true ret=applied'),
+  ('create_distance', 'idempotent', 'replay', 'shooter', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=30 ends=4 arrows=3 face=0002 marked=true ret=applied'),
 
-  ('update_distance', 'success', 'default', 'editor', 'ok', 'events=2 revision=2 distance=55 ends=3 arrows=3 face=0002 marked=true disabled=false ret=applied fields=distance,config'),
-  ('update_distance', 'success', 'distance_only', 'editor', 'ok', 'events=2 revision=2 distance=40 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance'),
-  ('update_distance', 'success', 'config_only', 'editor', 'ok', 'events=2 revision=2 distance=70 ends=3 arrows=3 face=0002 marked=true disabled=false ret=applied fields=config'),
-  ('update_distance', 'success', 'field_marked_to_unmarked', 'editor', 'ok', 'events=2 revision=2 distance=- ends=4 arrows=3 face=0002 marked=false disabled=false ret=applied fields=is_marked,distance'),
-  ('update_distance', 'success', 'with_shots_distance_only', 'editor', 'ok', 'events=2 revision=2 distance=40 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance'),
-  ('update_distance', 'success', 'with_shots_config_fits', 'editor', 'ok', 'events=2 revision=2 distance=50 ends=4 arrows=6 face=0002 marked=true disabled=false ret=applied fields=config'),
-  ('update_distance', 'success', 'with_shots_unmarked_to_marked', 'editor', 'ok', 'events=3 revision=3 distance=60 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=is_marked'),
-  ('update_distance', 'success', 'with_shots_unmarked_stays', 'editor', 'ok', 'events=2 revision=2 distance=45 ends=6 arrows=6 face=0001 marked=false disabled=false ret=applied fields=is_marked,distance'),
-  ('update_distance', 'success', 'marked_with_distance_same_save', 'editor', 'ok', 'events=2 revision=2 distance=60 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=is_marked,distance'),
-  ('update_distance', 'success', 'partial_config_unfit', 'editor', 'ok', 'events=2 revision=2 distance=45 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance rejected=config:UNFIT'),
-  ('update_distance', 'success', 'at_limit_config', 'editor', 'ok', 'events=2 revision=2 distance=70 ends=60 arrows=12 face=0002 marked=true disabled=false ret=applied fields=config'),
-  ('update_distance', 'success', 'at_limit_distance', 'editor', 'ok', 'events=2 revision=2 distance=100 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance'),
-  ('update_distance', 'unauthorized', 'default', 'viewer', 'error:[PT403]この距離を編集する権限がありません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'success', 'default', 'shooter', 'ok', 'events=2 revision=2 distance=55 ends=3 arrows=3 face=0002 marked=true disabled=false ret=applied fields=distance,config'),
+  ('update_distance', 'success', 'default', 'delegate', 'ok', 'events=2 revision=2 distance=55 ends=3 arrows=3 face=0002 marked=true disabled=false ret=applied fields=distance,config'),
+  ('update_distance', 'success', 'distance_only', 'shooter', 'ok', 'events=2 revision=2 distance=40 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance'),
+  ('update_distance', 'success', 'config_only', 'shooter', 'ok', 'events=2 revision=2 distance=70 ends=3 arrows=3 face=0002 marked=true disabled=false ret=applied fields=config'),
+  ('update_distance', 'success', 'field_marked_to_unmarked', 'shooter', 'ok', 'events=2 revision=2 distance=- ends=4 arrows=3 face=0002 marked=false disabled=false ret=applied fields=is_marked,distance'),
+  ('update_distance', 'success', 'with_shots_distance_only', 'shooter', 'ok', 'events=2 revision=2 distance=40 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance'),
+  ('update_distance', 'success', 'with_shots_config_fits', 'shooter', 'ok', 'events=2 revision=2 distance=50 ends=4 arrows=6 face=0002 marked=true disabled=false ret=applied fields=config'),
+  ('update_distance', 'success', 'with_shots_unmarked_to_marked', 'shooter', 'ok', 'events=3 revision=3 distance=60 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=is_marked'),
+  ('update_distance', 'success', 'with_shots_unmarked_stays', 'shooter', 'ok', 'events=2 revision=2 distance=45 ends=6 arrows=6 face=0001 marked=false disabled=false ret=applied fields=is_marked,distance'),
+  ('update_distance', 'success', 'marked_with_distance_same_save', 'shooter', 'ok', 'events=2 revision=2 distance=60 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=is_marked,distance'),
+  ('update_distance', 'success', 'partial_config_unfit', 'shooter', 'ok', 'events=2 revision=2 distance=45 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance rejected=config:UNFIT'),
+  ('update_distance', 'success', 'at_limit_config', 'shooter', 'ok', 'events=2 revision=2 distance=70 ends=60 arrows=12 face=0002 marked=true disabled=false ret=applied fields=config'),
+  ('update_distance', 'success', 'at_limit_distance', 'shooter', 'ok', 'events=2 revision=2 distance=100 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance'),
   ('update_distance', 'unauthorized', 'default', 'non_member', 'error:[PT403]この距離を編集する権限がありません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'unauthorized', 'over_limit', 'viewer', 'error:[PT403]この距離を編集する権限がありません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
   ('update_distance', 'unauthorized', 'over_limit', 'non_member', 'error:[PT403]この距離を編集する権限がありません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'unmarked_in_outdoor', 'editor', 'ok', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=none rejected=is_marked:INVARIANT'),
-  ('update_distance', 'invalid', 'marked_distance_cleared', 'editor', 'ok', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=none rejected=distance:INVARIANT'),
-  ('update_distance', 'invalid', 'with_shots_arrows_unfit', 'editor', 'ok', 'events=1 revision=1 distance=50 ends=6 arrows=6 face=0001 marked=true disabled=false ret=none rejected=config:UNFIT'),
-  ('update_distance', 'invalid', 'with_shots_ends_unfit', 'editor', 'ok', 'events=1 revision=1 distance=50 ends=6 arrows=6 face=0001 marked=true disabled=false ret=none rejected=config:UNFIT'),
-  ('update_distance', 'invalid', 'distance_disabled', 'editor', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=DISABLED'),
-  ('update_distance', 'invalid', 'unknown_distance', 'editor', 'ok', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=MISSING'),
-  ('update_distance', 'invalid', 'missing_is_marked', 'editor', 'error:[PT422]Marked/Unmarkedが不正です。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'marked_with_unset_distance', 'editor', 'error:[PT422]Markedにする変更と距離(m)の未設定を同時に指定できません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'config_missing_target_face', 'editor', 'error:[PT422]構成は的・エンド数・矢数の3項目で指定してください。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'config_target_face_null', 'editor', 'error:[PT422]構成の値が不正です。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'total_ends_zero', 'editor', 'error:[PT422]構成の値が不正です。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'unknown_target_face', 'editor', 'error:[PT422]指定された的が存在しません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'distance_zero', 'editor', 'error:[PT422]距離(m)が不正です。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'distance_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'config_total_ends_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'config_arrows_per_end_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'unknown_key', 'editor', 'error:[PT422]距離の変更に未知の項目が含まれています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'invalid', 'empty_changes', 'editor', 'error:[PT422]距離の変更はキーを持つオブジェクトで指定してください。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('update_distance', 'idempotent', 'replay', 'editor', 'ok', 'events=2 revision=2 distance=55 ends=3 arrows=3 face=0002 marked=true disabled=false ret=applied fields=distance,config'),
-  ('update_distance', 'idempotent', 'replay_partial', 'editor', 'ok', 'events=2 revision=2 distance=45 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance rejected=config:REJECTED'),
+  ('update_distance', 'invalid', 'unmarked_in_outdoor', 'shooter', 'ok', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=none rejected=is_marked:INVARIANT'),
+  ('update_distance', 'invalid', 'marked_distance_cleared', 'shooter', 'ok', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=none rejected=distance:INVARIANT'),
+  ('update_distance', 'invalid', 'with_shots_arrows_unfit', 'shooter', 'ok', 'events=1 revision=1 distance=50 ends=6 arrows=6 face=0001 marked=true disabled=false ret=none rejected=config:UNFIT'),
+  ('update_distance', 'invalid', 'with_shots_ends_unfit', 'shooter', 'ok', 'events=1 revision=1 distance=50 ends=6 arrows=6 face=0001 marked=true disabled=false ret=none rejected=config:UNFIT'),
+  ('update_distance', 'invalid', 'distance_disabled', 'shooter', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=DISABLED'),
+  ('update_distance', 'invalid', 'unknown_distance', 'shooter', 'ok', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=MISSING'),
+  ('update_distance', 'invalid', 'missing_is_marked', 'shooter', 'error:[PT422]Marked/Unmarkedが不正です。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'marked_with_unset_distance', 'shooter', 'error:[PT422]Markedにする変更と距離(m)の未設定を同時に指定できません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'config_missing_target_face', 'shooter', 'error:[PT422]構成は的・エンド数・矢数の3項目で指定してください。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'config_target_face_null', 'shooter', 'error:[PT422]構成の値が不正です。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'total_ends_zero', 'shooter', 'error:[PT422]構成の値が不正です。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'unknown_target_face', 'shooter', 'error:[PT422]指定された的が存在しません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'distance_zero', 'shooter', 'error:[PT422]距離(m)が不正です。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'distance_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'config_total_ends_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'config_arrows_per_end_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'unknown_key', 'shooter', 'error:[PT422]距離の変更に未知の項目が含まれています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'empty_changes', 'shooter', 'error:[PT422]距離の変更はキーを持つオブジェクトで指定してください。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'idempotent', 'replay', 'shooter', 'ok', 'events=2 revision=2 distance=55 ends=3 arrows=3 face=0002 marked=true disabled=false ret=applied fields=distance,config'),
+  ('update_distance', 'idempotent', 'replay_partial', 'shooter', 'ok', 'events=2 revision=2 distance=45 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance rejected=config:REJECTED'),
 
-  ('disable_round', 'success', 'default', 'editor', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=true'),
-  ('disable_round', 'unauthorized', 'default', 'viewer', 'error:[PT403]このラウンドを削除する権限がありません。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false'),
+  ('disable_round', 'success', 'default', 'shooter', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=true'),
+  ('disable_round', 'unauthorized', 'default', 'delegate', 'error:[PT403]このラウンドを削除する権限がありません。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false'),
   ('disable_round', 'unauthorized', 'default', 'non_member', 'error:[PT403]このラウンドを削除する権限がありません。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false'),
-  ('disable_round', 'invalid', 'unknown_round', 'editor', 'error:[PT403]このラウンドを削除する権限がありません。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false'),
-  ('disable_round', 'idempotent', 'replay', 'editor', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=true'),
-  ('disable_round', 'idempotent', 'already_disabled', 'editor', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=true'),
+  ('disable_round', 'invalid', 'unknown_round', 'shooter', 'error:[PT403]このラウンドを削除する権限がありません。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false'),
+  ('disable_round', 'idempotent', 'replay', 'shooter', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=true'),
+  ('disable_round', 'idempotent', 'already_disabled', 'shooter', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=true'),
 
-  ('disable_distance', 'success', 'default', 'editor', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=applied'),
-  ('disable_distance', 'unauthorized', 'default', 'viewer', 'error:[PT403]この距離を削除する権限がありません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('disable_distance', 'success', 'default', 'shooter', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=applied'),
+  ('disable_distance', 'success', 'default', 'delegate', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=applied'),
   ('disable_distance', 'unauthorized', 'default', 'non_member', 'error:[PT403]この距離を削除する権限がありません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
-  ('disable_distance', 'invalid', 'unknown_distance', 'editor', 'ok', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=MISSING'),
-  ('disable_distance', 'idempotent', 'replay', 'editor', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=applied'),
-  ('disable_distance', 'idempotent', 'already_disabled', 'editor', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=DISABLED'),
+  ('disable_distance', 'invalid', 'unknown_distance', 'shooter', 'ok', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=MISSING'),
+  ('disable_distance', 'idempotent', 'replay', 'shooter', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=applied'),
+  ('disable_distance', 'idempotent', 'already_disabled', 'shooter', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=DISABLED'),
 
-  ('record_shots', 'success', 'single', 'editor', 'ok', 'events=1 shots=[1#1:9/editor/r1] ret=[applied{score,shooter_id}]'),
-  ('record_shots', 'success', 'batch_overwrite_and_proxy', 'editor', 'ok', 'events=5 shots=[1#1:9/editor/r2 1#2:9/editor/r1 2#1:7/editor/r1 2#2:5/viewer/r1] ret=[applied{score},applied{score,shooter_id},applied{score,shooter_id}]'),
-  ('record_shots', 'success', 'batch_partial_unfit', 'editor', 'ok', 'events=1 shots=[1#1:9/editor/r1] ret=[applied{score,shooter_id},UNFIT]'),
-  ('record_shots', 'success', 'last_cell_of_range', 'editor', 'ok', 'events=1 shots=[6#6:9/editor/r1] ret=[applied{score,shooter_id}]'),
-  ('record_shots', 'success', 'same_cell_later_event_wins', 'editor', 'ok', 'events=2 shots=[1#1:7/editor/r2] ret=[applied{score,shooter_id},applied{score}]'),
-  ('record_shots', 'unauthorized', 'default', 'viewer', 'error:[PT403]この距離に矢を記録する権限がありません。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'success', 'single', 'shooter', 'ok', 'events=1 shots=[1#1:9/s1/r1] ret=[applied{score,shooter_number}]'),
+  ('record_shots', 'success', 'single', 'delegate', 'ok', 'events=1 shots=[1#1:9/s1/r1] ret=[applied{score,shooter_number}]'),
+  ('record_shots', 'success', 'reassign_shooter', 'shooter', 'ok', 'events=3 shots=[1#1:9/s2/r2 1#2:9/s1/r1] ret=[applied{score,shooter_number}]'),
+  ('record_shots', 'success', 'reassign_shooter', 'delegate', 'ok', 'events=3 shots=[1#1:9/s2/r2 1#2:9/s1/r1] ret=[applied{score,shooter_number}]'),
+  ('record_shots', 'success', 'batch_overwrite_and_proxy', 'shooter', 'ok', 'events=5 shots=[1#1:9/s1/r2 1#2:9/s1/r1 2#1:7/s1/r1 2#2:5/s2/r1] ret=[applied{score,shooter_number},applied{score,shooter_number},applied{score,shooter_number}]'),
+  ('record_shots', 'success', 'batch_partial_unfit', 'shooter', 'ok', 'events=1 shots=[1#1:9/s1/r1] ret=[applied{score,shooter_number},UNFIT]'),
+  ('record_shots', 'success', 'last_cell_of_range', 'shooter', 'ok', 'events=1 shots=[6#6:9/s1/r1] ret=[applied{score,shooter_number}]'),
+  ('record_shots', 'success', 'same_cell_later_event_wins', 'shooter', 'ok', 'events=2 shots=[1#1:7/s1/r2] ret=[applied{score,shooter_number},applied{score,shooter_number}]'),
   ('record_shots', 'unauthorized', 'default', 'non_member', 'error:[PT403]この距離に矢を記録する権限がありません。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'shooter_not_member', 'editor', 'error:[PT403]指定された射手はこのラウンドのメンバーではありません。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'batch_with_invalid_shooter', 'editor', 'error:[PT403]指定された射手はこのラウンドのメンバーではありません。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'unknown_distance', 'editor', 'ok', 'events=0 shots=[] ret=[MISSING]'),
-  ('record_shots', 'invalid', 'end_out_of_range', 'editor', 'ok', 'events=0 shots=[] ret=[UNFIT]'),
-  ('record_shots', 'invalid', 'score_not_on_target', 'editor', 'ok', 'events=0 shots=[] ret=[UNFIT]'),
-  ('record_shots', 'invalid', 'shot_number_out_of_range', 'editor', 'ok', 'events=0 shots=[] ret=[UNFIT]'),
-  ('record_shots', 'invalid', 'distance_disabled', 'editor', 'ok', 'events=0 shots=[] ret=[DISABLED]'),
-  ('record_shots', 'invalid', 'missing_score_str', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'missing_score_int', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'missing_end_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'missing_shot_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'shot_id_without_cell', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'missing_event_id', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'null_shooter', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'zero_shot_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'negative_shot_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'fractional_shot_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'idempotent', 'replay', 'editor', 'ok', 'events=1 shots=[1#1:9/editor/r1] ret=[applied{score,shooter_id}]'),
-  ('clear_shots', 'success', 'single', 'editor', 'ok', 'events=3 shots=[1#1:X/editor/r2/cleared 1#2:9/editor/r1] ret=[applied]'),
-  ('clear_shots', 'success', 'batch', 'editor', 'ok', 'events=4 shots=[1#1:X/editor/r2/cleared 1#2:9/editor/r2/cleared] ret=[applied,applied]'),
-  ('clear_shots', 'success', 'already_cleared', 'editor', 'ok', 'events=3 shots=[1#1:X/editor/r2/cleared 1#2:9/editor/r1] ret=[DISABLED]'),
-  ('clear_shots', 'unauthorized', 'default', 'viewer', 'error:[PT403]この距離の矢を取り消す権限がありません。', 'events=2 shots=[1#1:X/editor/r1 1#2:9/editor/r1] ret=-'),
-  ('clear_shots', 'unauthorized', 'default', 'non_member', 'error:[PT403]この距離の矢を取り消す権限がありません。', 'events=2 shots=[1#1:X/editor/r1 1#2:9/editor/r1] ret=-'),
-  ('clear_shots', 'invalid', 'unknown_distance', 'editor', 'ok', 'events=2 shots=[1#1:X/editor/r1 1#2:9/editor/r1] ret=[MISSING]'),
-  ('clear_shots', 'invalid', 'empty_cell', 'editor', 'ok', 'events=2 shots=[1#1:X/editor/r1 1#2:9/editor/r1] ret=[MISSING]'),
-  ('clear_shots', 'invalid', 'distance_disabled', 'editor', 'ok', 'events=2 shots=[1#1:X/editor/r1 1#2:9/editor/r1] ret=[DISABLED]'),
-  ('clear_shots', 'invalid', 'same_cell_of_other_distance', 'editor', 'ok', 'events=2 shots=[1#1:X/editor/r1 1#2:9/editor/r1] ret=[MISSING]'),
-  ('clear_shots', 'invalid', 'missing_shot_number', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1#1:X/editor/r1 1#2:9/editor/r1] ret=-'),
-  ('clear_shots', 'invalid', 'missing_end_number', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1#1:X/editor/r1 1#2:9/editor/r1] ret=-'),
-  ('clear_shots', 'invalid', 'shot_id_without_cell', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1#1:X/editor/r1 1#2:9/editor/r1] ret=-'),
-  ('clear_shots', 'invalid', 'missing_event_id', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1#1:X/editor/r1 1#2:9/editor/r1] ret=-'),
-  ('clear_shots', 'idempotent', 'replay', 'editor', 'ok', 'events=3 shots=[1#1:X/editor/r2/cleared 1#2:9/editor/r1] ret=[applied]'),
+  ('record_shots', 'invalid', 'shooter_not_in_round', 'shooter', 'error:[PT403]指定された射手はこのラウンドの射手ではありません。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'batch_with_invalid_shooter', 'shooter', 'error:[PT403]指定された射手はこのラウンドの射手ではありません。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'unknown_distance', 'shooter', 'ok', 'events=0 shots=[] ret=[MISSING]'),
+  ('record_shots', 'invalid', 'end_out_of_range', 'shooter', 'ok', 'events=0 shots=[] ret=[UNFIT]'),
+  ('record_shots', 'invalid', 'score_not_on_target', 'shooter', 'ok', 'events=0 shots=[] ret=[UNFIT]'),
+  ('record_shots', 'invalid', 'shot_number_out_of_range', 'shooter', 'ok', 'events=0 shots=[] ret=[UNFIT]'),
+  ('record_shots', 'invalid', 'distance_disabled', 'shooter', 'ok', 'events=0 shots=[] ret=[DISABLED]'),
+  ('record_shots', 'invalid', 'missing_score_str', 'shooter', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'missing_score_int', 'shooter', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'missing_end_number', 'shooter', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'missing_shot_number', 'shooter', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'shot_id_without_cell', 'shooter', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'missing_event_id', 'shooter', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'null_shooter', 'shooter', 'error:[PT422]射手の番号が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'zero_shot_number', 'shooter', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'negative_shot_number', 'shooter', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'fractional_shot_number', 'shooter', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'idempotent', 'replay', 'shooter', 'ok', 'events=1 shots=[1#1:9/s1/r1] ret=[applied{score,shooter_number}]'),
+  ('clear_shots', 'success', 'single', 'shooter', 'ok', 'events=3 shots=[1#1:X/s1/r2/cleared 1#2:9/s1/r1] ret=[applied]'),
+  ('clear_shots', 'success', 'single', 'delegate', 'ok', 'events=3 shots=[1#1:X/s1/r2/cleared 1#2:9/s1/r1] ret=[applied]'),
+  ('clear_shots', 'success', 'batch', 'shooter', 'ok', 'events=4 shots=[1#1:X/s1/r2/cleared 1#2:9/s1/r2/cleared] ret=[applied,applied]'),
+  ('clear_shots', 'success', 'already_cleared', 'shooter', 'ok', 'events=3 shots=[1#1:X/s1/r2/cleared 1#2:9/s1/r1] ret=[DISABLED]'),
+  ('clear_shots', 'unauthorized', 'default', 'non_member', 'error:[PT403]この距離の矢を取り消す権限がありません。', 'events=2 shots=[1#1:X/s1/r1 1#2:9/s1/r1] ret=-'),
+  ('clear_shots', 'invalid', 'unknown_distance', 'shooter', 'ok', 'events=2 shots=[1#1:X/s1/r1 1#2:9/s1/r1] ret=[MISSING]'),
+  ('clear_shots', 'invalid', 'empty_cell', 'shooter', 'ok', 'events=2 shots=[1#1:X/s1/r1 1#2:9/s1/r1] ret=[MISSING]'),
+  ('clear_shots', 'invalid', 'distance_disabled', 'shooter', 'ok', 'events=2 shots=[1#1:X/s1/r1 1#2:9/s1/r1] ret=[DISABLED]'),
+  ('clear_shots', 'invalid', 'same_cell_of_other_distance', 'shooter', 'ok', 'events=2 shots=[1#1:X/s1/r1 1#2:9/s1/r1] ret=[MISSING]'),
+  ('clear_shots', 'invalid', 'missing_shot_number', 'shooter', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1#1:X/s1/r1 1#2:9/s1/r1] ret=-'),
+  ('clear_shots', 'invalid', 'missing_end_number', 'shooter', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1#1:X/s1/r1 1#2:9/s1/r1] ret=-'),
+  ('clear_shots', 'invalid', 'shot_id_without_cell', 'shooter', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1#1:X/s1/r1 1#2:9/s1/r1] ret=-'),
+  ('clear_shots', 'invalid', 'missing_event_id', 'shooter', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1#1:X/s1/r1 1#2:9/s1/r1] ret=-'),
+  ('clear_shots', 'idempotent', 'replay', 'shooter', 'ok', 'events=3 shots=[1#1:X/s1/r2/cleared 1#2:9/s1/r1] ret=[applied]'),
 
-  ('save_round_as_preset', 'success', 'default', 'editor', 'ok', 'presets=1 owner=editor format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
-  ('save_round_as_preset', 'success', 'default', 'viewer', 'ok', 'presets=1 owner=viewer format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
+  ('add_round_shooter', 'success', 'default', 'shooter', 'ok', 'shooters=[1:owner 2:- 3:-] ret=applied'),
+  ('add_round_shooter', 'success', 'existing_number', 'shooter', 'ok', 'shooters=[1:owner 2:-] ret=applied'),
+  ('add_round_shooter', 'success', 'default', 'delegate', 'ok', 'shooters=[1:owner 2:- 3:-] ret=applied'),
+  ('add_round_shooter', 'success', 'existing_number', 'delegate', 'ok', 'shooters=[1:owner 2:-] ret=applied'),
+  ('add_round_shooter', 'unauthorized', 'default', 'non_member', 'error:[PT403]このラウンドに射手を追加する権限がありません。', 'shooters=[1:owner 2:-] ret=-'),
+  ('add_round_shooter', 'invalid', 'unknown_round', 'shooter', 'ok', 'shooters=[1:owner 2:-] ret=MISSING'),
+  ('add_round_shooter', 'invalid', 'round_disabled', 'shooter', 'ok', 'shooters=[1:owner 2:-] ret=DISABLED'),
+  ('add_round_shooter', 'invalid', 'zero_number', 'shooter', 'error:[PT422]射手の番号が不正です。', 'shooters=[1:owner 2:-] ret=-'),
+  ('add_round_shooter', 'idempotent', 'replay', 'shooter', 'ok', 'shooters=[1:owner 2:- 3:-] ret=applied'),
+
+  ('save_round_as_preset', 'success', 'default', 'shooter', 'ok', 'presets=1 owner=shooter format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
+  ('save_round_as_preset', 'success', 'default', 'delegate', 'ok', 'presets=1 owner=delegate format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
   ('save_round_as_preset', 'success', 'default', 'non_member', 'ok', 'presets=1 owner=non_member format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
-  ('save_round_as_preset', 'success', 'name_50_chars', 'editor', 'ok', 'presets=1 owner=editor format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
-  ('save_round_as_preset', 'success', 'at_limit', 'editor', 'ok', 'presets=1 owner=editor format=field bow=compound distance_rows=1 distances=[a:100:true:60x12:0001]'),
-  ('save_round_as_preset', 'invalid', 'name_51_chars', 'editor', 'error:new row for relation "preset_rounds" violates check constraint "preset_rounds_name_length"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'invalid_format', 'editor', 'error:new row for relation "preset_rounds" violates check constraint "preset_rounds_format_check"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'invalid_bow_type', 'editor', 'error:new row for relation "preset_rounds" violates check constraint "preset_rounds_bow_type_check"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'missing_name', 'editor', 'error:null value in column "name" of relation "preset_rounds" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'missing_format', 'editor', 'error:null value in column "format" of relation "preset_rounds" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'missing_bow_type', 'editor', 'error:null value in column "bow_type" of relation "preset_rounds" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'missing_position_key', 'editor', 'error:null value in column "position_key" of relation "preset_distances" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'missing_is_marked', 'editor', 'error:null value in column "is_marked" of relation "preset_distances" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'missing_target_face', 'editor', 'error:null value in column "target_face_id" of relation "preset_distances" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'marked_without_distance', 'editor', 'error:new row for relation "preset_distances" violates check constraint "preset_distances_marked_requires_distance"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'total_ends_zero', 'editor', 'error:new row for relation "preset_distances" violates check constraint "preset_distances_total_ends_positive"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'distance_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'total_ends_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'arrows_per_end_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'invalid', 'unknown_target_face', 'editor', 'error:insert or update on table "preset_distances" violates foreign key constraint "preset_distances_target_face_id_fkey"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
-  ('save_round_as_preset', 'idempotent', 'duplicate_save', 'editor', 'ok', 'presets=2 owner=editor format=field bow=compound distance_rows=4 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]');
+  ('save_round_as_preset', 'success', 'name_50_chars', 'shooter', 'ok', 'presets=1 owner=shooter format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
+  ('save_round_as_preset', 'success', 'at_limit', 'shooter', 'ok', 'presets=1 owner=shooter format=field bow=compound distance_rows=1 distances=[a:100:true:60x12:0001]'),
+  ('save_round_as_preset', 'invalid', 'name_51_chars', 'shooter', 'error:new row for relation "preset_rounds" violates check constraint "preset_rounds_name_length"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'invalid_format', 'shooter', 'error:new row for relation "preset_rounds" violates check constraint "preset_rounds_format_check"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'invalid_bow_type', 'shooter', 'error:new row for relation "preset_rounds" violates check constraint "preset_rounds_bow_type_check"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'missing_name', 'shooter', 'error:null value in column "name" of relation "preset_rounds" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'missing_format', 'shooter', 'error:null value in column "format" of relation "preset_rounds" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'missing_bow_type', 'shooter', 'error:null value in column "bow_type" of relation "preset_rounds" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'missing_position_key', 'shooter', 'error:null value in column "position_key" of relation "preset_distances" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'missing_is_marked', 'shooter', 'error:null value in column "is_marked" of relation "preset_distances" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'missing_target_face', 'shooter', 'error:null value in column "target_face_id" of relation "preset_distances" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'marked_without_distance', 'shooter', 'error:new row for relation "preset_distances" violates check constraint "preset_distances_marked_requires_distance"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'total_ends_zero', 'shooter', 'error:new row for relation "preset_distances" violates check constraint "preset_distances_total_ends_positive"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'distance_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'total_ends_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'arrows_per_end_over_limit', 'shooter', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'unknown_target_face', 'shooter', 'error:insert or update on table "preset_distances" violates foreign key constraint "preset_distances_target_face_id_fkey"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'idempotent', 'duplicate_save', 'shooter', 'ok', 'presets=2 owner=shooter format=field bow=compound distance_rows=4 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]');
 
 create temp table rpc_actual as
 select e.rpc, e.aspect, e.variant, e.actor, r.result, r.state

@@ -8,7 +8,7 @@ const entry: HistoryEntry = {
   endNumber: 1,
   shotNumber: 1,
   before: { alive: false },
-  after: { alive: true, scoreStr: "10", scoreInt: 10 },
+  after: { alive: true, scoreStr: "10", scoreInt: 10, shooterNumber: 1 },
 };
 
 describe("useScoreHistory", () => {

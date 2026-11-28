@@ -1,6 +1,6 @@
 import type { Tables } from "@/types/supabase";
 import type { RoundConfig } from "./round-config";
-import type { Distance, Shot } from "./scorecard-types";
+import type { CellShooter, Distance, Shooter, Shot } from "./scorecard-types";
 import { cellOfShot, shotCellKey } from "./shot-cell";
 import type { RoundStatus, SyncOperation } from "./sync-events";
 
@@ -29,6 +29,8 @@ export type ShotRow = Shot & { disabled: boolean };
 // サーバーのテーブルのうち、1つのラウンドに属する行。端末の基準と操作を重ねた最終状態の形。
 export type RoundTables = {
   round: RoundRow;
+  // round_usersのうち、射手の番号を持つ行。
+  shooters: Shooter[];
   distances: DistanceRow[];
   shots: ShotRow[];
 };
@@ -39,6 +41,9 @@ export type RoundState = {
   status: RoundStatus;
   distances: Distance[];
   shots: Shot[];
+  shooters: Shooter[];
+  // 取り消した矢を含む全てのマスの射手。書き直すマスの射手を決めるために持つ。
+  cellShooters: CellShooter[];
   // ラウンドの削除が列にあるか。画面は枠の中の見つからない表示にする。
   roundDisabled: boolean;
 };
@@ -59,6 +64,10 @@ export function roundTablesFromCreated(
       status: "in_progress",
       disabled: false,
     },
+    // 作成者は射つ人で、射手1に結び付いて始まる。
+    shooters: [
+      { shooter_number: 1, user_id: operation.creatorUserId, role: "owner" },
+    ],
     distances: operation.distances.map((d) => ({
       id: d.id,
       position_key: d.positionKey,
@@ -92,6 +101,15 @@ export function selectRoundState(tables: RoundTables): RoundState {
     shots: tables.shots
       .filter((s) => !s.disabled && liveIds.has(s.distance_id))
       .map(withoutDisabled),
+    shooters: tables.shooters,
+    cellShooters: tables.shots.map(
+      ({ distance_id, end_number, shot_number, shooter_number }) => ({
+        distance_id,
+        end_number,
+        shot_number,
+        shooter_number,
+      }),
+    ),
     roundDisabled: tables.round.disabled,
   };
 }
@@ -102,7 +120,7 @@ type ServerShot = Pick<
   Tables<"shots">,
   | "distance_id"
   | "end_number"
-  | "shooter_id"
+  | "shooter_number"
   | "score_str"
   | "score_int"
   | "shot_number"
@@ -121,15 +139,27 @@ type ServerDistance = Pick<
   | "revision"
   | "disabled_at"
 > & { shots: ServerShot[] };
+type ServerRoundUser = Pick<
+  Tables<"round_users">,
+  "shooter_number" | "user_id" | "role"
+>;
 export type ServerRound = Pick<
   Tables<"rounds">,
   "id" | "name" | "round_date" | "format" | "bow_type" | "revision"
 > & {
   status: RoundStatus;
+  round_users: ServerRoundUser[];
   distances: ServerDistance[];
 };
 
-// 取得した行から、端末に持つベース(表と、対象ごとのrevision)を作る。取り消した行は表に入れない。
+// 射手は、番号を持つ参加者の行である。
+function shootersOf(rows: readonly ServerRoundUser[]): Shooter[] {
+  return rows.flatMap(({ shooter_number, user_id, role }) =>
+    shooter_number === null ? [] : [{ shooter_number, user_id, role }],
+  );
+}
+
+// 取得した行から、端末に持つベース(表と、対象ごとのrevision)を作る。無効化した距離と、その矢は表に入れない。取り消した矢の行は、射手を保つため削除済みの印を付けて残す。
 // 戻りは、`round-base.ts`の`RoundBaseRecord`と同じ構造である(`round-base.ts`がこのファイルを参照するため、型の名前では書かない)。
 export function baseOfServerRound(round: ServerRound): {
   tables: RoundTables;
@@ -154,8 +184,8 @@ export function baseOfServerRound(round: ServerRound): {
         ...shot
       } = shotRow;
       revisions.shots[shotCellKey(cellOfShot(shot))] = shotRevision;
-      if (distanceLive && shotDisabledAt === null) {
-        shots.push({ ...shot, disabled: false });
+      if (distanceLive) {
+        shots.push({ ...shot, disabled: shotDisabledAt !== null });
       }
     }
   }
@@ -171,6 +201,7 @@ export function baseOfServerRound(round: ServerRound): {
         status: round.status,
         disabled: false,
       },
+      shooters: shootersOf(round.round_users),
       distances,
       shots,
     },

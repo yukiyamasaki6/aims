@@ -7,6 +7,7 @@ import {
   roundCreated,
   roundDisabled,
   roundUpdated,
+  shooterAdded,
   shotCleared,
   shotRecorded,
 } from "./round-op-test-helpers";
@@ -34,6 +35,13 @@ describe("conflicts", () => {
     ["作成の後の矢の取り消し", roundCreated(), shotCleared()],
     ["作成の後のラウンドの削除", roundCreated(), roundDisabled()],
     ["矢の後の作成", shotRecorded(), roundCreated()],
+    ["作成の後の射手の追加", roundCreated(), shooterAdded()],
+    ["ラウンドの削除の後の射手の追加", roundDisabled(), shooterAdded()],
+    [
+      "射手の追加の後の同じ番号の記録",
+      shooterAdded(2),
+      shotRecorded({ shooterNumber: 2 }),
+    ],
   ])("衝突する: %s", (_name, previous, next) => {
     // Given
     // When
@@ -82,6 +90,12 @@ describe("conflicts", () => {
       shotCleared({ endNumber: 2 }),
     ],
     ["別の距離の更新の後の削除", distanceUpdated(), distanceDisabled("d-2")],
+    [
+      "射手の追加の後の別の番号の記録",
+      shooterAdded(2),
+      shotRecorded({ shooterNumber: 1 }),
+    ],
+    ["射手の追加の後の矢の取り消し", shooterAdded(2), shotCleared()],
   ])("衝突しない: %s", (_name, previous, next) => {
     // Given
     // When

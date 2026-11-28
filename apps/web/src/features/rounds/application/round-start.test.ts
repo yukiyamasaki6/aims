@@ -76,7 +76,7 @@ function setup(
   const { pageNavigation, go } = createFakePageNavigation({ log: calls });
   const { ids, issued } = createFakeUniqueIds();
   const roundStart = createRoundStart({
-    hub: { append },
+    hub: { append, userId: () => "user-record" },
     sessionReader,
     ids,
     clock,
@@ -142,7 +142,7 @@ describe("createRoundStart", () => {
       expect(new Set(used)).toEqual(new Set(issued()));
     });
 
-    it("プリセット選択時の追記は、下書きにIDを足しただけで、内容を変えない", async () => {
+    it("プリセット選択時の追記は、下書きにIDと端末の記録の利用者(作成者)を足しただけで、内容を変えない", async () => {
       // Given
       const { roundStart, append } = setup();
 
@@ -162,7 +162,11 @@ describe("createRoundStart", () => {
         ...rest
       } = operation;
       const draft = roundCreatedDraftOf(preset, NOW, 0);
-      expect(rest).toEqual({ ...draft, distances: undefined });
+      expect(rest).toEqual({
+        ...draft,
+        creatorUserId: "user-record",
+        distances: undefined,
+      });
       expect(
         distances.map(({ eventId: _e, id: _i, ...content }) => content),
       ).toEqual(draft.distances);

@@ -55,7 +55,7 @@ const distanceA = {
 const shotA = {
   distance_id: "d-a",
   end_number: 1,
-  shooter_id: "user-1",
+  shooter_number: 2,
   score_str: "X",
   score_int: 10,
   shot_number: 1,
@@ -69,6 +69,10 @@ const serverRound: ServerRound = {
   bow_type: "recurve",
   status: "completed",
   revision: 3,
+  round_users: [
+    { shooter_number: 1, user_id: "user-1", role: "owner" },
+    { shooter_number: 2, user_id: null, role: null },
+  ],
   distances: [
     {
       ...distanceA,
@@ -198,6 +202,7 @@ describe("fetchRoundDetail", () => {
               status: "completed",
               disabled: false,
             },
+            shooters: serverRound.round_users,
             distances: [{ ...distanceA, disabled: false }],
             shots: [{ ...shotA, disabled: false }],
           },
@@ -308,6 +313,11 @@ describe("fetchRoundDetail", () => {
           bow_type: "recurve",
           status: "completed",
           revision: 3,
+          round_users: [
+            { shooter_number: 1, user_id: "user-1", role: "owner" },
+            { shooter_number: null, user_id: "user-2", role: "editor" },
+            { shooter_number: 2, user_id: null, role: null },
+          ],
           distances: [
             {
               ...distanceA,
@@ -340,7 +350,11 @@ describe("fetchRoundDetail", () => {
       status: "ok",
       data: {
         base: {
-          tables: { distances: [{ ...distanceA, disabled: false }], shots: [] },
+          tables: {
+            shooters: serverRound.round_users,
+            distances: [{ ...distanceA, disabled: false }],
+            shots: [{ ...shotA, shooter_number: 2, disabled: true }],
+          },
           revisions: { shots: { "d-a:1:1": 5 } },
         },
       },

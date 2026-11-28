@@ -32,6 +32,8 @@ export type SyncOperation =
       roundDate: string;
       format: string;
       bowType: string;
+      // 端末が作成者を射つ人(射手1)として持つための、操作した利用者。サーバーへは送らない(作成者は認証で決まる)。
+      creatorUserId: string | null;
       distances: {
         eventId: string;
         id: string;
@@ -78,6 +80,7 @@ export type SyncOperation =
       shotNumber: number;
       scoreStr: string;
       scoreInt: number;
+      shooterNumber: number;
     }
   | {
       type: "shot.cleared";
@@ -85,6 +88,13 @@ export type SyncOperation =
       distanceId: string;
       endNumber: number;
       shotNumber: number;
+    }
+  // 利用者に紐づかない射手を、番号を選んで加える。
+  | {
+      type: "shooter.added";
+      eventId: string;
+      roundId: string;
+      shooterNumber: number;
     };
 
 export type ShotOperation = Extract<

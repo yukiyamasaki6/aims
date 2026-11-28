@@ -31,7 +31,7 @@ export type RoundStart = {
 // 認証の確認で待つのは失効時だけで、上限はSHORT_WAIT_MS。時間切れは、確認できない(不明)として扱う。未認証と確認できたときだけ止め、不明のときは開始する(送信は認証が回復するまで待つ)。
 // 認証の確認の待ちの後に画面が無くなったときは、追記も遷移もしない。追記の保存の待ちの後に画面が無くなったときは、遷移だけしない(離れた後の強制遷移を防ぐ)。副作用が手続きの中の待ちの後にあるため、結果ではなく呼び出し側の`isCurrent`で守る。
 export function createRoundStart(deps: {
-  hub: Pick<RoundRecordHub, "append">;
+  hub: Pick<RoundRecordHub, "append" | "userId">;
   sessionReader: SessionReader;
   ids: Pick<UniqueIds, "next">;
   clock: Clock;
@@ -61,6 +61,7 @@ export function createRoundStart(deps: {
         ...draft,
         eventId: ids.next(),
         roundId: ids.next(),
+        creatorUserId: hub.userId(),
         distances: draft.distances.map((d) => ({
           ...d,
           eventId: ids.next(),
