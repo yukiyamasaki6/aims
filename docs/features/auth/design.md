@@ -40,7 +40,7 @@
 | `src/features/auth/ui/google-button.tsx`、`google-sign-in-section.tsx` | Googleのロゴつきのボタンと、サインインの「Googleで続ける」の部品 |
 | `src/hooks/use-page-restore.ts` | bfcacheからの復元(`pageshow`の`persisted`)を受ける共有の画面部品 |
 | `src/lib/supabase/infrastructure/client.ts` | ブラウザの接続。`detectSessionInUrl: false`(URLの`code`を自動で交換しない) |
-| `supabase/config.toml` | Auth発行制限Hook、メール確認必須、6桁・900秒、送信・検証制限、CAPTCHA、Googleの提供者、手動の結合、結合・解除の通知、戻り先の許可リスト |
+| `supabase/config.toml` | Auth発行制限Hook、メール確認必須、6桁・900秒、送信・検証制限、CAPTCHA、Googleの提供者、手動の結合、結合・解除の通知、戻り先の許可リスト、本番のメール送信(SMTP) |
 
 入口はClock・Connectivity・PageReplaceと認証実装を注入し、uiとinfrastructureを互いに依存させない。
 SDKのセッション・JWT・エラーの語彙はinfrastructureで内側の型へ変換する。
@@ -69,6 +69,15 @@ Custom Access Token Hookは`event jsonb -> jsonb`のSECURITY INVOKER関数とす
 メールはコード・15分の期限・心当たりがない場合の案内を示し、認証成立リンクやパスワード操作への導線を持たない。
 confirmation・magic_link・recoveryは共通の`supabase/templates/email-otp.html`を使い、旧用途別のsignup.html・already-signup.html・reset-password.htmlは廃止する。
 `/reset-password`のページ・ルート・定数・ガード対象を削除し、互換リダイレクトを設けない。
+
+### 本番のメール送信
+
+本番のSMTP(送信サービスはResend)は`supabase/config.toml`の`[remotes.production.auth.email.smtp]`だけで宣言し、`cd.yml`の`supabase config push`で反映する。
+ローカル・CIのメールを外へ送らず、本番の鍵を本番以外へ渡さないため、ルートとプレビューには宣言しない。
+パスワードは、GitHubのSecretsの`SMTP_PROD_PASSWORD`を、`cd.yml`が環境変数`SMTP_PASSWORD`で渡す。
+値が空でも反映は成功し、パスワードは送られず、本番の認証サービスの値が残る。
+鍵を替えるときは、Secretsを更新して`cd.yml`を手動で実行する(管理画面だけを替えると、次の反映でSecretsの鍵に戻る)。
+誤った鍵を反映したときは、管理画面で有効な鍵を入れ直し、次の反映までにSecretsも直す。
 
 ### チェック・失敗・離脱
 
