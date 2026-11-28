@@ -39,12 +39,12 @@
 | :--- | :--- | :--- |
 | `app/layout.tsx` | 入口 | ルートレイアウト。`<RootClientEntry>`で`SerwistProvider`と`children`を包む |
 | `app/root-client-entry.tsx` | 入口(クライアントの処理の部分) | 部品を`useState`の初期化で1度だけ生成して結び、効果で識別情報の記録と契機の手続きを始める。窓口をそれぞれの文脈(`RoundsListStoreProvider`、`RoundWindowProvider`)で、手続きの入れ物(`RoundProceduresProvider`)とともに画面へ渡し、セッションの手続き(`createSession`。記録の制御を記録の利用者の照合に、識別情報の記録を書き込みに受ける)を`SessionProvider`(`features/auth/ui`)で渡し、`RoundBaseRefresher`と`SwUpdateActivator`(`features/offline-pwa/ui`。更新の切り替えの手続きを受ける)を描き、効果で更新の切り替えの手続きも始める |
-| `features/rounds/domain/sync-events.ts` | domain | 操作の型。操作はクライアント生成のイベントIDを持つ。`round.updated`と`distance.updated`は、変えた項目だけの差分(`changes`)を持つ。矢の操作(`shot.recorded`・`shot.cleared`)はマス(`distanceId`、`endNumber`、`shotNumber`)で矢を指す。列の削除の有無`hasRoundDeletion`と、列のID(`round:<roundId>`)の変換 |
-| `features/rounds/domain/round-op-conflicts.ts` | domain | 操作の衝突の表と、並べる単位(lane)・送る単位の上限。矢の操作どうしは、同じマスなら衝突とする(別のマスは、同じエンドでも衝突しない) |
+| `features/rounds/domain/sync-events.ts` | domain | 操作の型。操作はクライアント生成のイベントIDを持つ。`round.updated`と`distance.updated`は、変えた項目だけの差分(`changes`)を持つ。矢の操作(`shot.recorded`・`shot.cleared`)はマス(`distanceId`、`endNumber`、`shotNumber`)で矢を指し、`shot.recorded`は射手番号を持つ。射手の追加`shooter.added`は番号を持つ(`rounds/shooters`)。列の削除の有無`hasRoundDeletion`と、列のID(`round:<roundId>`)の変換 |
+| `features/rounds/domain/round-op-conflicts.ts` | domain | 操作の衝突の表と、並べる単位(lane)・送る単位の上限。矢の操作どうしは、同じマスなら衝突とする(別のマスは、同じエンドでも衝突しない)。矢の記録は、同じラウンドの同じ番号の`shooter.added`と衝突する |
 | `features/rounds/domain/round-record.ts` | domain | 1つのラウンドの端末の記録(ベース、操作の列、保存の目印)を、変更しない値と関数にしたもの。起動時の合流(保存の行のうち記録に無い操作を前に、記録の操作を後ろに並べる。ベースは記録のものを優先する)、取得したベースの反映(新しい開始時刻でrevisionが古くないベースだけを採り、反映済みの確定済みの操作を外す)、確定の反映、効かなかった操作の除去 |
 | `features/rounds/domain/record-user.ts` | domain | 記録の利用者の照合`matchRecordUser`(`same`、`other`、`unowned`。送る前、常駐の一括の取得の前段、取得の反映が使う)。記録の利用者は文書の間、変わらない |
-| `features/rounds/domain/round-base.ts`、`round-tables.ts` | domain | 端末に持つベースの記録(`RoundBaseRecord`。サーバーの状態と対象ごとの`revision`)と、反映済みの判定`reflectsBase`(確定の`revision`と取得の`revision`の比較1つ。削除の印には確定済みの操作がすべて反映済み)・ベースの新旧`isOlderBase`。サーバーのテーブルの行の形(`RoundTables`。行は削除済みの印`disabled`を持ち、矢の`revision`はマスの鍵で引く)と、画面の状態(`RoundState`)を導く`selectRoundState`、取得した行から、`disabled: false`の印を付けた行で端末のベースを作る`baseOfServerRound` |
-| `features/rounds/domain/round-op-apply.ts`、`round-retention.ts` | domain | 基準のテーブルへ操作を重ねる`applyOperations(base, 操作, 的)`。操作ごとの処理は、サーバーの対応するRPCと同じ判定の順序にする。未確定の操作は、サーバーと同じ規則で項目ごとに判定し、確定済みの操作はサーバーが効かせた項目だけを判定せずに重ねる。構成の変更は矢を取り除かない(サーバーと同じ)。矢の記録は同じマスの行を上書きし(消した行は生き返る)、クリアは同じマスの行を消す。端末に保持するかの規則(`isRoundInProgress`、`keepsRoundBase`、`isRetainedForRefresh`) |
+| `features/rounds/domain/round-base.ts`、`round-tables.ts` | domain | 端末に持つベースの記録(`RoundBaseRecord`。サーバーの状態と対象ごとの`revision`)と、反映済みの判定`reflectsBase`(確定の`revision`と取得の`revision`の比較。削除の印には確定済みの操作がすべて反映済み。`shooter.added`は取得の射手の一覧に同じ番号があれば反映済み)・ベースの新旧`isOlderBase`。サーバーのテーブルの行の形(`RoundTables`。行は削除済みの印`disabled`を持ち、矢の`revision`はマスの鍵で引く)と、画面の状態(`RoundState`)を導く`selectRoundState`、取得した行と射手の一覧から端末のベースを作る`baseOfServerRound`(取り消し済みの矢の行は、`disabled: true`の印と射手番号を付けて残す) |
+| `features/rounds/domain/round-op-apply.ts`、`round-retention.ts` | domain | 基準のテーブルへ操作を重ねる`applyOperations(base, 操作, 的)`。操作ごとの処理は、サーバーの対応するRPCと同じ判定の順序にする。未確定の操作は、サーバーと同じ規則で項目ごとに判定し、確定済みの操作はサーバーが効かせた項目だけを判定せずに重ねる。構成の変更は矢を取り除かない(サーバーと同じ)。矢の記録は同じマスの行を指定の射手で上書きし(消した行は生き返る)、射手の追加は同じ番号が無いときだけ一覧へ足し、クリアは同じマスの行を消す。端末に保持するかの規則(`isRoundInProgress`、`keepsRoundBase`、`isRetainedForRefresh`) |
 | `features/rounds/domain/round-opening.ts` | domain | 詳細を開くときの判断(`roundOpening`、`isUnknownToServer`)。詳細の窓口が使う |
 | `features/rounds/domain/round-view.ts`、`round-list.ts` | domain | 画面の状態の導出(起点`originOf`、`roundScreenState`)。履歴の材料の型、削除済みと入力中と合計点の導出 |
 | `features/rounds/domain/rounds-list-view.ts` | domain | ホームと点数一覧の表示の内容の決定 |
@@ -108,7 +108,7 @@
    サーバーは、受理した操作の各項目を確定の順で判定し、効かなかった項目を応答で返す。効かなかった操作は列から外し、効いた項目だけを確定として残す。
    効かなかった操作または項目がある応答を受けたとき、サーバーの状態を取り直してベースを差し替える。
    それ以外の成功では再取得しない。
-5. 効いた操作は、RPCが返した`revision`と効いた項目を付けて列に残す。確定の時点では外さない。列から取り除くのは、取得したベースが組に入るとき、そのベースに反映済みだと確かめた操作だけである。確かめるのは1つの規則(`reflectsBase`。確定の`revision`と取得の`revision`の比較)で、特例を持たない。失敗した操作は、再読み込み後に再送できるよう残す。
+5. 効いた操作は、RPCが返した`revision`と効いた項目を付けて列に残す。確定の時点では外さない。列から取り除くのは、取得したベースが組に入るとき、そのベースに反映済みだと確かめた操作だけである。確かめるのは1つの規則(`reflectsBase`)で、確定の`revision`と取得の`revision`を比べ、射手の追加は取得の射手の一覧の番号で確かめる。失敗した操作は、再読み込み後に再送できるよう残す。
 6. 試行の直前にオフラインなら送らず保留にする。この見送りはリトライ回数を消費しない。リトライ待機中のオフライン検知でも保留にする。保留からの再開は`online`イベントのみで行う。
 7. 画面を開くと、サーバーの状態を取得して組へ反映する(`commit`)。ベースは新しい取得(`startedAt`)の方を使い、確定した`revision`が取得の`revision`以下の操作は列から外れる。残りは`seq`順にベースへ重ねて表示する。未確定の操作は、同じイベントIDで再送する。ベースの差し替えは取得の時点だけで行い、操作ごとには取得しない。
 7a. ベースは、オンラインの間に、画面を開く取得のほかに、入力中のラウンドと端末が保持するラウンドの一括の取得(認証イベント・`online`・可視化。ホーム・点数一覧を開いたときは含めない)でも更新する。保持の規則は、状態が入力中か、ベースに反映されていない操作(未送信、または確定済みで取得に未反映)が残るラウンドで、削除済みにも例外を設けない。当たらない(完了で送信済み、削除が受理された)ラウンドは、ベースも操作も端末に残さない。未送信の削除が残るラウンドはベースごと保持し、開くと削除済みとして遷移元へ戻る。通信できないとき、保持するラウンドは端末のベースと操作の列で開く。
@@ -122,7 +122,7 @@
 - 書き込みは認可つきRPCに限り、RLSで直接の書き込みを禁止する。認可、不変条件、並行更新の検証はDB側で保証する。
 - 変更は追記専用のイベントログに記録し、既存テーブルを同一トランザクションの射影とする。
 - `create_round`は他の書き込みRPCと同じ形で、作成の`revision` 1を返す。重複の`event_id`は作成者を照合し、違えば`PT403`とする。
-- 書き込みRPC(`create_round`、`update_round`、`disable_round`、`create_distance`、`update_distance`、`disable_distance`、`record_shots`、`clear_shots`)は、操作ごとに`{revision, applied, applied_fields, rejected_fields, reason}`の形で返す(`create_round`、`disable_round`、`disable_distance`は`applied_fields`と`rejected_fields`を持たない)。
+- 書き込みRPC(`create_round`、`update_round`、`disable_round`、`create_distance`、`update_distance`、`disable_distance`、`record_shots`、`clear_shots`)と`add_round_shooter`は、操作ごとに`{revision, applied, applied_fields, rejected_fields, reason}`の形で返す(`create_round`、`disable_round`、`disable_distance`、`add_round_shooter`は`applied_fields`と`rejected_fields`を持たず、`add_round_shooter`の`revision`はnull)。
 - `record_shots`と`clear_shots`は、配列の先頭から順に1トランザクションで処理し、入力の順の結果の配列を返す。
 - 設定の保存は、変えた項目だけを持つjsonbの差分(`p_changes`)で送る。`update_round`の差分は、ラウンドの状態(`status`。`rounds/completion`)も項目として持ち、常に効く。キーがあれば変えた項目、無ければ変えていない項目で、値のnullは「未設定にする」を表す(距離(m)だけ)。構成は的・エンド数・射数/エンドの1組で、`config`キーに3項目を揃えて持つ。
 - 判定は確定の時点の状態だけで行い、操作に前提の版を持たせない。効く項目は同じ項目の後勝ちで、規則に当たる項目だけを効かせない。
@@ -131,8 +131,9 @@
   - 矢: 矢はマス(`distance_id`、`end_number`、`shot_number`)で指し、矢のIDを持たない。要素の`end_number`と`shot_number`は1以上の整数で、外れれば契約の不一致(`PT422`)である。現在の構成で無効な記録(エンドがエンド数を超える、マスの番号が射数/エンドを超える、的に無い点数)は効かない(`UNFIT`)。
   - 同じマス: `record_shots`は、マスに行があれば上書きし(消した行は生き返る)、無ければ行を作る。同じマスへの記録・取り消しは、確定の順の後勝ちである。
   - 射数/エンドの上限: マスの範囲の判定(距離の行のロックの下で行う)と、マスごとに1行(主キー)であることで守り、生きている矢を数えない。範囲内のマスの数が射数/エンドに等しいため、生きている矢は射数/エンドを超えない。
-  - 矢の項目: `record_shots`は要素に含まれる項目だけを変える。射手(`shooter_id`)はキーがあるときだけ変え、行の無いマスへの記録で射手が無ければ実行者にする。消した行を生き返らせる記録で射手が無ければ、行の射手を引き継ぐ。
-  - 射手の保持: 端末は射手をこの端末の利用者として記録する矢の操作に射手を含めず、射手は変わらない(`rounds/sync`のE2E)。別の利用者を射手にした矢が、射手を含まない操作で書き換えられても射手を保つことは、DBのテスト(pgTAP、`supabase/tests/shot_identity.sql`)で担保する。
+  - 矢の項目: `record_shots`は点数と射手番号を必須とし、両方を書く(`rounds/shooters`)。取り消しは射手番号を変えない。
+  - 射手の追加: `shooter.added`は`add_round_shooter`を単独の要求で呼ぶ。応答は`{revision: null, applied, reason}`で、成功は確認済みの印(`ackedRevision = 0`)で保存し、取得の射手の一覧に番号が現れるまで列に残す。`applied`が偽の操作は列から外す。
+  - ベースの新旧: 残っているラウンドで、既知の射手番号が欠けた取得は古いベースとする(射手は一覧から消えないため)。
   - 行の無いマスのクリアは`MISSING`、取り消し済みのマスのクリアは`DISABLED`で、どちらも記録しない。
   - 構成: 表示中の矢に新しい構成で無効なもの(新しい範囲の外のマスの矢、新しい的に無い点数)があれば、3項目とも効かない(`UNFIT`)。同じ保存の他の項目は効く。効くときは表示中の矢を値もマスも変えずに引き継ぐ。画面は得点のある距離の構成を変えさせないため、遅れて届く変更への備えである。
   - 不変条件: Unmarkedはフィールドだけ、Markedは距離(m)必須。破る後の項目は効かせず(`INVARIANT`)、補正しない。同じ操作の中ではMarked/Unmarkedを距離(m)より先に判定するが、Markedの判定には同じ操作で変更する距離(m)(保存後の値)を使い、Markedと距離(m)の入力を同じ保存で両方効かせる。
@@ -164,12 +165,12 @@
 | いつ送り、いつ取り直すかを同期の1か所で決め、画面には状態と変更の方法だけを渡す | 経路の重複の解消(受け入れ条件12)と画面の検証の独立のため | 画面が送信の状態を表示するようになったとき |
 | 画面の導出を`applyOperations`1つにする | 読み込み時と操作時で導出が食い違い、表示がちらつくため | 導出が1つで足りなくなったとき |
 | 基準と最終状態をサーバーのテーブルの形にし、操作ごとの処理をRPCに1対1で対応させ、画面の形は`selectRoundState`で導く | サーバーの規則の変更が、対応するRPCの1か所へ写せ、画面の形への影響が投影で止まるため | サーバーのテーブルの形が変わるとき |
-| 反映の判定は、RPCが返す`revision`と取得の`revision`の比較にする | 時刻や取得のやり直しの推測では、取得が確定の前後どちらに当たるか決められないため。取得は1つのスナップショットでなく、適用の前後を時刻で決められない | 取得が1つのスナップショットになったとき |
+| 反映の判定は、RPCが返す`revision`と取得の`revision`の比較にする | 時刻や取得のやり直しの推測では、取得が確定の前後どちらに当たるか決められないため。取得は1つのスナップショットでなく、適用の前後を時刻で決められない。射手の追加は`revision`を持たないため、取得の射手の一覧の番号で確かめる | 取得が1つのスナップショットになったとき |
 | 反映済みの判定に特例を持たない | 特例は、取得より新しく確定した取り消しだけを外し、前の記録が重なり直るため | 反映を確かめられない操作が増えたとき |
 | 矢をマス(距離、エンド、マスの番号)で識別し、矢のIDを持たない。マスの番号を射順にする | マスが射順を兼ね、1つのマスの矢が1本に決まるため。矢をIDで識別して射順を別に持つ方式は、同じマスの2本を防ぐ規則(射順の重なりを効かせない、復活で射順を外す)と、並べるための時刻順のIDが要るためやめた | 1つのマスに複数の矢を持つ要求(射手別のマスなど)が出たとき |
 | 同じマスへの記録・取り消し・生き返りを、確定の順の後勝ちにする | 同じマスは同じ1本の矢で、ラウンド・距離の項目と同じ規則で収束させるため。先に確定した矢を残して後の記録を効かせない案は、戻る・直しが知らない他端末の書き込みに負けて利用者の操作が消えるため採らない。上書きされた矢は利用者に知らせない(要求の対象外) | 利用者が上書きを知る・選ぶ要求が出たとき |
 | 射数/エンドの上限を、マスの範囲の判定と主キーで守り、生きている矢を数えない | 範囲内のマスの数が射数/エンドに等しく、上書きは矢の数を増やさないため、範囲を守れば数は超えない。範囲の判定は距離の行のロックの下で行い、構成の変更と直列にする | 1つのマスに複数の矢を持つとき |
-| 矢の書き込みは要素に含まれる項目だけを変える | 点数の変更が、他端末が後で変えた射手を古い値で戻さないため | 項目ごとの差分の操作を別に設けるとき |
+| 矢の記録は点数と射手を1つの操作で書く | 射手の指定を必須にし、同じマスを射手を含めて後に保存した内容にするため(`rounds/shooters`) | 射手を指定せずに点数だけを変える操作を設けるとき |
 | ベースと操作の列を1つの組として、端末では1つのトランザクション、タブでは1回の反映で変える | 別のDBやstoreを別々に書くと原子的に書けず、画面で、ベースが古いまま列から操作だけが外れて点数が消えるため。`ops`と`bases`を同じDB(`aims-sync`)に置く | 組を変える書き込みが1つのトランザクションで足りなくなったとき |
 | 変更をIndexedDBへ先に永続化し、非同期に送る | 書き込み完了を待つと入力が遅く、再読み込みや通信断で記録を失うため。Realtimeによる他端末の変更の受信は対象外である | 他端末との共同編集が要るとき |
 | 同期の状態(送信中、保留、送信済み)を画面に表示しない | 同期は自動で行われ、利用者が関与せず、表示が求める対処も無いため。表示はそのラウンドを開いている間しか見えず、対処が要る場面の手がかりとしても弱い | 利用者が対処すべき同期の問題を知らせる要求が出たとき |

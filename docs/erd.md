@@ -2,9 +2,9 @@
 
 | テーブル名                  | 説明                                                                             |
 | :------------------------ | :------------------------------------------------------------------------------ |
-| `users`                   | ユーザーの基本プロフィール情報を保持する。アカウント削除で、射手・操作者の置き先になる「削除済みの利用者」(`00000000-0000-4000-8000-000000000001`。対応する`auth.users`の行はサインインできない)の1行を持つ |
+| `users`                   | ユーザーの基本プロフィール情報を保持する。アカウント削除で、操作者の置き先になる「削除済みの利用者」(`00000000-0000-4000-8000-000000000001`。対応する`auth.users`の行はサインインできない)の1行を持つ |
 | `rounds`                  | アーチェリーの記録単位となる「ラウンド」（1回の練習・試合セッション）を表す。距離構成は`distances`が持つ |
-| `round_users`             | 特定のラウンドに対するユーザーのアクセス権限・ロールを管理する多対多の中間テーブル。1ラウンドに複数のeditor/viewerが存在しうる |
+| `round_users`             | ラウンドの参加者の役割(射つ人`owner`・代理の人`editor`)と射手(番号)を持つ。利用者に紐づかない射手の行は利用者も役割も持たない |
 | `distances`               | ラウンド中に射撃する特定の距離（70m、50m等）を表す。1ラウンドに複数の距離を持てる            |
 | `shots`                   | 1行が1つのマス(距離・エンド・マスの番号)の矢で、点数・射手を記録する。矢はマスで識別し、マスの番号が射順である。1つのマスの行は1つだけである |
 | `round_events` | `rounds`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない。効かせた操作の、効いた項目だけを記録する |
@@ -24,7 +24,9 @@ erDiagram
     rounds ||--o{ round_users : "1対多"
     rounds ||--o{ distances : "1対多"
     distances ||--o{ shots : "1対多"
-    users ||--o{ shots : "1対多"
+    round_users ||--o{ shots : "射手"
+    round_users ||--o{ shot_events : "射手"
+    distances ||--o{ shot_events : "1対多"
     target_faces ||--o{ target_face_spots : "1対多"
     target_face_spots ||--o{ target_face_rings : "1対多"
     target_faces ||--o{ distances : "1対多"
@@ -55,15 +57,16 @@ erDiagram
     }
     round_users {
         uuid id PK "サロゲートID"
-        uuid round_id FK, UK "対象ラウンド [UK: (round_id, user_id)]"
-        uuid user_id FK, UK "対象ユーザ [UK: (round_id, user_id)]"
-        string role "ユーザのラウンドへのアクセス権限 [CHECK: editor / viewer]"
+        uuid round_id FK, UK "対象ラウンド [UK: (round_id, user_id)、(round_id, shooter_number)]"
+        uuid user_id FK, UK "利用者 [NULLABLE: null=利用者に紐づかない射手] [UK: (round_id, user_id)] [利用者の削除は連鎖しない]"
+        string role "役割 [NULLABLE: null=利用者に紐づかない射手] [CHECK: owner / editor]"
+        integer shooter_number UK "射手の番号 [NULLABLE: null=代理の人] [CHECK: > 0] [UK: (round_id, shooter_number)]"
         timestamp created_at "作成時刻"
         timestamp updated_at "最終更新時刻"
     }
     distances {
         uuid id PK "サロゲートID"
-        uuid round_id FK "所属ラウンド"
+        uuid round_id FK, UK "所属ラウンド [UK: (round_id, id)]"
         string position_key "ラウンド内の並び順を表す可変長キー。重複を許し、同じキーはIDで順序を決める。表示番号は(position_key, id)順から導出"
         integer distance "距離（m） [CHECK: > 0, <= 100] [NULLABLE: is_marked=falseの場合]"
         integer total_ends "総エンド数 [CHECK: > 0, <= 60]"
@@ -76,10 +79,11 @@ erDiagram
         timestamp updated_at "最終更新時刻"
     }
     shots {
-        uuid distance_id PK, FK "所属する距離 [PK: (distance_id, end_number, shot_number)]"
+        uuid round_id FK "所属ラウンド [NOT NULL] [FK: (round_id, distance_id)、(round_id, shooter_number)]"
+        uuid distance_id PK, FK "所属する距離 [PK: (distance_id, end_number, shot_number)] [FK: (round_id, distance_id) → distances、削除は連鎖]"
         integer end_number PK "距離内で何番目のエンドか [PK: (distance_id, end_number, shot_number)] [CHECK: > 0] [エンド数以下(RPCが判定する)]"
         integer shot_number PK "エンド内のマスの番号で、その矢の射順 [PK: (distance_id, end_number, shot_number)] [NOT NULL] [CHECK: >= 1] [射数/エンド以下(RPCが判定する)]"
-        uuid shooter_id FK "行射したユーザ。削除した利用者の矢は「削除済みの利用者」になる"
+        integer shooter_number FK "射手の番号 [NOT NULL] [FK: (round_id, shooter_number) → round_users]"
         string score_str "点数の文字列表現（例：X, M, 10）"
         integer score_int "点数の整数表現"
         bigint revision "現在のサーバー確定リビジョン [NOT NULL] [CHECK: >= 1]"
@@ -121,14 +125,15 @@ erDiagram
     }
     shot_events {
         uuid event_id PK "クライアント生成UUID。冪等性キー"
-        uuid distance_id "対象距離の論理FK"
+        uuid round_id FK "対象ラウンド [NOT NULL] [FK: (round_id, distance_id)、(round_id, shooter_number)]"
+        uuid distance_id FK "対象距離 [FK: (round_id, distance_id) → distances]"
         string type "操作種別 [CHECK: RECORDED / CLEARED]"
         uuid author_id FK "操作実行ユーザ"
         bigint revision UK "サーバー確定順 [NOT NULL] [CHECK: >= 1] [UK: (distance_id, end_number, shot_number, revision)]"
-        text_array set_fields "RECORDEDで効いた属性(score、shooter_id) [DB制約でなくRPCが保つ形。RECORDED: 必須、scoreを含む / CLEARED: NULL]"
+        text_array set_fields "RECORDEDで効いた属性(score、shooter_number) [DB制約でなくRPCが保つ形。RECORDED: 必須、scoreを含む / CLEARED: NULL]"
         integer end_number "対象のマスのエンド。shots.end_numberと同じ制約。全イベント種別で必須"
         integer shot_number "対象のマスの番号。shots.shot_numberと同じ制約。全イベント種別で必須"
-        uuid shooter_id FK "shots.shooter_idと同じ制約 [DB制約でなくRPCが保つ形。RECORDED: 必須 / CLEARED: NULL]"
+        integer shooter_number FK "射手の番号。全イベント種別で必須。CLEAREDは取り消した矢の射手 [NOT NULL] [FK: (round_id, shooter_number) → round_users]"
         string score_str "shots.score_strと同じ制約 [DB制約でなくRPCが保つ形。RECORDED: 必須 / CLEARED: NULL]"
         integer score_int "shots.score_intと同じ制約 [DB制約でなくRPCが保つ形。RECORDED: 必須 / CLEARED: NULL]"
         timestamp created_at "サーバー受領時刻 [DEFAULT: clock_timestamp()]"
@@ -186,6 +191,30 @@ erDiagram
     }
 ```
 
+## 射手と役割
+
+`round_users`の有効な行は、射つ人(利用者、`owner`、番号)、代理の人(利用者、`editor`、番号なし)、利用者に紐づかない射手(番号だけ)の3種類で、次のCHECK制約が保つ(`rounds/shooters`、`rounds/roles`)。
+
+```sql
+CHECK (role IN ('owner','editor')),
+CHECK (role IS DISTINCT FROM 'owner' OR shooter_number IS NOT NULL),
+CHECK (shooter_number > 0),
+CHECK (role IS NULL OR user_id IS NOT NULL),
+CHECK (user_id IS NULL OR role IS NOT NULL),
+CHECK (user_id IS NOT NULL OR
+       (role IS NULL AND shooter_number IS NOT NULL)),
+CHECK (user_id IS NULL OR shooter_number IS NULL
+       OR role IS NOT DISTINCT FROM 'owner'),
+CHECK (user_id IS DISTINCT FROM
+       '00000000-0000-4000-8000-000000000001'::uuid)
+```
+
+- `round_users.user_id`は`users(id)`を`ON DELETE NO ACTION`で参照し、`round_id`は`rounds(id)`を`ON DELETE CASCADE`で参照する。
+- 一度付いた`shooter_number`の変更とNULL化、射手の行の`round_id`の変更は、更新のトリガーが拒否する。`user_id`は変更できる。
+- 残るラウンドに`owner`が1人以上いることを、遅延制約トリガーがコミットの時点で検査する。
+- `shots`と`shot_events`の射手の外部キーは`ON DELETE NO ACTION`・`ON UPDATE NO ACTION`で、両表は`(round_id, shooter_number)`の索引を持つ。
+- 距離の外部キーは`(round_id, distance_id)`が`distances(round_id, id)`を参照し、`shots`は`ON DELETE CASCADE`、`shot_events`は`ON DELETE NO ACTION`である(どちらも`ON UPDATE NO ACTION`)。
+
 ## 矢の記録
 
 - `shots`の1行は1つのマスの矢で、マス(`distance_id`、`end_number`、`shot_number`)で識別する。矢のIDの列は持たない。マスの番号が射順で、画面はマスを番号順に固定で並べる(`rounds/score-entry`)。
@@ -198,7 +227,7 @@ erDiagram
 
 `delete_account()`が、1トランザクションで、利用者のアカウントと記録を取り除く(`auth/delete-account`)。
 
-- 利用者を除くと編集者がいなくなるラウンドは、ラウンド・距離・矢と、3つの変更履歴を全て消す(変更履歴の`round_id`・`distance_id`は論理FKのため、関数が明示して消す)。
-- 残るラウンドでは、`shots.shooter_id`、`shot_events.shooter_id`と各変更履歴の`author_id`を「削除済みの利用者」へ置き換える。他の列は変えない。
-- `users`の行、`round_users`、個人の`preset_rounds`は、`auth.users`の削除の連鎖で消える。
+- 利用者を除くと射つ人がいなくなるラウンドは、代理の人が残っていても、ラウンド・距離・矢と、3つの変更履歴を全て消す(`round_events`・`distance_events`の`round_id`・`distance_id`は論理FKのため、関数が明示して消す。変更履歴を先に消してからラウンドを消す)。
+- 残るラウンドでは、利用者の射手の行の`user_id`と`role`をNULLにし(番号、矢と履歴の射手は変えない)、射手でない参加の行を削除する。各変更履歴の`author_id`は「削除済みの利用者」へ置き換える。
+- `users`の行と個人の`preset_rounds`は、`auth.users`の削除の連鎖で消える。
 - `users`を参照する列を足すときは、この関数の削除または置き換えに加える。

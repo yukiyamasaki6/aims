@@ -72,6 +72,8 @@
 | rounds | completion | ラウンドの入力を完了にする | 点数一覧・ラウンド詳細 |
 | rounds | delete | ラウンドを削除する | 点数一覧・ラウンド詳細 |
 | rounds | sync | 記録を失わず同期する | RDBMS・データ基盤 |
+| rounds | shooters | 1人で記録しても、どの矢を誰が射ったかが分かるように記録する | なし |
+| rounds | roles | ラウンドの射つ人と代理の人を分け、削除を射つ人に限る | なし |
 | app | introduction | やりたいことが実現できるかを知り、記録を始める | 最小限の紹介画面、機能紹介 |
 | app | navigation | 迷わず移動する | 基本テーマ |
 | app | offline-pwa | アプリとして入れて、オフラインでも使う | PWA・オフライン点数記録 |
