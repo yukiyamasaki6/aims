@@ -8,6 +8,7 @@ import {
   roundCreated,
   roundDisabled,
   roundUpdated,
+  shooterAdded,
   shotCleared,
   shotRecorded,
 } from "../domain/round-op-test-helpers";
@@ -74,6 +75,7 @@ describe("createRoundOpTransport", () => {
     ["create_distance", distanceCreated()],
     ["update_distance", distanceUpdated()],
     ["disable_distance", distanceDisabled()],
+    ["add_round_shooter", shooterAdded()],
   ])("単独の操作は%sで送り、判定結果を返す", async (rpc, operation) => {
     // Given
 
@@ -87,7 +89,7 @@ describe("createRoundOpTransport", () => {
   });
 
   describe("ラウンドの作成", () => {
-    it("create_roundへ距離を含めて送り、jsonbの返りを判定結果として返す", async () => {
+    it("create_roundへ距離を含めて送り、作成者は送らず、jsonbの返りを判定結果として返す", async () => {
       // Given
       client.rpc.mockResolvedValue({
         data: resultJson(1),
@@ -138,7 +140,7 @@ describe("createRoundOpTransport", () => {
     });
   });
 
-  it("矢1件の記録は、マス(距離・エンド・番号)と点数を、矢のIDと射手を送らずにrecord_shotsへ送る", async () => {
+  it("矢1件の記録は、マス(距離・エンド・番号)と点数と射手番号を、矢のIDと射手の利用者IDを送らずにrecord_shotsへ送る", async () => {
     // Given
     client.rpc.mockResolvedValue({
       data: [resultJson(7)],
@@ -160,12 +162,63 @@ describe("createRoundOpTransport", () => {
           shot_number: 1,
           score_str: "10",
           score_int: 10,
+          shooter_number: 1,
         },
       ],
     });
   });
 
-  it("矢の束は1回のRPCへ列の順で詰め、マスで指し、矢のIDと射手は送らず、revisionを同じ順で返す", async () => {
+  it("射手の追加は、ラウンドと数値の番号でadd_round_shooterを1回呼び、revisionの無い成功を適用された結果にする", async () => {
+    // Given
+    client.rpc.mockResolvedValue({
+      data: { revision: null, applied: true, reason: null },
+      error: null,
+      status: 200,
+    });
+
+    // When
+    const outcome = await sendRoundBatch(flight(shooterAdded(2147483647)));
+
+    // Then
+    expect(client.rpc).toHaveBeenCalledExactlyOnceWith("add_round_shooter", {
+      p_round_id: "round-1",
+      p_shooter_number: 2147483647,
+    });
+    expect(outcome).toEqual({
+      ok: true,
+      results: [
+        {
+          revision: null,
+          applied: true,
+          appliedFields: null,
+          hasRejectedFields: false,
+        },
+      ],
+    });
+  });
+
+  it.each(["MISSING", "DISABLED"])(
+    "射手の追加の%sの返りは、適用されない結果にする",
+    async (reason) => {
+      // Given
+      client.rpc.mockResolvedValue({
+        data: { revision: null, applied: false, reason },
+        error: null,
+        status: 200,
+      });
+
+      // When
+      const outcome = await sendRoundBatch(flight(shooterAdded()));
+
+      // Then
+      expect(outcome).toMatchObject({
+        ok: true,
+        results: [{ revision: null, applied: false }],
+      });
+    },
+  );
+
+  it("矢の束は1回のRPCへ列の順で詰め、マスで指し、各矢の射手番号を数値で送り、矢のIDは送らず、revisionを同じ順で返す", async () => {
     // Given
     client.rpc.mockResolvedValue({
       data: [resultJson(2), resultJson(3), resultJson(4)],
@@ -176,9 +229,13 @@ describe("createRoundOpTransport", () => {
     // When
     const outcome = await sendRoundBatch(
       flight(
-        shotRecorded({ eventId: "a" }),
-        shotRecorded({ eventId: "b", shotNumber: 2 }),
-        shotRecorded({ eventId: "c", shotNumber: 3 }),
+        shotRecorded({ eventId: "a", shooterNumber: 1 }),
+        shotRecorded({ eventId: "b", shotNumber: 2, shooterNumber: 2 }),
+        shotRecorded({
+          eventId: "c",
+          shotNumber: 3,
+          shooterNumber: 2147483647,
+        }),
       ),
     );
 
@@ -196,6 +253,9 @@ describe("createRoundOpTransport", () => {
     expect(
       p_shots.map((shot: { shot_number: number }) => shot.shot_number),
     ).toEqual([1, 2, 3]);
+    expect(
+      p_shots.map((shot: { shooter_number: number }) => shot.shooter_number),
+    ).toEqual([1, 2, 2147483647]);
     for (const shot of p_shots) {
       expect(shot).not.toHaveProperty("shooter_id");
       expect(shot).not.toHaveProperty("shot_id");
@@ -209,7 +269,7 @@ describe("createRoundOpTransport", () => {
         {
           revision: 3,
           applied: true,
-          applied_fields: ["score", "shooter_id"],
+          applied_fields: ["score", "shooter_number"],
           rejected_fields: [{ field: "score", reason: "UNFIT" }],
         },
       ],
@@ -227,14 +287,14 @@ describe("createRoundOpTransport", () => {
         {
           revision: 3,
           applied: true,
-          appliedFields: ["score", "shooter_id"],
+          appliedFields: ["score", "shooter_number"],
           hasRejectedFields: true,
         },
       ],
     });
   });
 
-  it("取り消しの束は、マスをclear_shotsへ送り、矢のIDは送らない", async () => {
+  it("取り消しの束は、マスをclear_shotsへ送り、矢のIDと射手は送らない", async () => {
     // Given
     client.rpc.mockResolvedValue({
       data: [resultJson(4), resultJson(5)],

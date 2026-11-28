@@ -19,7 +19,7 @@ type ScorecardSync = {
 
 // 矢の入力に関わる状態(ポインタ、テンキー、履歴、入力)。
 function useScorecardInput(sync: ScorecardSync, inProgress: boolean) {
-  const { distances, shots } = sync.state;
+  const { distances, shots, shooters, cellShooters } = sync.state;
   const [pointer, setPointer] = useReconciledPointer(
     inProgress,
     distances,
@@ -30,6 +30,8 @@ function useScorecardInput(sync: ScorecardSync, inProgress: boolean) {
   const input = useShotInput({
     distances,
     shots,
+    shooters,
+    cellShooters,
     pointer,
     setPointer: keypad.followPointer,
     append: sync.append,

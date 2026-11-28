@@ -10,7 +10,7 @@
 
 | ファイル | 責務 |
 | :--- | :--- |
-| `supabase/migrations/`の追加migration | 役割の制約、認可の関数、閲覧のポリシー、射つ人の不変条件 |
+| `supabase/migrations/20261128010001_shooters_unified.sql` | 役割の制約、認可の関数、閲覧のポリシー、射つ人の不変条件 |
 | `apps/web/src/features/rounds/` | 未同期の`round.created`でも、認証中の利用者を作成者(射つ人、射手1)として端末の状態に持つ(`rounds/shooters`) |
 
 役割は`round_users.role`が持ち、利用者に紐づかない射手の行はNULLである(行の種類は`rounds/shooters`)。

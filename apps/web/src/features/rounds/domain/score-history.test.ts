@@ -14,7 +14,7 @@ describe("取り消しの列", () => {
     endNumber: 1,
     shotNumber,
     before: { alive: false },
-    after: { alive: true, scoreStr: "9", scoreInt: 9 },
+    after: { alive: true, scoreStr: "9", scoreInt: 9, shooterNumber: 1 },
   });
 
   it("新たな書き込みを積むと、やり直しの列を捨てる", () => {

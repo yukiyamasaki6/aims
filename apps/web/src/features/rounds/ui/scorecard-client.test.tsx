@@ -16,9 +16,16 @@ import { RootClientEntry } from "@/app/root-client-entry";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import type { RoundConfig } from "@/features/rounds/domain/round-config";
-import { roundTablesFromServer } from "@/features/rounds/domain/round-op-test-helpers";
+import {
+  roundCreated,
+  roundTablesFromServer,
+} from "@/features/rounds/domain/round-op-test-helpers";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
-import type { Distance, Shot } from "@/features/rounds/domain/scorecard-types";
+import type {
+  Distance,
+  Shooter,
+  Shot,
+} from "@/features/rounds/domain/scorecard-types";
 import {
   roundStreamId,
   type SyncOperation,
@@ -250,6 +257,9 @@ async function setup(
     initialRoundConfig?: RoundConfig;
     distances?: Distance[];
     initialShots?: Shot[];
+    // 取得した取り消し済みの矢。
+    cancelledShots?: Shot[];
+    shooters?: Shooter[];
     targetFaces?: TargetFaceOption[];
     status?: "in_progress" | "completed";
   } = {},
@@ -259,16 +269,21 @@ async function setup(
     initialRoundConfig = roundConfig,
     distances = [distanceA],
     initialShots = [],
+    cancelledShots = [],
+    shooters,
     targetFaces: faces = targetFaces,
   } = overrides;
+  const tables = roundTablesFromServer({
+    status,
+    roundConfig: initialRoundConfig,
+    distances,
+    shots: initialShots,
+    shooters,
+  });
+  const cancelled = cancelledShots.map((s) => ({ ...s, disabled: true }));
   await seedDevice(
     {
-      tables: roundTablesFromServer({
-        status,
-        roundConfig: initialRoundConfig,
-        distances,
-        shots: initialShots,
-      }),
+      tables: { ...tables, shots: [...tables.shots, ...cancelled] },
       revisions: { round: 1, distances: {}, shots: {} },
     },
     faces,
@@ -290,16 +305,24 @@ function shotRow(
   shotNumber: number,
   scoreStr: string,
   scoreInt: number,
+  shooterNumber = 1,
 ): Shot {
   return {
     distance_id: distanceId,
     end_number: end,
     shot_number: shotNumber,
-    shooter_id: "user-1",
+    shooter_number: shooterNumber,
     score_str: scoreStr,
     score_int: scoreInt,
   };
 }
+
+// 射手1は別の射つ人、射手2は利用者に紐づかない射手、射手3は認証中の利用者`user-1`の射つ人である。
+const threeShooters: Shooter[] = [
+  { shooter_number: 1, user_id: "user-other", role: "owner" },
+  { shooter_number: 2, user_id: null, role: null },
+  { shooter_number: 3, user_id: "user-1", role: "owner" },
+];
 
 // 距離の全てのマスを埋める、取得した矢の行。
 function fullEndShots(distance: Distance): Shot[] {
@@ -782,10 +805,13 @@ describe("ScorecardClient マスを指す・点数を書く", () => {
     expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("38");
   });
 
-  it("空のマスへ書くと、そのマスに記録し、他の利用者が埋めたマスを飛ばして後ろの最初の空のマスを指す", async () => {
+  it("空のマスへ書くと、そのマスに認証中の射つ人の射手番号で記録し、他の利用者が埋めたマスを飛ばして後ろの最初の空のマスを指す", async () => {
     // Given
     const user = userEvent.setup();
-    await setup({ initialShots: [shotRow(distanceA.id, 1, 3, "8", 8)] });
+    await setup({
+      shooters: threeShooters,
+      initialShots: [shotRow(distanceA.id, 1, 3, "8", 8)],
+    });
     await user.click(screen.getByTestId("shot-cell-1-1-2"));
 
     // When
@@ -803,6 +829,7 @@ describe("ScorecardClient マスを指す・点数を書く", () => {
           shot_number: 2,
           score_str: "9",
           score_int: 9,
+          shooter_number: 3,
         },
       ]);
     });
@@ -889,13 +916,14 @@ describe("ScorecardClient マスを指す・点数を書く", () => {
     expect(pointedCell()).toBe("shot-cell-1-1-2");
   });
 
-  it("記録済みのマスへ点数を書くと、そのマスの点数だけが変わり、位置も指すマスも変わらない", async () => {
+  it("紐づかない射手の記録済みのマスへ点数を書くと、そのマスの点数だけが変わり、同じ射手の記録を送り、位置も指すマスも変わらない", async () => {
     // Given
     const user = userEvent.setup();
     await setup({
+      shooters: threeShooters,
       initialShots: [
-        shotRow(distanceA.id, 1, 1, "10", 10),
-        shotRow(distanceA.id, 1, 2, "9", 9),
+        shotRow(distanceA.id, 1, 1, "10", 10, 3),
+        shotRow(distanceA.id, 1, 2, "9", 9, 2),
       ],
     });
     await user.click(screen.getByTestId("shot-cell-1-1-2"));
@@ -912,10 +940,149 @@ describe("ScorecardClient マスを指す・点数を書く", () => {
           end_number: 1,
           shot_number: 2,
           score_str: "X",
+          shooter_number: 2,
         }),
       ]);
     });
-    expect(sentShots("record_shots")[0]).not.toHaveProperty("shooter_id");
+  });
+
+  it("紐づかない射手のマスをクリアして書き直すと、クリア前の射手の記録を送る", async () => {
+    // Given
+    const user = userEvent.setup();
+    await setup({
+      shooters: threeShooters,
+      initialShots: [shotRow(distanceA.id, 1, 1, "9", 9, 2)],
+    });
+    await user.click(screen.getByTestId("shot-cell-1-1-1"));
+    await user.click(screen.getByTestId("score-button-clear"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
+
+    // When
+    await user.click(screen.getByTestId("score-button-X"));
+
+    // Then
+    await waitFor(() => {
+      expect(sentShots("record_shots")).toEqual([
+        expect.objectContaining({ score_str: "X", shooter_number: 2 }),
+      ]);
+    });
+  });
+
+  it("取得した取り消し済みのマスは空に描き、書くとそのマスの射手の記録を送る", async () => {
+    // Given
+    const user = userEvent.setup();
+    await setup({
+      shooters: threeShooters,
+      cancelledShots: [shotRow(distanceA.id, 1, 1, "9", 9, 2)],
+    });
+    const before = cellsOf(1, 1);
+
+    // When
+    await user.click(screen.getByTestId("score-button-X"));
+
+    // Then
+    expect(before).toEqual(["", "", ""]);
+    await waitFor(() => {
+      expect(sentShots("record_shots")).toEqual([
+        expect.objectContaining({
+          end_number: 1,
+          shot_number: 1,
+          shooter_number: 2,
+        }),
+      ]);
+    });
+  });
+
+  it("紐づかない射手のマスを直し、一つ戻って一つ進むと、どの記録もそのマスの射手で送る", async () => {
+    // Given
+    const user = userEvent.setup();
+    await setup({
+      shooters: threeShooters,
+      initialShots: [shotRow(distanceA.id, 1, 1, "9", 9, 2)],
+    });
+    await user.click(screen.getByTestId("shot-cell-1-1-1"));
+    await user.click(screen.getByTestId("score-button-X"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["X"]));
+
+    // When
+    await user.click(screen.getByTestId("score-button-undo"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9"]));
+    await user.click(screen.getByTestId("score-button-redo"));
+
+    // Then
+    await waitFor(() => {
+      expect(
+        sentShots("record_shots").map((shot) => [
+          shot.score_str,
+          shot.shooter_number,
+        ]),
+      ).toEqual([
+        ["X", 2],
+        ["9", 2],
+        ["X", 2],
+      ]);
+    });
+  });
+
+  it("開始したばかりの未送信のラウンドへ書くと、射手1の記録を積む", async () => {
+    // Given
+    const user = userEvent.setup();
+    setOnline(false);
+    createBrowserIdentityStore().write("user-1");
+    window.localStorage.setItem(
+      "aims:reference:target-faces:user-1",
+      JSON.stringify({
+        shape: TARGET_FACE_SELECT,
+        startedAt: 1,
+        data: targetFaces,
+      }),
+    );
+    const created = roundCreated({
+      distances: [
+        {
+          eventId: "e-created-distance",
+          id: distanceA.id,
+          positionKey: "a",
+          distance: 70,
+          isMarked: true,
+          totalEnds: 12,
+          arrowsPerEnd: 3,
+          targetFaceId: targetFaceX.id,
+        },
+      ],
+    });
+    await createIndexedDbOpLogStore(roundStreamRules).append(
+      {
+        eventId: created.eventId,
+        streamId: roundStreamId("round-1"),
+        userId: "user-1",
+        operation: created,
+      },
+      undefined,
+    );
+    render(<RoundScreenHarness roundId="round-1" />, { wrapper: AppWrapper });
+    await pollWithRealTasks(() => {
+      expect(screen.getByTestId("round-summary")).toBeInTheDocument();
+    });
+
+    // When
+    await user.click(screen.getByTestId("score-button-X"));
+
+    // Then
+    await waitFor(async () => {
+      const group = await loadStreamGroup(
+        createIndexedDbOpLogStore(roundStreamRules),
+        roundStreamId("round-1"),
+        "user-1",
+      );
+      expect(group.entries.map((entry) => entry.operation)).toContainEqual(
+        expect.objectContaining({
+          type: "shot.recorded",
+          scoreStr: "X",
+          shooterNumber: 1,
+        }),
+      );
+    });
   });
 
   it("空のマスを指しているときはクリアを押せない", async () => {
@@ -1025,6 +1192,7 @@ describe("ScorecardClient マスを指す・点数を書く", () => {
         shotNumber: 2,
         scoreStr: "9",
         scoreInt: 9,
+        shooterNumber: 1,
       }),
     );
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9"]));
@@ -1575,6 +1743,7 @@ describe("ScorecardClient 指しているマスへのスクロール", () => {
           shotNumber: 1,
           scoreStr: "9",
           scoreInt: 9,
+          shooterNumber: 1,
         }),
       );
 
@@ -1879,10 +2048,13 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
     );
   });
 
-  it("直したマスを戻すと、直す前の点数だけを射手なしで書き、そのマスを指す", async () => {
+  it("直したマスを戻すと、直す前の点数をそのマスの射手で書き、そのマスを指す", async () => {
     // Given
     const user = userEvent.setup();
-    await setup({ initialShots: [shotRow(distanceA.id, 1, 1, "10", 10)] });
+    await setup({
+      shooters: threeShooters,
+      initialShots: [shotRow(distanceA.id, 1, 1, "10", 10, 2)],
+    });
     await user.click(screen.getByTestId("shot-cell-1-1-1"));
     await user.click(screen.getByTestId("score-button-9"));
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9"]));
@@ -1901,14 +2073,18 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
         shot_number: 1,
         score_str: "10",
         score_int: 10,
+        shooter_number: 2,
       });
     });
   });
 
-  it("直したマスを戻して進むと、直した点数だけを射手なしで書き、そのマスを指す", async () => {
+  it("直したマスを戻して進むと、直した点数をそのマスの射手で書き、そのマスを指す", async () => {
     // Given
     const user = userEvent.setup();
-    await setup({ initialShots: [shotRow(distanceA.id, 1, 1, "10", 10)] });
+    await setup({
+      shooters: threeShooters,
+      initialShots: [shotRow(distanceA.id, 1, 1, "10", 10, 2)],
+    });
     await user.click(screen.getByTestId("shot-cell-1-1-1"));
     await user.click(screen.getByTestId("score-button-9"));
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9"]));
@@ -1929,14 +2105,18 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
         shot_number: 1,
         score_str: "9",
         score_int: 9,
+        shooter_number: 2,
       });
     });
   });
 
-  it("クリアしたマスを戻すと、クリア前の点数だけが射手なしで戻る", async () => {
+  it("クリアしたマスを戻すと、クリア前の点数がそのマスの射手で戻る", async () => {
     // Given
     const user = userEvent.setup();
-    await setup({ initialShots: [shotRow(distanceA.id, 1, 1, "10", 10)] });
+    await setup({
+      shooters: threeShooters,
+      initialShots: [shotRow(distanceA.id, 1, 1, "10", 10, 2)],
+    });
     await user.click(screen.getByTestId("shot-cell-1-1-1"));
     await user.click(screen.getByTestId("score-button-clear"));
     await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
@@ -1954,6 +2134,7 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
         shot_number: 1,
         score_str: "10",
         score_int: 10,
+        shooter_number: 2,
       });
     });
   });
@@ -1991,6 +2172,7 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
         shotNumber: 1,
         scoreStr: "9",
         scoreInt: 9,
+        shooterNumber: 1,
       }),
     );
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9"]));

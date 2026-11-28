@@ -901,6 +901,7 @@ describe("append / 画面の導出", () => {
       score_str: "10",
       score_int: 10,
       shot_number: 1,
+      shooter_number: 1,
     };
     await tab.hub.commit(
       STREAM,

@@ -6,7 +6,8 @@ import {
   type RoundBaseRecord,
   reflectsBase,
 } from "./round-base";
-import { roundTablesFromServer } from "./round-op-test-helpers";
+import { roundTablesFromServer, shooterAdded } from "./round-op-test-helpers";
+import type { Shooter } from "./scorecard-types";
 import type { SyncOperation } from "./sync-events";
 
 // 公開の契約(規則の引数)から、列の操作の型を得る。
@@ -34,6 +35,17 @@ function record(
     }),
     revisions: { round: 1, distances: {}, shots: {}, ...overrides.revisions },
   };
+}
+
+// 番号だけの射手を持つ記録。
+const knowing = (...numbers: number[]): RoundBaseRecord =>
+  withShooters(
+    numbers.map((n) => ({ shooter_number: n, user_id: null, role: null })),
+  );
+
+function withShooters(shooters: Shooter[]): RoundBaseRecord {
+  const base = record();
+  return { ...base, tables: { ...base.tables, shooters } };
 }
 
 const roundUpdated: SyncOperation = {
@@ -95,6 +107,7 @@ describe("reflectsBase", () => {
       shotNumber: n,
       scoreStr: "9",
       scoreInt: 9,
+      shooterNumber: 1,
     });
     const distanceUpdated = (distanceId: string): SyncOperation => ({
       type: "distance.updated",
@@ -150,6 +163,34 @@ describe("reflectsBase", () => {
   });
 });
 
+describe("reflectsBase(射手の追加)", () => {
+  it("確定していない射手の追加は、同じ番号を持つベースにも、削除の印にも、反映済みでない", () => {
+    // Given
+    const added = entry(shooterAdded(2));
+
+    // When
+    const withNumber = reflectsBase(knowing(1, 2), added);
+    const onMarker = reflectsBase(null, added);
+
+    // Then
+    expect(withNumber).toBe(false);
+    expect(onMarker).toBe(false);
+  });
+
+  it("確定した射手の追加は、revisionに依らず、取得の射手の一覧に番号があるときと削除の印に反映済みになる", () => {
+    // Given
+    const added = entry(shooterAdded(2), 0);
+
+    // When
+    const results = [knowing(1), knowing(1, 2), null].map((base) =>
+      reflectsBase(base, added),
+    );
+
+    // Then
+    expect(results).toEqual([false, true, true]);
+  });
+});
+
 describe("isOlderBase", () => {
   it("ラウンドのrevisionが小さければ古く、同じか大きければ古くない", () => {
     // Given
@@ -192,6 +233,39 @@ describe("isOlderBase", () => {
     expect(olderDistance).toBe(true);
     expect(olderShot).toBe(true);
     expect(onlyOneSide).toBe(false);
+  });
+});
+
+describe("isOlderBase(射手)", () => {
+  it("今のベースが知る射手番号が欠けた取得は古く、同じ番号と増えた番号の取得は古くない", () => {
+    // Given
+    const current = knowing(1, 2);
+
+    // When
+    const results = [knowing(1), knowing(1, 2), knowing(1, 2, 3)].map(
+      (incoming) => isOlderBase(current, incoming),
+    );
+
+    // Then
+    expect(results).toEqual([true, false, false]);
+  });
+
+  it("射手の匿名化と利用者の変更は、番号が同じため古いとしない", () => {
+    // Given
+    const current = withShooters([
+      { shooter_number: 1, user_id: "user-1", role: "owner" },
+      { shooter_number: 2, user_id: "user-2", role: "owner" },
+    ]);
+    const incoming = withShooters([
+      { shooter_number: 1, user_id: "user-3", role: "owner" },
+      { shooter_number: 2, user_id: null, role: null },
+    ]);
+
+    // When
+    const result = isOlderBase(current, incoming);
+
+    // Then
+    expect(result).toBe(false);
   });
 });
 

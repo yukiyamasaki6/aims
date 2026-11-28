@@ -58,9 +58,12 @@ insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('N'));
 insert into public.rounds (id, name, round_date, format, bow_type) values
   (pg_temp.id('RF'), 'Auto Field', '2026-01-01', 'field', 'recurve'),
   (pg_temp.id('RO'), 'Auto Outdoor', '2026-01-01', 'outdoor', 'recurve');
-insert into public.round_users (round_id, user_id, role) values
-  (pg_temp.id('RF'), pg_temp.id('E'), 'editor'),
-  (pg_temp.id('RO'), pg_temp.id('E'), 'editor');
+-- 操作するEは代理の人で、矢は射つ人Nの射手1に記録する。
+insert into public.round_users (round_id, user_id, role, shooter_number) values
+  (pg_temp.id('RF'), pg_temp.id('N'), 'owner', 1),
+  (pg_temp.id('RF'), pg_temp.id('E'), 'editor', null),
+  (pg_temp.id('RO'), pg_temp.id('N'), 'owner', 1),
+  (pg_temp.id('RO'), pg_temp.id('E'), 'editor', null);
 insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked) values
   (pg_temp.id('U'), pg_temp.id('RF'), 'a', null, 6, 6, pg_temp.face(), false),
   (pg_temp.id('S'), pg_temp.id('RO'), 'a', 50, 6, 6, pg_temp.face(), true),
@@ -70,8 +73,8 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
 
 select public.record_shots(jsonb_build_array(
-  jsonb_build_object('shot_event_id', pg_temp.ev(1), 'distance_id', pg_temp.id('S'), 'end_number', 3, 'shot_number', 1, 'score_str', '9', 'score_int', 9),
-  jsonb_build_object('shot_event_id', pg_temp.ev(2), 'distance_id', pg_temp.id('X'), 'end_number', 5, 'shot_number', 1, 'score_str', '9', 'score_int', 9)
+  jsonb_build_object('shot_event_id', pg_temp.ev(1), 'distance_id', pg_temp.id('S'), 'end_number', 3, 'shot_number', 1, 'score_str', '9', 'score_int', 9, 'shooter_number', 1),
+  jsonb_build_object('shot_event_id', pg_temp.ev(2), 'distance_id', pg_temp.id('X'), 'end_number', 5, 'shot_number', 1, 'score_str', '9', 'score_int', 9, 'shooter_number', 1)
 ));
 select public.clear_shots(jsonb_build_array(
   jsonb_build_object('shot_event_id', pg_temp.ev(3), 'distance_id', pg_temp.id('X'), 'end_number', 5, 'shot_number', 1)

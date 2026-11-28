@@ -1,15 +1,16 @@
 -- アカウント削除(delete_account)の振る舞いを確認する。
 --   - 認可: 認証済みで、JWTのamrにotpの認証が直近60秒以内にあること。満たさない呼び出しは何も変えずにPT403で拒否する
---   - 削除: 他に編集者がいないラウンドは全ての状態で消え、利用者のプロフィール・参加・個人のプリセット・認証の行も消える
---   - 匿名化: 他の編集者が残るラウンドの矢・履歴は残り、利用者を指す列だけが「削除済みの利用者」に置き換わる
+--   - 削除: 他に射つ人がいないラウンドは全ての状態で消え、利用者のプロフィール・参加・個人のプリセット・認証の行も消える
+--   - 匿名化: 他の射つ人が残るラウンドの矢・履歴は残り、利用者の射手は番号を保って紐づけと役割を外し、操作者だけが「削除済みの利用者」に置き換わる
 --   - 再登録と旧トークン、原子性、関数の属性
 --   - 削除の記録(docs/backup.md): 記録先の設定が無い・記録を送れないときの取り消しと、復元で使うpurge_account
 -- 権限(anonとauthenticatedのEXECUTE)は rls_matrix.sql の関数EXECUTE表が固定する。
+-- 同時の削除は、複数の接続が要るためapps/web/tests/e2e/auth/delete-account.spec.tsで確かめる。
 -- ラウンドの形は実際のデータに合わせ、屋外の12エンド×3射の距離を1つ持つ。
 
 begin;
 
-select plan(49);
+select plan(59);
 
 -- ============================================================
 -- fixture
@@ -39,14 +40,14 @@ begin
 end;
 $$;
 
--- ラウンドと、12エンド×3射の距離を1つ作る。作成者を編集者とし、作成の履歴を残す。
+-- ラウンドと、12エンド×3射の距離を1つ作る。作成者を射手1の射つ人とし、作成の履歴を残す。
 create function pg_temp.mk_round(p_alias text, p_author text, p_status text default 'in_progress', p_disabled boolean default false) returns void
 language plpgsql
 as $$
 begin
   insert into public.rounds (id, name, round_date, format, bow_type, status, disabled_at)
   values (pg_temp.uid(p_alias), p_alias, '2026-09-10', 'outdoor', 'recurve', p_status, case when p_disabled then now() end);
-  insert into public.round_users (round_id, user_id, role) values (pg_temp.uid(p_alias), pg_temp.uid(p_author), 'editor');
+  insert into public.round_users (round_id, user_id, role, shooter_number) values (pg_temp.uid(p_alias), pg_temp.uid(p_author), 'owner', 1);
   insert into public.round_events (event_id, round_id, type, author_id, revision, name, round_date, format, bow_type, status)
   values (pg_temp.uid(p_alias || '.re1'), pg_temp.uid(p_alias), 'CREATED', pg_temp.uid(p_author), 1, p_alias, '2026-09-10', 'outdoor', 'recurve', p_status);
   insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked)
@@ -56,20 +57,26 @@ begin
 end;
 $$;
 
-create function pg_temp.join_round(p_round text, p_user text, p_role text) returns void
+-- 射つ人(番号あり)か代理の人(番号なし)を加える。
+create function pg_temp.join_round(p_round text, p_user text, p_role text, p_number int default null) returns void
 language sql
-as $$ insert into public.round_users (round_id, user_id, role) values (pg_temp.uid(p_round), pg_temp.uid(p_user), p_role) $$;
+as $$ insert into public.round_users (round_id, user_id, role, shooter_number) values (pg_temp.uid(p_round), pg_temp.uid(p_user), p_role, p_number) $$;
 
--- 距離に、1エンド目の矢と、その記録の履歴を足す。p_shooterが射手、p_authorが記録した操作者。
-create function pg_temp.mk_shot(p_round text, p_n int, p_shooter text, p_author text) returns void
+-- 利用者に紐づかない射手を加える。
+create function pg_temp.add_shooter(p_round text, p_number int) returns void
+language sql
+as $$ insert into public.round_users (round_id, shooter_number) values (pg_temp.uid(p_round), p_number) $$;
+
+-- 距離に、1エンド目の矢と、その記録の履歴を足す。p_shooterが射手の番号、p_authorが記録した操作者。
+create function pg_temp.mk_shot(p_round text, p_n int, p_shooter int, p_author text) returns void
 language plpgsql
 as $$
 begin
-  insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
-  values (pg_temp.uid(p_round || '.d'), 1, p_n, pg_temp.uid(p_shooter), '9', 9);
-  insert into public.shot_events (event_id, distance_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, shot_number, set_fields)
-  values (pg_temp.uid(p_round || '.se' || p_n), pg_temp.uid(p_round || '.d'), 'RECORDED', pg_temp.uid(p_author), 1, 1,
-    pg_temp.uid(p_shooter), '9', 9, p_n, array['score', 'shooter_id']);
+  insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int)
+  values (pg_temp.uid(p_round), pg_temp.uid(p_round || '.d'), 1, p_n, p_shooter, '9', 9);
+  insert into public.shot_events (event_id, round_id, distance_id, type, author_id, revision, end_number, shooter_number, score_str, score_int, shot_number, set_fields)
+  values (pg_temp.uid(p_round || '.se' || p_n), pg_temp.uid(p_round), pg_temp.uid(p_round || '.d'), 'RECORDED', pg_temp.uid(p_author), 1, 1,
+    p_shooter, '9', 9, p_n, array['score', 'shooter_number']);
 end;
 $$;
 
@@ -114,7 +121,7 @@ $$;
 
 -- ---- 利用者 ----
 -- Q: 拒否の確認用。T/O1/O2: 認可の境界と並びの確認用。X: 途中で失敗させる確認用。
--- S: 他に編集者がいないラウンドを持つ(Wが閲覧者)。A: 他の編集者Bが残るラウンドを持つ(Vが閲覧者)。
+-- S: 他に射つ人がいないラウンドを持つ(Wが代理の人)。A: 他の射つ人Bが残るラウンドを持つ(Vが代理の人)。
 select pg_temp.mk_user('Q');
 select pg_temp.mk_user('T');
 select pg_temp.mk_user('O1');
@@ -128,54 +135,61 @@ select pg_temp.mk_user('V');
 
 -- Q: 自分だけのラウンドと、個人のプリセット。
 select pg_temp.mk_round('Q1', 'Q');
-select pg_temp.mk_shot('Q1', 1, 'Q', 'Q');
+select pg_temp.mk_shot('Q1', 1, 1, 'Q');
 select pg_temp.mk_preset('Qp', 'Q');
 select pg_temp.mk_auth_rows('Q');
 
--- X: 自分だけのラウンドと、他の編集者が残るラウンド。
+-- X: 自分だけのラウンドと、他の射つ人が残るラウンド。
 select pg_temp.mk_round('X1', 'X');
-select pg_temp.mk_shot('X1', 1, 'X', 'X');
+select pg_temp.mk_shot('X1', 1, 1, 'X');
 select pg_temp.mk_round('X2', 'B');
-select pg_temp.join_round('X2', 'X', 'editor');
-select pg_temp.mk_shot('X2', 1, 'X', 'X');
+select pg_temp.join_round('X2', 'X', 'owner', 2);
+select pg_temp.mk_shot('X2', 1, 2, 'X');
 
--- S: 進行中・完了・論理削除済みの自分だけのラウンドと、閲覧者Wだけが残るラウンド。
+-- S: 進行中・完了・論理削除済みの自分だけのラウンドと、代理の人Wと紐づかない射手が残るラウンド。
 select pg_temp.mk_round('S1', 'S', 'in_progress');
 select pg_temp.mk_round('S2', 'S', 'completed');
 select pg_temp.mk_round('S3', 'S', 'completed', true);
 select pg_temp.mk_round('S4', 'S', 'in_progress');
-select pg_temp.join_round('S4', 'W', 'viewer');
-select pg_temp.mk_shot(r, 1, 'S', 'S') from unnest(array['S1', 'S2', 'S3', 'S4']) as r;
-select pg_temp.mk_shot(r, 2, 'S', 'S') from unnest(array['S1', 'S2', 'S3', 'S4']) as r;
+select pg_temp.join_round('S4', 'W', 'editor');
+select pg_temp.add_shooter('S4', 3);
+select pg_temp.mk_shot(r, 1, 1, 'S') from unnest(array['S1', 'S2', 'S3', 'S4']) as r;
+select pg_temp.mk_shot(r, 2, 1, 'S') from unnest(array['S1', 'S2', 'S3']) as r;
+select pg_temp.mk_shot('S4', 2, 3, 'W');
 select pg_temp.mk_edit(r, 'S') from unnest(array['S1', 'S2', 'S3', 'S4']) as r;
 select pg_temp.mk_preset('Sp', 'S');
 select pg_temp.mk_auth_rows('S');
 -- Wは自分だけのラウンドも持つ(削除の影響を受けない)。
 select pg_temp.mk_round('W1', 'W');
-select pg_temp.mk_shot('W1', 1, 'W', 'W');
+select pg_temp.mk_shot('W1', 1, 1, 'W');
 select pg_temp.mk_preset('Wp', 'W');
 
--- A: 他の編集者Bが残るラウンドR1(Vは閲覧者)、Aが閲覧者のラウンドR2、Aが参加していないラウンドR3。
---   R1の矢: 1=射手A・記録A、2=射手A・記録B、3=射手B・記録A、4=射手B・記録B
---   R3は、Aの参加が外れた後にAの行が残った形(矢の射手、各履歴の操作者)
+-- A: 他の射つ人Bが残るラウンドR1(Vは代理の人、射手4は紐づかない)、Aが代理の人のラウンドR2、
+--    Aが参加していないラウンドR3、Aが矢を1本も記録していない射手のラウンドR4。
+--   R1の矢: 1=射手A(1)・記録A、2=射手A(1)・記録B、3=射手B(2)・記録A、4=射手B(2)・記録B、5=射手4・記録V
+--   R2の矢は代理の人Aが記録した射手Bの矢。R3は各履歴の操作者にAが残った形。
 select pg_temp.mk_round('R1', 'A', 'completed');
-select pg_temp.join_round('R1', 'B', 'editor');
-select pg_temp.join_round('R1', 'V', 'viewer');
-select pg_temp.mk_shot('R1', 1, 'A', 'A');
-select pg_temp.mk_shot('R1', 2, 'A', 'B');
-select pg_temp.mk_shot('R1', 3, 'B', 'A');
-select pg_temp.mk_shot('R1', 4, 'B', 'B');
+select pg_temp.join_round('R1', 'B', 'owner', 2);
+select pg_temp.join_round('R1', 'V', 'editor');
+select pg_temp.add_shooter('R1', 4);
+select pg_temp.mk_shot('R1', 1, 1, 'A');
+select pg_temp.mk_shot('R1', 2, 1, 'B');
+select pg_temp.mk_shot('R1', 3, 2, 'A');
+select pg_temp.mk_shot('R1', 4, 2, 'B');
+select pg_temp.mk_shot('R1', 5, 4, 'V');
 select pg_temp.mk_edit('R1', 'A');
 select pg_temp.mk_edit('R1', 'B');
 select pg_temp.mk_round('R2', 'B', 'completed');
-select pg_temp.join_round('R2', 'A', 'viewer');
-select pg_temp.mk_shot('R2', 1, 'B', 'B');
-select pg_temp.mk_round('R3', 'A', 'completed');
-select pg_temp.join_round('R3', 'B', 'editor');
-select pg_temp.mk_shot('R3', 1, 'A', 'A');
-select pg_temp.mk_shot('R3', 2, 'B', 'B');
+select pg_temp.join_round('R2', 'A', 'editor');
+select pg_temp.mk_shot('R2', 1, 1, 'A');
+select pg_temp.mk_shot('R2', 2, 1, 'B');
+select pg_temp.mk_round('R3', 'B', 'completed');
+select pg_temp.mk_shot('R3', 1, 1, 'A');
+select pg_temp.mk_shot('R3', 2, 1, 'B');
 select pg_temp.mk_edit('R3', 'A');
-delete from public.round_users where round_id = pg_temp.uid('R3') and user_id = pg_temp.uid('A');
+select pg_temp.mk_round('R4', 'B', 'in_progress');
+select pg_temp.join_round('R4', 'A', 'owner', 3);
+select pg_temp.mk_shot('R4', 1, 1, 'B');
 select pg_temp.mk_preset('Ap', 'A');
 select pg_temp.mk_auth_rows('A');
 
@@ -397,17 +411,17 @@ drop trigger da_fail_user_delete on public.users;
 
 create temp table da_s_call as select pg_temp.call_as(pg_temp.uid('S'), pg_temp.fresh()) as r;
 
-select is((select r from da_s_call), 'ok', '編集者が自分だけのラウンドを持つ利用者が、削除できる');
+select is((select r from da_s_call), 'ok', '自分だけが射つ人のラウンドを持つ利用者が、削除できる');
 
 select is_empty(
   $$select 'rounds' as t from public.rounds where id in (select pg_temp.uid(a) from unnest(array['S1','S2','S3','S4']) a)
     union all select 'distances' from public.distances where round_id in (select pg_temp.uid(a) from unnest(array['S1','S2','S3','S4']) a)
-    union all select 'shots' from public.shots where distance_id in (select pg_temp.uid(a || '.d') from unnest(array['S1','S2','S3','S4']) a)
-    union all select 'shot_events' from public.shot_events where distance_id in (select pg_temp.uid(a || '.d') from unnest(array['S1','S2','S3','S4']) a)
+    union all select 'shots' from public.shots where round_id in (select pg_temp.uid(a) from unnest(array['S1','S2','S3','S4']) a)
+    union all select 'shot_events' from public.shot_events where round_id in (select pg_temp.uid(a) from unnest(array['S1','S2','S3','S4']) a)
     union all select 'distance_events' from public.distance_events where round_id in (select pg_temp.uid(a) from unnest(array['S1','S2','S3','S4']) a)
     union all select 'round_events' from public.round_events where round_id in (select pg_temp.uid(a) from unnest(array['S1','S2','S3','S4']) a)
     union all select 'round_users' from public.round_users where round_id in (select pg_temp.uid(a) from unnest(array['S1','S2','S3','S4']) a)$$,
-  '他に編集者がいないラウンドは、進行中・完了・論理削除済み・閲覧者だけが残るもののどれも、距離・矢・全ての履歴・参加を含めて消える'
+  '他に射つ人がいないラウンドは、進行中・完了・論理削除済み・代理の人と紐づかない射手が残るもののどれも、距離・矢・射手・全ての履歴を含めて消える'
 );
 
 select is_empty(
@@ -424,7 +438,7 @@ select is_empty(
 select results_eq(
   $$select (select count(*) from public.round_users where user_id = pg_temp.uid('W')), (select count(*) from public.users where id = pg_temp.uid('W'))$$,
   $$values (1::bigint, 1::bigint)$$,
-  '他の利用者(閲覧者だったW)は、閲覧者の参加だけが消え、自分のラウンドの参加とプロフィールは残る'
+  '他の利用者(代理の人だったW)は、消えたラウンドの参加だけがなくなり、自分のラウンドの参加とプロフィールは残る'
 );
 
 select is(
@@ -455,49 +469,74 @@ select is_empty(
 -- A3 匿名化
 -- ============================================================
 
+-- 残る射つ人Bから見た、一覧と詳細の集計。
+create function pg_temp.summary_as(p_uid uuid) returns jsonb
+language plpgsql
+as $$
+declare
+  v_result jsonb;
+begin
+  perform set_config('request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  select jsonb_build_object(
+    'rounds', public.rounds_list(null, null, null, null, null, 100),
+    'distances', public.distances_list(null, null, null, null, null, 100),
+    'details', (
+      select jsonb_agg(to_jsonb(t) order by t.distance_id, t.shooter_number)
+      from (
+        select s.distance_id, s.shooter_number, count(*) as arrows, sum(s.score_int) as total
+        from public.shots s
+        where s.round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) and s.disabled_at is null
+        group by s.distance_id, s.shooter_number
+      ) as t
+    )
+  ) into v_result;
+  reset role;
+  return v_result;
+end;
+$$;
+
+create temp table da_summary_before as select pg_temp.summary_as(pg_temp.uid('B')) as v;
+
 create temp table da_a_call as select pg_temp.call_as(pg_temp.uid('A'), pg_temp.fresh()) as r;
 
-select is((select r from da_a_call), 'ok', '他の編集者が残るラウンドに矢と履歴を持つ利用者が、削除できる');
+select is((select r from da_a_call), 'ok', '他の射つ人が残るラウンドに射手・矢・履歴を持つ利用者が、削除できる');
 
 select results_eq(
-  $$select distance_id, end_number, shooter_id, score_str, score_int, revision, disabled_at, shot_number, created_at
-    from public.shots where distance_id in (select pg_temp.uid(a || '.d') from unnest(array['R1','R2','R3']) a) order by distance_id, end_number, shot_number$$,
-  $$select distance_id, end_number,
-      case when shooter_id = pg_temp.uid('A') then pg_temp.deleted_user() else shooter_id end,
-      score_str, score_int, revision, disabled_at, shot_number, created_at
-    from bef_shots where distance_id in (select pg_temp.uid(a || '.d') from unnest(array['R1','R2','R3']) a) order by distance_id, end_number, shot_number$$,
-  '利用者が射手の矢は残り、射手だけが削除済みの利用者になり、点数・マスの番号・revisionなどは変わらない'
+  $$select round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int, revision, disabled_at, created_at
+    from public.shots where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) order by distance_id, end_number, shot_number$$,
+  $$select round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int, revision, disabled_at, created_at
+    from bef_shots where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) order by distance_id, end_number, shot_number$$,
+  '他の射つ人が残るラウンドの矢は残り、射手・点数・マスの番号・revisionは変わらない(代理の人が記録した矢を含む)'
 );
 
 select results_eq(
-  $$select event_id, distance_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, shot_number, set_fields, created_at
-    from public.shot_events where distance_id in (select pg_temp.uid(a || '.d') from unnest(array['R1','R2','R3']) a) order by event_id$$,
-  $$select event_id, distance_id, type,
+  $$select event_id, round_id, distance_id, type, author_id, revision, end_number, shooter_number, score_str, score_int, shot_number, set_fields, created_at
+    from public.shot_events where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) order by event_id$$,
+  $$select event_id, round_id, distance_id, type,
       case when author_id = pg_temp.uid('A') then pg_temp.deleted_user() else author_id end,
-      revision, end_number,
-      case when shooter_id = pg_temp.uid('A') then pg_temp.deleted_user() else shooter_id end,
-      score_str, score_int, shot_number, set_fields, created_at
-    from bef_shot_events where distance_id in (select pg_temp.uid(a || '.d') from unnest(array['R1','R2','R3']) a) order by event_id$$,
-  '矢の変更履歴は、射手と操作者の両方が削除済みの利用者になり、操作の種類と前後の値は変わらない'
+      revision, end_number, shooter_number, score_str, score_int, shot_number, set_fields, created_at
+    from bef_shot_events where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) order by event_id$$,
+  '矢の変更履歴は、操作者だけが削除済みの利用者になり、射手・操作の種類・前後の値は変わらない'
 );
 
 select results_eq(
   $$select event_id, round_id, distance_id, type, author_id, revision, position_key, distance, is_marked, total_ends, arrows_per_end, target_face_id, set_fields, created_at
-    from public.distance_events where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3']) a) order by event_id$$,
+    from public.distance_events where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) order by event_id$$,
   $$select event_id, round_id, distance_id, type,
       case when author_id = pg_temp.uid('A') then pg_temp.deleted_user() else author_id end,
       revision, position_key, distance, is_marked, total_ends, arrows_per_end, target_face_id, set_fields, created_at
-    from bef_distance_events where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3']) a) order by event_id$$,
+    from bef_distance_events where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) order by event_id$$,
   '距離の履歴は、利用者が操作者のものだけが削除済みの利用者になり、他の参加者が操作した履歴は変わらない'
 );
 
 select results_eq(
   $$select event_id, round_id, type, author_id, revision, name, round_date, format, bow_type, status, set_fields, created_at
-    from public.round_events where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3']) a) order by event_id$$,
+    from public.round_events where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) order by event_id$$,
   $$select event_id, round_id, type,
       case when author_id = pg_temp.uid('A') then pg_temp.deleted_user() else author_id end,
       revision, name, round_date, format, bow_type, status, set_fields, created_at
-    from bef_round_events where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3']) a) order by event_id$$,
+    from bef_round_events where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) order by event_id$$,
   'ラウンドの履歴は、利用者が操作者のものだけが削除済みの利用者になり、他の参加者が操作した履歴は変わらない'
 );
 
@@ -505,25 +544,47 @@ select results_eq(
   $$select r.id, r.name, r.round_date, r.format, r.bow_type, r.status, r.revision, r.disabled_at, r.created_at,
       d.id, d.round_id, d.position_key, d.distance, d.total_ends, d.arrows_per_end, d.target_face_id, d.is_marked, d.revision, d.disabled_at
     from public.rounds r join public.distances d on d.round_id = r.id
-    where r.id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3']) a) order by r.id$$,
+    where r.id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) order by r.id$$,
   $$select r.id, r.name, r.round_date, r.format, r.bow_type, r.status, r.revision, r.disabled_at, r.created_at,
       d.id, d.round_id, d.position_key, d.distance, d.total_ends, d.arrows_per_end, d.target_face_id, d.is_marked, d.revision, d.disabled_at
     from bef_rounds r join bef_distances d on d.round_id = r.id
-    where r.id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3']) a) order by r.id$$,
-  '他の編集者が残るラウンドとその距離は、変わらない(行の更新日時を除く)'
+    where r.id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) order by r.id$$,
+  '他の射つ人が残るラウンドとその距離は、変わらない(行の更新日時を除く)'
 );
 
+-- 射つ人Aの行(R1の射手1、矢の無いR4の射手3)は行のIDと番号を保って紐づけと役割が外れ、代理の人の行(R2)は消える。
 select results_eq(
-  $$select round_id, user_id, role from public.round_users where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3']) a) order by round_id, user_id$$,
-  $$select round_id, user_id, role from bef_round_users
-    where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3']) a) and user_id <> pg_temp.uid('A') order by round_id, user_id$$,
-  '利用者の参加だけが消え、他の参加者の参加は変わらない(閲覧者だけだったラウンドも、ラウンドは残る)'
+  $$select id, round_id, user_id, role, shooter_number, created_at
+    from public.round_users where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a) order by id$$,
+  $$select id, round_id,
+      case when user_id = pg_temp.uid('A') then null else user_id end,
+      case when user_id = pg_temp.uid('A') then null else role end,
+      shooter_number, created_at
+    from bef_round_users
+    where round_id in (select pg_temp.uid(a) from unnest(array['R1','R2','R3','R4']) a)
+      and not (user_id is not distinct from pg_temp.uid('A') and shooter_number is null)
+    order by id$$,
+  '利用者の射手は矢の有無を問わず利用者と役割だけがNULLになり、代理の人の参加は消え、射手は増えず、他の利用者の行は変わらない'
+);
+
+select is(
+  (select string_agg(r.a || ':' || u.shooter_number, ',' order by r.a, u.shooter_number)
+    from unnest(array['R1','R4']) as r(a)
+    join public.round_users u on u.round_id = pg_temp.uid(r.a) and u.user_id is null and u.role is null),
+  'R1:1,R1:4,R4:3',
+  '紐づかない射手は、匿名化した射手と元からの射手だけである'
 );
 
 select is(
   pg_temp.leftover_refs(pg_temp.uid('A')),
   0::bigint,
   '参加していないラウンドに残った行を含め、利用者のIDを値に持つ行が、利用者を指す全ての外部キーの列で0件になる'
+);
+
+select is(
+  (select count(*) from public.round_users where user_id = pg_temp.deleted_user()),
+  0::bigint,
+  '匿名化先は、どの射手の利用者にもならない'
 );
 
 select ok(
@@ -538,31 +599,37 @@ select ok(
   '匿名化されたデータの置き先から、削除した利用者の名前とメールアドレスは引けない'
 );
 
+select is(
+  pg_temp.summary_as(pg_temp.uid('B')),
+  (select v from da_summary_before),
+  '残る利用者の一覧と詳細の集計は、削除の前後で同じである'
+);
+
 -- 匿名化の後も、残る参加者の取得と書き込みが成り立つ。
 set local role authenticated;
 select set_config('request.jwt.claims', jsonb_build_object('sub', pg_temp.uid('B'), 'role', 'authenticated')::text, true);
 
 select ok(
-  (select count(*) = 3 from jsonb_array_elements(public.rounds_list(null, null, null, null, null, 100) -> 'rounds') as e(r)
-    where (e.r ->> 'id')::uuid in (pg_temp.uid('R1'), pg_temp.uid('R2'), pg_temp.uid('R3'))),
-  '残る編集者は、匿名化されたラウンドを履歴の取得で削除前と同じように読める'
-);
-
-select ok(
   (select count(*) = 3 from public.history_rounds(null, null, null, null, null) h
     where h.id in (pg_temp.uid('R1'), pg_temp.uid('R2'), pg_temp.uid('R3'))),
-  '残る編集者は、匿名化されたラウンドを履歴のラウンドの取得で読める'
+  '残る射つ人は、匿名化されたラウンドを履歴のラウンドの取得で読める'
 );
 
 select is(
   (select (public.record_shots(jsonb_build_array(jsonb_build_object(
     'shot_event_id', pg_temp.uid('new.se'), 'distance_id', pg_temp.uid('R1.d'),
-    'end_number', 2, 'shot_number', 1, 'score_str', '10', 'score_int', 10)))) -> 0 ->> 'applied'),
+    'end_number', 2, 'shot_number', 1, 'score_str', '10', 'score_int', 10, 'shooter_number', 1)))) -> 0 ->> 'applied'),
   'true',
-  '残る編集者は、匿名化されたラウンドに矢を記録できる'
+  '残る射つ人は、匿名化された射手の矢を記録できる'
 );
 
 reset role;
+
+select lives_ok(
+  'set constraints all immediate',
+  'アカウント削除の後に残るラウンドは、射つ人の検査を通る'
+);
+set constraints all deferred;
 
 -- ============================================================
 -- A4 再登録と旧トークン
@@ -574,7 +641,7 @@ select ok(
   pg_temp.uid('A2') <> pg_temp.uid('A')
     and exists (select 1 from public.users where id = pg_temp.uid('A2'))
     and not exists (select 1 from public.round_users where user_id = pg_temp.uid('A2'))
-    and not exists (select 1 from public.shots where shooter_id = pg_temp.uid('A2')),
+    and not exists (select 1 from public.shot_events where author_id = pg_temp.uid('A2')),
   '削除したメールアドレスで新しく登録でき、新しい利用者は旧データを引き継がない'
 );
 
@@ -585,7 +652,7 @@ select set_config('request.jwt.claims', jsonb_build_object('sub', pg_temp.uid('A
 select throws_ok(
   $$select public.record_shots(jsonb_build_array(jsonb_build_object(
     'shot_event_id', pg_temp.uid('old.se'), 'distance_id', pg_temp.uid('R1.d'),
-    'end_number', 3, 'shot_number', 1, 'score_str', '9', 'score_int', 9)))$$,
+    'end_number', 3, 'shot_number', 1, 'score_str', '9', 'score_int', 9, 'shooter_number', 1)))$$,
   'PT403',
   null,
   '旧IDのJWTでの矢の記録は、参加の確認でPT403になる'
@@ -622,14 +689,14 @@ select is(
 -- A6 削除の記録(docs/backup.md)と、復元で使う内部関数purge_account
 -- ============================================================
 
--- P: 自分だけのラウンドと、他の編集者Bが残るラウンドを持つ。復元の手順5と同じ入力(削除の後の状態へ戻す利用者)に使う。
+-- P: 自分だけのラウンドと、他の射つ人Bが残るラウンドを持つ。復元の手順5と同じ入力(削除の後の状態へ戻す利用者)に使う。
 select pg_temp.mk_user('P', 'pat@example.test', 'Pat Archer');
 select pg_temp.mk_round('P1', 'P');
-select pg_temp.mk_shot('P1', 1, 'P', 'P');
+select pg_temp.mk_shot('P1', 1, 1, 'P');
 select pg_temp.mk_round('P2', 'B', 'completed');
-select pg_temp.join_round('P2', 'P', 'editor');
-select pg_temp.mk_shot('P2', 1, 'P', 'P');
-select pg_temp.mk_shot('P2', 2, 'B', 'P');
+select pg_temp.join_round('P2', 'P', 'owner', 2);
+select pg_temp.mk_shot('P2', 1, 2, 'P');
+select pg_temp.mk_shot('P2', 2, 1, 'P');
 select pg_temp.mk_edit('P2', 'P');
 select pg_temp.mk_preset('Pp', 'P');
 select pg_temp.mk_auth_rows('P');
@@ -718,7 +785,7 @@ $$;
 select is(
   pg_temp.snapshot_after('purge', pg_temp.uid('P')),
   pg_temp.snapshot_after('delete', pg_temp.uid('P')),
-  '利用者が自分だけのラウンドと他の編集者が残るラウンドを持つとき、purge_accountの後の全記録は、delete_accountの成功後と同一である'
+  '利用者が自分だけのラウンドと他の射つ人が残るラウンドを持つとき、purge_accountの後の全記録は、delete_accountの成功後と同一である'
 );
 
 create temp table da_before_missing as select pg_temp.snapshot() as snap;
@@ -757,10 +824,11 @@ select results_eq(
   $$select (select count(*) from auth.users where id = pg_temp.uid('P')),
          (select count(*) from public.rounds where id = pg_temp.uid('P1')),
          (select count(*) from public.rounds where id = pg_temp.uid('P2')),
-         (select count(*) from public.shots where distance_id = pg_temp.uid('P2.d') and shooter_id = pg_temp.deleted_user()),
+         (select count(*) from public.round_users where round_id = pg_temp.uid('P2') and shooter_number = 2 and user_id is null and role is null),
+         (select count(*) from public.shots where distance_id = pg_temp.uid('P2.d') and shooter_number = 2),
          pg_temp.leftover_refs(pg_temp.uid('P'))$$,
-  $$values (0::bigint, 0::bigint, 1::bigint, 1::bigint, 0::bigint)$$,
-  'purge_accountの後は、利用者と自分だけのラウンドが消え、他の編集者が残るラウンドは残って矢の射手が削除済みの利用者になり、利用者を指す行が無い'
+  $$values (0::bigint, 0::bigint, 1::bigint, 1::bigint, 1::bigint, 0::bigint)$$,
+  'purge_accountの後は、利用者と自分だけのラウンドが消え、他の射つ人が残るラウンドは残って利用者の射手が紐づかなくなり、利用者を指す行が無い'
 );
 
 create temp table da_before_twice as select pg_temp.snapshot() as snap;
@@ -775,7 +843,7 @@ select is(
 -- 記録先の設定が無い、または記録を送れないとき、削除は全体が取り消される。
 select pg_temp.mk_user('L');
 select pg_temp.mk_round('L1', 'L');
-select pg_temp.mk_shot('L1', 1, 'L', 'L');
+select pg_temp.mk_shot('L1', 1, 1, 'L');
 select pg_temp.mk_auth_rows('L');
 
 create temp table da_log_before as select pg_temp.snapshot() as snap;
@@ -814,6 +882,114 @@ select is(
   'ok',
   '記録先が記録しない設定(disabled)のとき、削除は成功する'
 );
+
+-- ============================================================
+-- A7 射つ人が複数いるラウンドの順の削除、利用者の変更、匿名化の内部関数
+-- ============================================================
+
+-- M: 射つ人M1(射手1)・M2(射手2)・M3(射手3)が、自分の射手の矢を持つ。N: 射つ人M1・M2だけ。
+select pg_temp.mk_user(u) from unnest(array['M1', 'M2', 'M3']) as u;
+select pg_temp.mk_round('M', 'M1');
+select pg_temp.join_round('M', 'M2', 'owner', 2);
+select pg_temp.join_round('M', 'M3', 'owner', 3);
+select pg_temp.mk_shot('M', n, n, 'M' || n) from generate_series(1, 3) as n;
+select pg_temp.mk_round('N', 'M1');
+select pg_temp.join_round('N', 'M2', 'owner', 2);
+select pg_temp.mk_shot('N', n, n, 'M' || n) from generate_series(1, 2) as n;
+
+-- ラウンドの射手と、矢・履歴の射手番号を表す。操作者は利用者の別名か、削除済み(D)で表す。
+create function pg_temp.round_state(p_round text) returns text
+language sql stable
+as $$
+  select format('round=%s shooters=[%s] shots=[%s] authors=[%s]',
+    (select count(*) from public.rounds where id = pg_temp.uid(p_round)),
+    (select string_agg(u.shooter_number || ':' || coalesce(a.alias, '-'), ' ' order by u.shooter_number)
+      from public.round_users u
+      left join (select alias, pg_temp.uid(alias) as id from unnest(array['M1', 'M2', 'M3', 'B', 'C1', 'C2']) as alias) a on a.id = u.user_id
+      where u.round_id = pg_temp.uid(p_round)),
+    (select string_agg(s.shot_number || ':' || s.shooter_number, ' ' order by s.shot_number)
+      from public.shots s where s.round_id = pg_temp.uid(p_round)),
+    (select string_agg(e.shot_number || ':' || e.shooter_number || ':' || coalesce(a.alias, 'D'), ' ' order by e.shot_number)
+      from public.shot_events e
+      left join (select alias, pg_temp.uid(alias) as id from unnest(array['M1', 'M2', 'M3', 'B', 'C1', 'C2']) as alias) a on a.id = e.author_id
+      where e.round_id = pg_temp.uid(p_round)))
+$$;
+
+create temp table da_m1 as select pg_temp.call_as(pg_temp.uid('M1'), pg_temp.fresh()) as r;
+select is(
+  (select r from da_m1) || ' ' || pg_temp.round_state('N'),
+  'ok round=1 shooters=[1:- 2:M2] shots=[1:1 2:2] authors=[1:1:D 2:2:M2]',
+  '射つ人2人のラウンドは、1人目の削除でその射手が紐づかなくなって残る'
+);
+create temp table da_m2 as select pg_temp.call_as(pg_temp.uid('M2'), pg_temp.fresh()) as r;
+select is(
+  (select r from da_m2) || ' ' || pg_temp.round_state('M'),
+  'ok round=1 shooters=[1:- 2:- 3:M3] shots=[1:1 2:2 3:3] authors=[1:1:D 2:2:D 3:3:M3]',
+  '射つ人3人のうち2人が順に削除すると、2人の矢と履歴は別々の番号の射手として残る'
+);
+select is(
+  (select count(*) from public.rounds where id = pg_temp.uid('N'))
+    + (select count(*) from public.round_users where round_id = pg_temp.uid('N'))
+    + (select count(*) from public.shots where round_id = pg_temp.uid('N'))
+    + (select count(*) from public.shot_events where round_id = pg_temp.uid('N')),
+  0::bigint,
+  '射つ人2人のラウンドは、2人目の削除で記録を残さず消える'
+);
+
+-- CH: 射手1の利用者をC1からC2へ変えた後に、C1を削除する。
+select pg_temp.mk_user(u) from unnest(array['C1', 'C2']) as u;
+select pg_temp.mk_round('CH', 'C1');
+select pg_temp.join_round('CH', 'B', 'owner', 2);
+select pg_temp.mk_shot('CH', 1, 1, 'C1');
+update public.round_users set user_id = pg_temp.uid('C2') where round_id = pg_temp.uid('CH') and shooter_number = 1;
+create temp table da_c1 as select pg_temp.call_as(pg_temp.uid('C1'), pg_temp.fresh()) as r;
+select is(
+  (select r from da_c1) || ' ' || pg_temp.round_state('CH'),
+  'ok round=1 shooters=[1:C2 2:B] shots=[1:1] authors=[1:1:D]',
+  '射手の利用者を変えた後に元の利用者を削除しても、番号は変更後の利用者のままで、操作者だけが匿名化先になる'
+);
+
+-- AN1・AN2: BとKが射つ人。AN3: Kは代理の人。
+select pg_temp.mk_user('K');
+select pg_temp.mk_round('AN1', 'B');
+select pg_temp.join_round('AN1', 'K', 'owner', 2);
+select pg_temp.mk_round('AN2', 'K');
+select pg_temp.join_round('AN2', 'B', 'owner', 2);
+select pg_temp.mk_round('AN3', 'B');
+select pg_temp.join_round('AN3', 'K', 'editor');
+
+create temp table da_anon_before as
+select id, user_id, role, shooter_number from public.round_users
+where round_id in (select pg_temp.uid(a) from unnest(array['AN1', 'AN2', 'AN3']) a);
+select public.anonymize_round_shooter(pg_temp.uid('AN1'), pg_temp.uid('K'));
+select public.anonymize_round_shooter(pg_temp.uid('AN3'), pg_temp.uid('K'));
+
+select results_eq(
+  $$select id, user_id, role, shooter_number from public.round_users
+    where round_id in (select pg_temp.uid(a) from unnest(array['AN1', 'AN2', 'AN3']) a) order by id$$,
+  $$select b.id,
+      case when t.id is null then b.user_id end,
+      case when t.id is null then b.role end,
+      b.shooter_number
+    from da_anon_before b
+    left join public.round_users t on t.id = b.id and t.round_id = pg_temp.uid('AN1') and b.user_id = pg_temp.uid('K')
+    order by b.id$$,
+  '匿名化の内部関数は、指定したラウンドの指定した利用者の射手だけを匿名化し、番号の無い参加の行と他のラウンドは変えない'
+);
+
+create temp table da_anon_once as select pg_temp.snapshot() as snap;
+select public.anonymize_round_shooter(pg_temp.uid('AN1'), pg_temp.uid('K'));
+select is(
+  pg_temp.snapshot(),
+  (select snap from da_anon_once),
+  '匿名化の内部関数をもう一度呼んでも、結果は変わらない'
+);
+
+select lives_ok(
+  'set constraints all immediate',
+  '順の削除と利用者の変更の後に残るラウンドは、射つ人の検査を通る'
+);
+set constraints all deferred;
 
 -- ---- 関数の属性 ----
 

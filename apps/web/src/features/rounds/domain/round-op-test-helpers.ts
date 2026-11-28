@@ -1,7 +1,7 @@
 import type { RoundBaseRecord } from "./round-base";
 import type { RoundConfig } from "./round-config";
 import type { RoundRevisions, RoundTables } from "./round-tables";
-import type { Distance, Shot } from "./scorecard-types";
+import type { Distance, Shooter, Shot } from "./scorecard-types";
 import type { RoundStatus, SyncOperation } from "./sync-events";
 
 type Op<T extends SyncOperation["type"]> = Extract<SyncOperation, { type: T }>;
@@ -72,6 +72,7 @@ export const shotRecorded = (
   shotNumber: 1,
   scoreStr: "10",
   scoreInt: 10,
+  shooterNumber: 1,
   ...overrides,
 });
 
@@ -86,6 +87,16 @@ export const shotCleared = (
   ...overrides,
 });
 
+export const shooterAdded = (
+  shooterNumber = 2,
+  eventId = "e-shooter-added",
+): SyncOperation => ({
+  type: "shooter.added",
+  eventId,
+  roundId: "round-1",
+  shooterNumber,
+});
+
 export const roundCreated = (
   overrides: Partial<Op<"round.created">> = {},
 ): SyncOperation => ({
@@ -96,6 +107,7 @@ export const roundCreated = (
   roundDate: "2026-09-29",
   format: "indoor",
   bowType: "compound",
+  creatorUserId: "user-1",
   distances: [
     {
       eventId: "e-created-d-1",
@@ -111,12 +123,18 @@ export const roundCreated = (
   ...overrides,
 });
 
-// 取得した状態から作る表。取得は削除済みの行を含まないため、全ての行が削除済みでない。
+// 作成したばかりのラウンドの射手。作成者`user-1`が射手1の射つ人である。
+const creatorShooters: Shooter[] = [
+  { shooter_number: 1, user_id: "user-1", role: "owner" },
+];
+
+// 取得した状態から作る表。与える行は、全て削除済みでない行である。射手を省くと、作成者の射手1だけにする。
 export function roundTablesFromServer(fetched: {
   roundConfig: RoundConfig;
   status: RoundStatus;
   distances: Distance[];
   shots: Shot[];
+  shooters?: Shooter[];
 }): RoundTables {
   return {
     round: {
@@ -124,6 +142,7 @@ export function roundTablesFromServer(fetched: {
       status: fetched.status,
       disabled: false,
     },
+    shooters: fetched.shooters ?? creatorShooters,
     distances: fetched.distances.map((d) => ({ ...d, disabled: false })),
     shots: fetched.shots.map((s) => ({ ...s, disabled: false })),
   };
@@ -136,6 +155,7 @@ export function roundBase(
     name?: string;
     distances?: Distance[];
     shots?: Shot[];
+    shooters?: Shooter[];
     revisions?: Partial<RoundRevisions>;
   } = {},
 ): RoundBaseRecord {
@@ -150,6 +170,7 @@ export function roundBase(
       },
       distances: overrides.distances ?? [],
       shots: overrides.shots ?? [],
+      shooters: overrides.shooters,
     }),
     revisions: { round: 1, distances: {}, shots: {}, ...overrides.revisions },
   };

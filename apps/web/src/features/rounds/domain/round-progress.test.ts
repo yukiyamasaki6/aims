@@ -47,8 +47,8 @@ const shot = (shotNumber: number, scoreStr = "10", endNumber = 1) => ({
   distance_id: "d-1",
   end_number: endNumber,
   shot_number: shotNumber,
-  // 取得した行は、DBのNOT NULL列のため必ず射手のIDを持つ。
-  shooter_id: "user-1",
+  // 取得した行は、DBのNOT NULL列のため必ず射手の番号を持つ。
+  shooter_number: 1,
   score_str: scoreStr,
   score_int: Number(scoreStr),
 });

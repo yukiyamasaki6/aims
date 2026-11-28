@@ -16,8 +16,16 @@ import {
 } from "../helpers/auth";
 import { resetOtpSendInterval } from "../helpers/auth-db";
 import { expectKeypadSettled } from "../helpers/keypad";
+import {
+  beginAs,
+  type DbSession,
+  expectWaitingForLock,
+  withDbSessions,
+  withLocalDb,
+} from "../helpers/local-db";
 import { getOtpCodeFromMailpit, mailIds } from "../helpers/mailpit";
 import {
+  addShooterAs,
   clearShotAs,
   getDistanceIds,
   getRoundRow,
@@ -442,21 +450,28 @@ test("送信に失敗した点数を残してアプリを閉じ、通信のあ�
   await expectSavedShots(supabase, distanceIds[0], ["1-1:10"]);
 });
 
-test("オフラインで開始したラウンドの詳細からラウンド一覧へ移り、オンラインに戻ると、そのラウンドを開き直さずに保存され、一覧にそのラウンドが1件だけ表示される", async ({
+test("オフラインで開始したラウンドに点数を記録してラウンド一覧へ移り、オンラインに戻ると、そのラウンドを開き直さずに保存されて矢は射手1になり、一覧に1件だけ表示され、開くと点数が表示される", async ({
   page,
 }) => {
-  // オフラインでラウンドを開始し、開いた設定のダイアログを閉じる。
+  // オフラインで、距離を持つプリセットを選んでラウンドを開始する。
   await page.goto("/rounds/new");
   await waitForHydration(page);
   await waitForServiceWorkerControl(page);
   await expectRoundBasesFetched(page);
+  const preset = page
+    .getByTestId("round-preset-button")
+    .filter({ hasText: "WA 1440" });
+  await preset.click();
+  await expect(preset).toHaveAttribute("aria-pressed", "true");
   await goOffline(page.context());
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
   await waitForHydration(page);
   const id = page.url().split("/").pop() as string;
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toBeHidden();
+
+  // 先頭のマスに点数を記録して、ラウンド一覧へ移る。
+  await page.getByTestId("score-button-10").click();
+  await expect(cell(page, 1, 1, 1)).toHaveText("10");
 
   await backToList(page);
 
@@ -470,10 +485,33 @@ test("オフラインで開始したラウンドの詳細からラウンド一�
     .poll(() => savedRoundCount(supabase, id), { timeout: 30_000 })
     .toBe(1);
 
+  const [distanceId] = await getDistanceIds(supabase, id);
+  await expect
+    .poll(
+      async () => {
+        const { data, error } = await supabase
+          .from("shots")
+          .select("end_number, shot_number, score_str, shooter_number")
+          .eq("distance_id", distanceId);
+        if (error) throw error;
+        return data;
+      },
+      { timeout: 30_000 },
+    )
+    .toEqual([
+      { end_number: 1, shot_number: 1, score_str: "10", shooter_number: 1 },
+    ]);
+
   // ラウンド一覧を読み込み直し、そのラウンドが1件だけ表示されることを確かめる。
   await page.reload();
   await waitForHydration(page);
   await expect(roundLinks(page, id)).toHaveCount(1);
+
+  // ラウンドを開いて読み込み直し、点数が表示されることを確かめる。
+  await roundLinks(page, id).click();
+  await expect(page).toHaveURL(new RegExp(`/rounds/${id}$`));
+  await reloadRound(page);
+  await expect(cell(page, 1, 1, 1)).toHaveText("10");
 });
 
 // サーバー側でセッションを失効させるため、共有のユーザーではなく使い捨てのユーザーで行う。
@@ -599,4 +637,219 @@ test("別の利用者の未送信の点数が残る端末でサインインし�
 
   await backToList(page);
   await expect(page.getByText(roundA.name)).toHaveCount(0);
+});
+
+// 公開APIを、利用者のアクセストークンで呼ぶ。数値の書き方をそのまま届けるため、本文は文字列で渡す。
+async function postRpc(supabase: SupabaseClient, fn: string, body: string) {
+  const { data } = await supabase.auth.getSession();
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/${fn}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+        authorization: `Bearer ${data.session?.access_token}`,
+        "content-type": "application/json",
+      },
+      body,
+    },
+  );
+  if (response.ok) return { status: response.status, code: null };
+  const { code } = (await response.json()) as { code: string };
+  return { status: response.status, code };
+}
+
+// 射手番号のJSONの書き方。`2.0`と`2e0`は整数の2である。
+const ACCEPTED_NUMBERS = ["2.0", "2e0", "1", "2", "2147483647"];
+// nullは、番号のキーの省略を表す。
+const REJECTED_NUMBERS = [
+  null,
+  "null",
+  '"2"',
+  '"abc"',
+  "true",
+  "[2]",
+  '{"n":2}',
+  "0",
+  "-1",
+  "1.5",
+  "2147483648",
+  "99999999999999999999",
+];
+const accepted = { status: 200, code: null };
+const rejected = { status: 422, code: "PT422" };
+
+test("射手の追加の公開APIは、有効な射手番号を受理し、省略と不正な番号をHTTP 422のPT422で拒否する", async () => {
+  const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const add = (number: string | null) => {
+    const argument = number === null ? "" : `,"p_shooter_number":${number}`;
+    return postRpc(
+      supabase,
+      "add_round_shooter",
+      `{"p_round_id":"${roundId}"${argument}}`,
+    );
+  };
+
+  for (const number of ACCEPTED_NUMBERS) {
+    expect(await add(number), `番号 ${number}`).toEqual(accepted);
+  }
+  for (const number of REJECTED_NUMBERS) {
+    expect(await add(number), `番号 ${number}`).toEqual(rejected);
+  }
+
+  const { data, error } = await supabase
+    .from("round_users")
+    .select("shooter_number")
+    .eq("round_id", roundId)
+    .order("shooter_number");
+  expect(error).toBeNull();
+  expect(data?.map((row) => row.shooter_number)).toEqual([1, 2, 2147483647]);
+});
+
+test("矢の記録の公開APIは、有効な射手番号を受理して保存し、省略と不正な番号をHTTP 422のPT422で拒否する", async () => {
+  const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const [distanceId] = await getDistanceIds(supabase, roundId);
+  await addShooterAs(supabase, roundId, 2);
+  await addShooterAs(supabase, roundId, 2147483647);
+  // 値ごとに別のマスへ記録する。
+  const record = (number: string | null, index: number) => {
+    const shooter = number === null ? "" : `,"shooter_number":${number}`;
+    const cellJson = `"end_number":${Math.floor(index / 3) + 1},"shot_number":${(index % 3) + 1}`;
+    return postRpc(
+      supabase,
+      "record_shots",
+      `{"p_shots":[{"shot_event_id":"${randomUUID()}","distance_id":"${distanceId}",${cellJson},"score_str":"10","score_int":10${shooter}}]}`,
+    );
+  };
+
+  for (const [index, number] of ACCEPTED_NUMBERS.entries()) {
+    expect(await record(number, index), `番号 ${number}`).toEqual(accepted);
+  }
+  for (const [index, number] of REJECTED_NUMBERS.entries()) {
+    const cellIndex = ACCEPTED_NUMBERS.length + index;
+    expect(await record(number, cellIndex), `番号 ${number}`).toEqual(rejected);
+  }
+
+  const { data, error } = await supabase
+    .from("shots")
+    .select("end_number, shot_number, shooter_number")
+    .eq("distance_id", distanceId)
+    .order("end_number")
+    .order("shot_number");
+  expect(error).toBeNull();
+  expect(data?.map((shot) => shot.shooter_number)).toEqual([
+    2, 2, 1, 2, 2147483647,
+  ]);
+});
+
+// 同じ距離の作成を、指定した接続から呼ぶ。
+function createDistanceOn(
+  session: DbSession,
+  ids: { eventId: string; distanceId: string },
+) {
+  const result = session.client.query<{ result: Record<string, unknown> }>(
+    `select public.create_distance($1, $2, $3, 'b', 30, 12, 3,
+       'a1000000-0000-0000-0000-000000000001', true) as result`,
+    [ids.eventId, ids.distanceId, roundId],
+  );
+  // 待ちの確認が先に失敗しても、接続を閉じるときの失敗を未処理にしない。
+  result.catch(() => undefined);
+  return result;
+}
+
+// 保存された距離と、その作成の履歴の件数。
+function distanceCounts(distanceId: string) {
+  return withLocalDb(async (client) => {
+    const { rows } = await client.query(
+      `select (select count(*)::int from public.distances where id = $1) as distances,
+              (select count(*)::int from public.distance_events where distance_id = $1) as events`,
+      [distanceId],
+    );
+    return rows[0];
+  });
+}
+
+const createdDistance = { revision: 1, applied: true, reason: null };
+
+test("2接続から同じ番号の射手を同時に追加すると、後の追加は先の確定を待ち、両方適用されて射手は1行になる", async () => {
+  const { userId } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const results = await withDbSessions(2, async ([first, second]) => {
+    const add = (session: DbSession) =>
+      session.client.query<{ result: { applied: boolean } }>(
+        "select public.add_round_shooter($1, '2'::jsonb) as result",
+        [roundId],
+      );
+    await beginAs(first, userId);
+    await beginAs(second, userId);
+    const firstResult = await add(first);
+    const waiting = add(second);
+    waiting.catch(() => undefined);
+    await expectWaitingForLock(second);
+    await first.client.query("commit");
+    const secondResult = await waiting;
+    await second.client.query("commit");
+    return [firstResult, secondResult].map((r) => r.rows[0].result.applied);
+  });
+
+  expect(results).toEqual([true, true]);
+  const { rows } = await withLocalDb((client) =>
+    client.query(
+      "select count(*)::int as count from public.round_users where round_id = $1 and shooter_number = 2",
+      [roundId],
+    ),
+  );
+  expect(rows).toEqual([{ count: 1 }]);
+});
+
+test("未確定の同じ作成と並行する距離の作成は、先の確定を待って記録した結果を返し、距離は1つになる", async () => {
+  const { userId } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const ids = { eventId: randomUUID(), distanceId: randomUUID() };
+  const results = await withDbSessions(2, async ([first, second]) => {
+    await beginAs(first, userId);
+    await beginAs(second, userId);
+    const firstResult = await createDistanceOn(first, ids);
+    const waiting = createDistanceOn(second, ids);
+    await expectWaitingForLock(second);
+    await first.client.query("commit");
+    const secondResult = await waiting;
+    await second.client.query("commit");
+    return [firstResult, secondResult].map((r) => r.rows[0].result);
+  });
+
+  expect(results).toEqual([createdDistance, createdDistance]);
+  expect(await distanceCounts(ids.distanceId)).toEqual({
+    distances: 1,
+    events: 1,
+  });
+});
+
+test("操作の照合の後に同じ作成が確定しても、距離の作成は拒否せず記録した結果を返し、距離は1つになる", async () => {
+  const { userId } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const ids = { eventId: randomUUID(), distanceId: randomUUID() };
+  const results = await withDbSessions(3, async ([first, second, blocker]) => {
+    await beginAs(first, userId);
+    await beginAs(second, userId);
+    const firstResult = await createDistanceOn(first, ids);
+    // 関数を変えずに、後の要求を操作の照合と距離IDの確認の間で待たせる。関数がその間で的の表を読むことに依る。
+    await blocker.client.query("begin");
+    const lock = blocker.client.query(
+      "lock table public.target_faces in access exclusive mode",
+    );
+    lock.catch(() => undefined);
+    await expectWaitingForLock(blocker);
+    const waiting = createDistanceOn(second, ids);
+    await expectWaitingForLock(second);
+    await first.client.query("commit");
+    await lock;
+    await blocker.client.query("commit");
+    const secondResult = await waiting;
+    await second.client.query("commit");
+    return [firstResult, secondResult].map((r) => r.rows[0].result);
+  });
+
+  expect(results).toEqual([createdDistance, createdDistance]);
+  expect(await distanceCounts(ids.distanceId)).toEqual({
+    distances: 1,
+    events: 1,
+  });
 });

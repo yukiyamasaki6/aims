@@ -150,6 +150,7 @@ export function createFakeRoundProcedures() {
     ids: {
       next: vi.fn(() => `id-${++issued.ids}`),
     },
+    recordUserId: vi.fn(() => "user-1"),
     whenOnline,
     historyViewMemory: createFakeHistoryViewMemory().memory,
     historyPagesMemory: createHistoryPagesMemory(),

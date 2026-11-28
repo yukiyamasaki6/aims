@@ -203,6 +203,7 @@ function composeStores(inputs: Inputs, records: Records) {
       }),
       fetching,
       ids,
+      recordUserId: hub.userId,
       // 参照を安定させるため、1度だけ作る。
       whenOnline: whenOnline.bind(null, connectivity),
       historyViewMemory: createBrowserHistoryViewMemory(identityStore),

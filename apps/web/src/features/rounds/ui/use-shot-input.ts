@@ -1,12 +1,18 @@
 import type { RoundState } from "../domain/round-tables";
 import type { HistoryEntry } from "../domain/score-history";
-import type { Distance, Shot } from "../domain/scorecard-types";
+import type {
+  CellShooter,
+  Distance,
+  Shooter,
+  Shot,
+} from "../domain/scorecard-types";
 import { shotAt } from "../domain/shot-cell";
 import {
   buildShotOperation,
   clearHistoryEntry,
   replayHistoryEntry,
   scoreHistoryEntry,
+  shooterNumberFor,
 } from "../domain/shot-operations";
 import { type Pointer, pointerAfterScore } from "../domain/shot-pointer";
 import type { SyncOperation } from "../domain/sync-events";
@@ -16,6 +22,9 @@ import type { ScoreHistory } from "./use-score-history";
 type ShotInputContext = {
   distances: Distance[];
   shots: Shot[];
+  shooters: Shooter[];
+  cellShooters: CellShooter[];
+  userId: string | null;
   pointer: Pointer;
   setPointer: (pointer: Pointer) => void;
   append: (operation: SyncOperation) => RoundState;
@@ -26,8 +35,15 @@ type ShotInputContext = {
 function scoreShot(ctx: ShotInputContext, scoreStr: string, scoreInt: number) {
   const { pointer, distances, shots } = ctx;
   if (!pointer) return;
+  const shooterNumber = shooterNumberFor(ctx, pointer, ctx.userId);
+  // 射手を指定できないマスには書かない。
+  if (shooterNumber === undefined) return;
   // 指しているマスの距離と範囲は、reconcilePointerが常に保証する。
-  const entry = scoreHistoryEntry(shots, pointer, { scoreStr, scoreInt });
+  const entry = scoreHistoryEntry(shots, pointer, {
+    scoreStr,
+    scoreInt,
+    shooterNumber,
+  });
   const operation = buildShotOperation(entry, entry.after, ctx.newId());
   // 次に指すマスは、追記の結果の画面の状態から決める。規則で効かない操作は、画面と同じく反映されない。
   const state = ctx.append(operation);
@@ -63,15 +79,20 @@ function replay(ctx: ShotInputContext, entry: HistoryEntry, forward: boolean) {
 export function useShotInput({
   distances,
   shots,
+  shooters,
+  cellShooters,
   pointer,
   setPointer,
   append,
   history,
-}: Omit<ShotInputContext, "newId">) {
-  const { ids } = useRoundProcedures();
+}: Omit<ShotInputContext, "newId" | "userId">) {
+  const { ids, recordUserId } = useRoundProcedures();
   const ctx: ShotInputContext = {
     distances,
     shots,
+    shooters,
+    cellShooters,
+    userId: recordUserId(),
     pointer,
     setPointer,
     append,

@@ -42,7 +42,7 @@ language sql stable
 as $$
   select case when p_score is null
     then jsonb_build_object('shot_event_id', pg_temp.ev(p_n), 'distance_id', pg_temp.id(p_distance), 'end_number', p_end, 'shot_number', p_shot_number)
-    else jsonb_build_object('shot_event_id', pg_temp.ev(p_n), 'distance_id', pg_temp.id(p_distance), 'end_number', p_end, 'shot_number', p_shot_number, 'score_str', p_score::text, 'score_int', p_score)
+    else jsonb_build_object('shot_event_id', pg_temp.ev(p_n), 'distance_id', pg_temp.id(p_distance), 'end_number', p_end, 'shot_number', p_shot_number, 'score_str', p_score::text, 'score_int', p_score, 'shooter_number', 1)
   end
 $$;
 
@@ -64,9 +64,9 @@ insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('N'));
 insert into public.rounds (id, name, round_date, format, bow_type) values
   (pg_temp.id('R1'), 'Rev Outdoor', '2026-01-01', 'outdoor', 'recurve'),
   (pg_temp.id('R2'), 'Rev Field', '2026-01-01', 'field', 'recurve');
-insert into public.round_users (round_id, user_id, role) values
-  (pg_temp.id('R1'), pg_temp.id('E'), 'editor'),
-  (pg_temp.id('R2'), pg_temp.id('E'), 'editor');
+insert into public.round_users (round_id, user_id, role, shooter_number) values
+  (pg_temp.id('R1'), pg_temp.id('E'), 'owner', 1),
+  (pg_temp.id('R2'), pg_temp.id('E'), 'owner', 1);
 insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked) values
   (pg_temp.id('D1'), pg_temp.id('R1'), 'a', 70, 6, 6, pg_temp.face(), true),
   (pg_temp.id('D2'), pg_temp.id('R1'), 'b', 50, 6, 6, pg_temp.face(), true);

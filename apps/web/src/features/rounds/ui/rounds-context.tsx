@@ -14,7 +14,7 @@ import type { RoundsListStore } from "../application/rounds-list-store";
 import type { UniqueIds } from "../application/unique-ids";
 import type { WhenOnline } from "../application/when-online";
 
-// 画面が窓口を通さずに使う手続き。離れる(完了、削除)、ラウンドの削除(一覧)、開始、プリセットの保存・削除・取得、IDの払い出し、オンライン復帰の通知、履歴の条件の記憶、戻ったときの履歴の表示の記憶。
+// 画面が窓口を通さずに使う手続き。離れる(完了、削除)、ラウンドの削除(一覧)、開始、プリセットの保存・削除・取得、IDの払い出し、記録の利用者、オンライン復帰の通知、履歴の条件の記憶、戻ったときの履歴の表示の記憶。
 type RoundProcedures = {
   leaving: RoundLeaving;
   deletion: RoundDeletion;
@@ -26,6 +26,8 @@ type RoundProcedures = {
     "fetchPresets" | "savedPresets" | "savedTargetFaces"
   >;
   ids: UniqueIds;
+  // 端末の記録の利用者(認証中の利用者)。
+  recordUserId: () => string | null;
   whenOnline: WhenOnline;
   historyViewMemory: HistoryViewMemory;
   historyPagesMemory: HistoryPagesMemory;

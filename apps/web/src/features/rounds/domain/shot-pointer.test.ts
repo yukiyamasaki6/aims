@@ -41,6 +41,7 @@ function shotIn(c: ShotCell): Shot {
     shot_number: c.shotNumber,
     score_str: "10",
     score_int: 10,
+    shooter_number: 1,
   };
 }
 

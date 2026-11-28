@@ -98,11 +98,11 @@ type ShotCellInput = {
   shotNumber: number;
 };
 
-// 他端末が、マスへ点数を記録する。
+// 他端末が、マスへ点数を記録する。射手の番号を省くと、作った人の射手1にする。
 export function recordShotAs(
   supabase: SupabaseClient,
   cell: ShotCellInput,
-  score: { scoreStr: string; scoreInt: number },
+  score: { scoreStr: string; scoreInt: number; shooterNumber?: number },
 ) {
   return call(supabase, "record_shots", {
     p_shots: [
@@ -113,8 +113,21 @@ export function recordShotAs(
         shot_number: cell.shotNumber,
         score_str: score.scoreStr,
         score_int: score.scoreInt,
+        shooter_number: score.shooterNumber ?? 1,
       },
     ],
+  });
+}
+
+// 他端末が、利用者に紐づかない射手を番号を選んで加える。
+export function addShooterAs(
+  supabase: SupabaseClient,
+  roundId: string,
+  shooterNumber: number,
+) {
+  return call(supabase, "add_round_shooter", {
+    p_round_id: roundId,
+    p_shooter_number: shooterNumber,
   });
 }
 

@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(58);
+select plan(53);
 
 -- 既存の制約・権限テスト向けのfixture生成ヘルパー。プロダクションの
 -- create_roundはid/position_keyを必須とするため、簡潔なfixtureの入力を、
@@ -49,7 +49,8 @@ end;
 $$;
 
 -- ============================================================
--- RLS: editor / 非メンバー
+-- RLS: 射つ人 / 非参加者
+-- 参加の行の制約はshooters.sql、代理の人を含む閲覧の範囲はhistory_read_visibility.sqlで固定している。
 -- ============================================================
 
 -- Fixture: user A owns a round. rounds への直接INSERTは create_round RPC経由のみ許可される
@@ -61,25 +62,17 @@ insert into auth.users (id) values ('99999999-9999-9999-9999-999999999999');
 insert into public.rounds (id, name, round_date, format, bow_type)
 values ('44444444-4444-4444-4444-444444444444', 'Private Round', current_date, 'outdoor', 'recurve');
 
-insert into public.round_users (round_id, user_id, role)
-values ('44444444-4444-4444-4444-444444444444', '11111111-1111-1111-1111-111111111111', 'editor');
-
-select throws_ok(
-  $$insert into public.round_users (round_id, user_id, role)
-    values ('44444444-4444-4444-4444-444444444444', '11111111-1111-1111-1111-111111111111', 'viewer')$$,
-  '23505',
-  null,
-  '同一(round_id, user_id)の重複登録は一意制約で拒否される'
-);
+insert into public.round_users (round_id, user_id, role, shooter_number)
+values ('44444444-4444-4444-4444-444444444444', '11111111-1111-1111-1111-111111111111', 'owner', 1);
 
 set local role authenticated;
 
--- Acting as user A (member/editor): the round is visible.
+-- Acting as user A (owner): the round is visible.
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 select results_eq(
   $$select count(*) from public.rounds where id = '44444444-4444-4444-4444-444444444444'$$,
   $$values (1::bigint)$$,
-  'ラウンド作成者（editor）には自分のラウンドが見える'
+  '射つ人には自分のラウンドが見える'
 );
 
 -- Acting as user B (not a member): the round is hidden by RLS.
@@ -91,76 +84,10 @@ select results_eq(
 );
 
 -- ============================================================
--- RLS: viewerロールの閲覧
--- ============================================================
--- viewerの書き込み拒否はrls_matrix.sql（直接の書き込み）とrpc_matrix.sql（RPC）で固定する。
-
--- Fixture: user A (editor) owns a round with one distance and one shot.
--- User B is registered as a 'viewer' on the same round.
--- 前セクションのauthenticatedロールをリセットし、フィクスチャ投入用の
--- 接続ロール（RLS対象外）に戻す。
-reset role;
-
-insert into auth.users (id) values ('55555555-5555-5555-5555-555555555555');
-insert into auth.users (id) values ('66666666-6666-6666-6666-666666666666');
-
-insert into public.rounds (id, name, round_date, format, bow_type)
-values ('77777777-7777-7777-7777-777777777777', 'Viewer Test Round', current_date, 'outdoor', 'recurve');
-
-insert into public.round_users (round_id, user_id, role)
-values ('77777777-7777-7777-7777-777777777777', '55555555-5555-5555-5555-555555555555', 'editor');
-insert into public.round_users (round_id, user_id, role)
-values ('77777777-7777-7777-7777-777777777777', '66666666-6666-6666-6666-666666666666', 'viewer');
-
-insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
-values ('88888888-8888-8888-8888-888888888888', '77777777-7777-7777-7777-777777777777', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
-
-insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
-values ('88888888-8888-8888-8888-888888888888', 1, 1, '55555555-5555-5555-5555-555555555555', 'X', 10);
-
-set local role authenticated;
-select set_config('request.jwt.claim.sub', '66666666-6666-6666-6666-666666666666', true);
-
--- viewerはis_round_member経由でSELECTできる（閲覧のみ許可）。
-select results_eq(
-  $$select count(*) from public.rounds where id = '77777777-7777-7777-7777-777777777777'$$,
-  $$values (1::bigint)$$,
-  'viewerロールのユーザーはラウンドを閲覧できる'
-);
-
-select results_eq(
-  $$select count(*) from public.distances where round_id = '77777777-7777-7777-7777-777777777777'$$,
-  $$values (1::bigint)$$,
-  'viewerロールのユーザーはdistancesを閲覧できる'
-);
-
-select results_eq(
-  $$select count(*) from public.shots where distance_id = '88888888-8888-8888-8888-888888888888'$$,
-  $$values (1::bigint)$$,
-  'viewerロールのユーザーはshotsを閲覧できる'
-);
-
--- ============================================================
--- round_users.role のCHECK制約
--- ============================================================
-
-reset role;
-
-insert into auth.users (id) values ('b0000000-0000-0000-0000-000000000001');
-insert into public.rounds (id, name, round_date, format, bow_type)
-values ('b0000000-0000-0000-0000-000000000002', 'Role Check Round', current_date, 'outdoor', 'recurve');
-
-select throws_ok(
-  $$insert into public.round_users (round_id, user_id, role)
-    values ('b0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', 'admin')$$,
-  '23514',
-  null,
-  'round_users.roleは''editor''/''viewer''以外はCHECK制約で拒否される'
-);
-
--- ============================================================
 -- rounds / distances: format / bow_type / target_faceのCHECK・外部キー制約
 -- ============================================================
+
+reset role;
 
 insert into auth.users (id) values ('b0000000-0000-0000-0000-000000000003');
 set local role authenticated;
@@ -215,7 +142,7 @@ select id as shots_distance_id from public.distances where round_id = :'shots_ro
 select results_eq(
   $$select record_shots(jsonb_build_array(jsonb_build_object(
       'shot_event_id', gen_random_uuid(), 'distance_id', '$$ || :'shots_distance_id' || $$'::uuid,
-      'end_number', 1, 'shot_number', 1, 'score_str', 'bullseye', 'score_int', -1
+      'end_number', 1, 'shot_number', 1, 'score_str', 'bullseye', 'score_int', -1, 'shooter_number', 1
     ))) -> 0 ->> 'reason'$$,
   $$values ('UNFIT'::text)$$,
   '的に無い点数はUNFITで効かず、矢として記録されない'
@@ -224,15 +151,15 @@ select results_eq(
 -- 以降の一意制約テストが、1エンド目のマス1に矢がある状態を前提とする。
 select record_shots(jsonb_build_array(jsonb_build_object(
   'shot_event_id', gen_random_uuid(), 'distance_id', :'shots_distance_id'::uuid,
-  'end_number', 1, 'shot_number', 1, 'score_str', 'X', 'score_int', 10
+  'end_number', 1, 'shot_number', 1, 'score_str', 'X', 'score_int', 10, 'shooter_number', 1
 )));
 
 -- record_shotsは同じマスへの再記録を更新として扱うため、生の主キー制約（23505）はRLS対象外の接続ロールで直接検証する。
 reset role;
 
 select throws_ok(
-  $$insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
-    values ('$$ || :'shots_distance_id' || $$', 1, 1, 'b0000000-0000-0000-0000-000000000004', '9', 9)$$,
+  $$insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int)
+    values ('$$ || :'shots_round_id' || $$', '$$ || :'shots_distance_id' || $$', 1, 1, 1, '9', 9)$$,
   '23505',
   null,
   '同じマス(距離・エンド・番号)の重複挿入は主キーで拒否される'
@@ -240,8 +167,8 @@ select throws_ok(
 
 -- マスの番号が違えば、同じエンドに同じ点数・同じ射手の矢が並ぶ。
 select lives_ok(
-  $$insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
-    values ('$$ || :'shots_distance_id' || $$', 1, 2, 'b0000000-0000-0000-0000-000000000004', 'X', 10)$$,
+  $$insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int)
+    values ('$$ || :'shots_round_id' || $$', '$$ || :'shots_distance_id' || $$', 1, 2, 1, 'X', 10)$$,
   '同じエンドの別のマスに、同じ点数・同じ射手の矢を記録できる'
 );
 
@@ -513,7 +440,7 @@ select lives_ok(
 
 reset role;
 
-insert into auth.users (id) values ('90000000-0000-0000-0000-000000000001'); -- editor
+insert into auth.users (id) values ('90000000-0000-0000-0000-000000000001'); -- 射つ人
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '90000000-0000-0000-0000-000000000001', true);
@@ -556,7 +483,7 @@ select results_eq(
 select record_shots(jsonb_build_array(jsonb_build_object(
   'shot_event_id', '90000000-0000-0000-0000-000000000015',
   'distance_id', '90000000-0000-0000-0000-000000000013',
-  'end_number', 1, 'shot_number', 1, 'score_str', 'X', 'score_int', 10
+  'end_number', 1, 'shot_number', 1, 'score_str', 'X', 'score_int', 10, 'shooter_number', 1
 )));
 
 select results_eq(
@@ -587,7 +514,7 @@ select results_eq(
 select record_shots(jsonb_build_array(jsonb_build_object(
   'shot_event_id', '90000000-0000-0000-0000-000000000017',
   'distance_id', '90000000-0000-0000-0000-000000000013',
-  'end_number', 1, 'shot_number', 1, 'score_str', '9', 'score_int', 9
+  'end_number', 1, 'shot_number', 1, 'score_str', '9', 'score_int', 9, 'shooter_number', 1
 )));
 
 select results_eq(
@@ -613,7 +540,7 @@ select results_eq(
 );
 
 select results_eq(
-  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000013', 'end_number', 2, 'shot_number', 1, 'score_str', 'X', 'score_int', 10))) -> 0 ->> 'reason'$$,
+  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000013', 'end_number', 2, 'shot_number', 1, 'score_str', 'X', 'score_int', 10, 'shooter_number', 1))) -> 0 ->> 'reason'$$,
   $$values ('DISABLED'::text)$$,
   '削除済みのラウンド配下への矢記録はDISABLEDで効かない'
 );
@@ -645,7 +572,7 @@ select results_eq(
 );
 
 select results_eq(
-  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000023', 'end_number', 1, 'shot_number', 1, 'score_str', 'X', 'score_int', 10))) -> 0 ->> 'reason'$$,
+  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000023', 'end_number', 1, 'shot_number', 1, 'score_str', 'X', 'score_int', 10, 'shooter_number', 1))) -> 0 ->> 'reason'$$,
   $$values ('DISABLED'::text)$$,
   '削除済みの距離への矢記録はDISABLEDで効かない'
 );
@@ -665,11 +592,11 @@ select results_eq(
   '行の無いマスの取り消しはMISSINGで効かず、記録されない'
 );
 
-select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000026', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'shot_number', 2, 'score_str', 'X', 'score_int', 10)));
+select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000026', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'shot_number', 2, 'score_str', 'X', 'score_int', 10, 'shooter_number', 1)));
 
 select clear_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000029', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'shot_number', 2)));
 
-select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-00000000002a', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'shot_number', 2, 'score_str', '9', 'score_int', 9)));
+select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-00000000002a', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'shot_number', 2, 'score_str', '9', 'score_int', 9, 'shooter_number', 1)));
 
 select results_eq(
   $$select type, revision, end_number from shot_events where distance_id = '90000000-0000-0000-0000-000000000028' and end_number = 6 and shot_number = 2 order by revision$$,

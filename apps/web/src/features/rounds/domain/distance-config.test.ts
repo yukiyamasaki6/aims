@@ -287,6 +287,7 @@ describe("validateDistanceDraft", () => {
       score_str: scoreStr,
       score_int: scoreInt,
       shot_number: shotNumber,
+      shooter_number: 1,
     });
     const shots = [
       shot(3, 1, "10", 10),

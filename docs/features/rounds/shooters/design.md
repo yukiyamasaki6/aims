@@ -23,7 +23,7 @@
 | `domain/round-view.ts`、`ui/use-shot-input.ts` | 取り消し済みを含むマスの射手を入力へ渡し、記録・戻る・進むの操作に射手を指定する |
 | `infrastructure/round-op-transport.ts` | 射手番号を`record_shots`へ、射手の追加を`add_round_shooter`へ送る |
 | `infrastructure/round-queries.ts` | 射手の一覧と矢の射手番号を数値で取得する |
-| `supabase/migrations/`の追加migration | 射手の表の定義、制約、RPC、匿名化の内部関数 |
+| `supabase/migrations/20261128010001_shooters_unified.sql` | 射手の表の定義、制約、RPC、匿名化の内部関数 |
 
 ### データ
 

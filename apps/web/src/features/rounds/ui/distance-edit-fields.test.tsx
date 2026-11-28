@@ -79,6 +79,7 @@ const recordedShots: Shot[] = [1, 2, 3].map((n) => ({
   score_str: "M",
   score_int: 0,
   shot_number: n,
+  shooter_number: 1,
 }));
 
 const EVENT_ID = "00000000-0000-4000-8000-000000000001";

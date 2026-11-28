@@ -54,7 +54,8 @@ Googleで作った、またはGoogleが結び付いたアカウントも、同�
 | `src/features/auth/ui/delete-account-form.tsx` | 意思確認とコード入力の画面、統合サインインと共通のOTP部品、意思の明示、設定パネルへの処理中通知 |
 | `src/features/auth/domain/auth-code.ts` | コード入力と60秒の再送待機の共通規則 |
 | `src/features/auth/application/session.ts` | 削除のネットワーク実行中の保持、成功後のサインアウトと遷移 |
-| `supabase/migrations/20261127010006_delete_account.sql` | 削除RPCのOTP認可と対象ID契約、削除・匿名化、削除記録の同期書込み |
+| `supabase/migrations/20261127010006_delete_account.sql` | 削除RPCのOTP認可と対象ID契約、削除記録の同期書込み |
+| `supabase/migrations/20261128010001_shooters_unified.sql` | 削除・匿名化の本体(射つ人を基準にした削除と、射手の匿名化) |
 
 意思確認の削除ボタンではDBへ削除を試行せず、続けてコード送信を行う。送信時にgetUserで対象IDと現在のメールを確定する。ブラウザの時計やJWT解析で認可や省略を決めない。
 送信は`signInWithOtp`のshouldCreateUser:falseとcaptchaToken、確認は`verifyOtp`のtype:emailを用いる。

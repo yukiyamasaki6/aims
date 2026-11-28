@@ -39,6 +39,7 @@ export type RoundsDbSchema = {
     | "save_round_as_preset"
     | "record_shots"
     | "clear_shots"
+    | "add_round_shooter"
   > & {
     create_distance: CreateDistanceWithNullable;
     rounds_list: NullableHistoryArgs<Full["Functions"]["rounds_list"]>;

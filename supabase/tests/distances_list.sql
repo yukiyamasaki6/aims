@@ -62,7 +62,7 @@ declare
 begin
   insert into public.rounds (id, name, round_date, created_at, format, bow_type, status, disabled_at)
   values (v_round, p_alias, p_date, v_created, p_format, p_bow_type, p_status, case when p_disabled then v_created end);
-  insert into public.round_users (round_id, user_id, role) values (v_round, pg_temp.id(p_owner), 'editor');
+  insert into public.round_users (round_id, user_id, role, shooter_number) values (v_round, pg_temp.id(p_owner), 'owner', 1);
   for v_row in select e.v from jsonb_array_elements(p_rows) with ordinality as e(v, ord) order by e.ord loop
     v_id := coalesce('d2000000-0000-0000-0000-' || lpad(v_row.v ->> 'i', 12, '0'), gen_random_uuid()::text)::uuid;
     insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, disabled_at)
@@ -70,11 +70,11 @@ begin
       coalesce((v_row.v ->> 'f')::uuid, 'a1000000-0000-0000-0000-000000000001'::uuid), coalesce((v_row.v ->> 'm')::boolean, true),
       case when (v_row.v ->> 'x')::boolean then v_created end);
     insert into dl_dist (alias, id) values (v_row.v ->> 'n', v_id);
-    insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int)
-    select v_id, (i - 1) / (v_row.v ->> 'a')::int + 1, (i - 1) % (v_row.v ->> 'a')::int + 1, pg_temp.id(p_owner), 'X', 10
+    insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int)
+    select v_round, v_id, (i - 1) / (v_row.v ->> 'a')::int + 1, (i - 1) % (v_row.v ->> 'a')::int + 1, 1, 'X', 10
     from generate_series(1, coalesce((v_row.v ->> 't')::int, 0)) as i;
-    insert into public.shots (distance_id, end_number, shot_number, shooter_id, score_str, score_int, disabled_at)
-    select v_id, (v_row.v ->> 'e')::int, i, pg_temp.id(p_owner), 'X', 10, now()
+    insert into public.shots (round_id, distance_id, end_number, shot_number, shooter_number, score_str, score_int, disabled_at)
+    select v_round, v_id, (v_row.v ->> 'e')::int, i, 1, 'X', 10, now()
     from generate_series(1, coalesce((v_row.v ->> 'dx')::int, 0)) as i;
   end loop;
 end;
@@ -180,7 +180,7 @@ insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('N'));
 --   H: インドア・ベアボウ 09-16。position_keyが同じ2つの距離。H1(100)は先に挿入されIDが大きく、H2(200)は後に挿入されIDが小さい
 --   I: 屋外・リカーブ 09-17。I1=50m 12エンド×3射(200)→I2=50m 6エンド×6射(220)。射数/エンドが違う
 --   J: 屋外・リカーブ 09-18。J1=50m(180)。的が屋外80cm
---   Z: Nの完了で、Eが閲覧者として属する。インドア・リカーブ 09-11。Z1=18m(220)
+--   Z: Nの完了で、Eが代理の人として参加する。インドア・リカーブ 09-11。Z1=18m(220)
 -- 返さない行: P（入力中）、X（削除済み）、Y（Nだけが属する完了）。
 select pg_temp.mkd('A', 'E', '2026-09-10', 'outdoor', 'recurve', 'completed',
   '[{"n":"A1","k":"1","d":50,"e":6,"a":6,"t":30},{"n":"A2","k":"2","d":30,"e":6,"a":6,"t":32}]');
@@ -205,7 +205,7 @@ select pg_temp.mkd('J', 'E', '2026-09-18', 'outdoor', 'recurve', 'completed',
   '[{"n":"J1","k":"1","d":50,"e":6,"a":6,"f":"a1000000-0000-0000-0000-000000000002","t":18}]');
 select pg_temp.mkd('Z', 'N', '2026-09-11', 'indoor', 'recurve', 'completed',
   '[{"n":"Z1","k":"1","d":18,"e":10,"a":3,"f":"a1000000-0000-0000-0000-000000000004","t":22}]');
-insert into public.round_users (round_id, user_id, role) values (pg_temp.id('Z'), pg_temp.id('E'), 'viewer');
+insert into public.round_users (round_id, user_id, role) values (pg_temp.id('Z'), pg_temp.id('E'), 'editor');
 select pg_temp.mkd('P', 'E', '2026-09-19', 'outdoor', 'recurve', 'in_progress', '[{"n":"P1","k":"1","d":50,"e":6,"a":6,"t":10}]');
 select pg_temp.mkd('X', 'E', '2026-09-20', 'outdoor', 'recurve', 'completed', '[{"n":"X1","k":"1","d":50,"e":6,"a":6,"t":10}]', true);
 select pg_temp.mkd('Y', 'N', '2026-09-21', 'outdoor', 'recurve', 'completed', '[{"n":"Y1","k":"1","d":50,"e":6,"a":6,"t":10}]');
@@ -220,7 +220,7 @@ select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
 select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100)),
   'J1,I1,I2,H2,H1,F1,F3,L1,L2,L3,C1,C2,D1,B1,B2,Z1,A1,A2',
-  '完了で無効でないラウンドの、無効でない距離だけを1件ずつ返す（入力中・削除済み・属さないラウンド・無効な距離を返さず、閲覧者として属するラウンドの距離を返し、距離が0件のラウンドは件を出さない）'
+  '完了で無効でないラウンドの、無効でない距離だけを1件ずつ返す（入力中・削除済み・属さないラウンド・無効な距離を返さず、代理の人として参加するラウンドの距離を返し、距離が0件のラウンドは件を出さない）'
 );
 
 select is(

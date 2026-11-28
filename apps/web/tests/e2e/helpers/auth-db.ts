@@ -1,27 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Client } from "pg";
-
-// ローカルのテスト用DBだけに接続する。ホストが手元でなければ、本番へ向けた書き換えを避けるため実行しない。
-const LOCAL_DATABASE_URL =
-  "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
-const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost"]);
-
-async function withLocalDb<T>(run: (client: Client) => Promise<T>): Promise<T> {
-  const connectionString = process.env.E2E_DATABASE_URL ?? LOCAL_DATABASE_URL;
-  const url = new URL(connectionString);
-  // `?host=`などのクエリは、検査したホストと別の接続先へ向けられるため認めない。
-  if (!LOCAL_HOSTS.has(url.hostname) || url.search !== "")
-    throw new Error(
-      "E2Eのテスト用DBは、クエリを含まないローカルのホストの接続文字列だけを使える。",
-    );
-  const client = new Client({ connectionString });
-  await client.connect();
-  try {
-    return await run(client);
-  } finally {
-    await client.end();
-  }
-}
+import { withLocalDb } from "./local-db";
 
 // 実Authの送信間隔は、利用者の送信時刻の列(確認済みの既存利用者へのOTPは`recovery_sent_at`、登録は`confirmation_sent_at`、メール変更は`email_change_sent_at`)で判定される。実時間を待たず、次の送信が通る状態にする。
 export function resetOtpSendInterval(email: string) {

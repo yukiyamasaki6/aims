@@ -21,8 +21,9 @@ export type ReflectableEntry = {
 
 // 操作の対象について、取得が持つrevision。取得に行が無ければ0。
 // ラウンドの削除は、取得が「見つからない」になるため、確認する対象がない(undefined)。
+// 射手の追加はrevisionを持たないため、対象にしない。
 function fetchedRevision(
-  operation: SyncOperation,
+  operation: Exclude<SyncOperation, { type: "shooter.added" }>,
   revisions: RoundRevisions,
 ): number | undefined {
   switch (operation.type) {
@@ -42,8 +43,13 @@ function fetchedRevision(
   }
 }
 
+function hasShooter(tables: RoundTables, shooterNumber: number): boolean {
+  return tables.shooters.some((s) => s.shooter_number === shooterNumber);
+}
+
 // 確定した操作が、ベースに反映済みか。確定のrevisionと取得のrevisionの比較で判定する。
 // 時刻では、取得の間に確定した操作が取得の前後どちらで適用されたかを決められないため。
+// 射手の追加は、取得の射手の一覧に同じ番号があるかで判定する。
 // 削除の印(null)には、確定済みの操作は全て反映済み。
 export function reflectsBase(
   base: RoundBaseRecord | null,
@@ -51,6 +57,9 @@ export function reflectsBase(
 ): boolean {
   if (entry.ackedRevision === undefined) return false;
   if (base === null) return true;
+  if (entry.operation.type === "shooter.added") {
+    return hasShooter(base.tables, entry.operation.shooterNumber);
+  }
   const fetchedAt = fetchedRevision(entry.operation, base.revisions);
   return fetchedAt !== undefined && fetchedAt >= entry.ackedRevision;
 }
@@ -58,11 +67,16 @@ export function reflectsBase(
 // 取り込もうとするベースが、今のベースより古い状態か。
 // 取得の開始時刻では、同時に始まった取得のどちらが新しい状態を返すかを決められないため、サーバーが付けたrevisionで比べる。
 // 両方にある対象(ラウンド、同じIDの距離、同じIDの矢)のどれかで、取り込むほうのrevisionが小さければ古い。片方にしか無い対象は比べない。
+// 射手は一覧から消えないため、今のベースが知る番号が取り込むほうに欠ければ古い。
 export function isOlderBase(
   current: RoundBaseRecord,
   incoming: RoundBaseRecord,
 ): boolean {
   if (incoming.revisions.round < current.revisions.round) return true;
+  const lacksShooter = current.tables.shooters.some(
+    (s) => !hasShooter(incoming.tables, s.shooter_number),
+  );
+  if (lacksShooter) return true;
   const older = (
     now: Record<string, number>,
     next: Record<string, number>,

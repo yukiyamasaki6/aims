@@ -6,7 +6,13 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
-import { updateRound } from "../helpers/other-device";
+import {
+  addShooterAs,
+  getDistanceIds,
+  openOtherDevice,
+  recordShotAs,
+  updateRound,
+} from "../helpers/other-device";
 import { createRound, signInAsTestUser } from "../helpers/rounds";
 import { cell, expectCells, expectPointedCell } from "../helpers/score-cells";
 
@@ -194,6 +200,73 @@ test("一つ戻った後に一つ進むと、同じマスに同じ点数が戻�
   // 再読み込みして、同じ点数が残ることを確かめる。
   await reloadAfter(page, sent);
   await expectCells(page, 1, 1, ["X", null, null]);
+});
+
+test("紐づかない射手のマスを直し、戻して進め、消して書き直すと、再読み込み後まで同じ射手の矢として保存され、空だったマスは作った人の射手の矢になる", async ({
+  page,
+}) => {
+  // 射手2(紐づかない射手)の矢があるラウンドを開く。射手を選ぶ画面は無いため、射手とその矢は公開APIで用意する。
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "射手の保持テスト",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+  });
+  const [distanceId] = await getDistanceIds(device.supabase, roundId);
+  await addShooterAs(device.supabase, roundId, 2);
+  await recordShotAs(
+    device.supabase,
+    { distanceId, endNumber: 1, shotNumber: 1 },
+    { scoreStr: "8", scoreInt: 8, shooterNumber: 2 },
+  );
+  // 保存された生きている矢を「マスの番号:点数:射手番号」で返す。
+  const savedShots = async () => {
+    const { data, error } = await device.supabase
+      .from("shots")
+      .select("shot_number, score_str, shooter_number")
+      .eq("distance_id", distanceId)
+      .is("disabled_at", null)
+      .order("shot_number");
+    if (error) throw error;
+    return data.map(
+      (s) => `${s.shot_number}:${s.score_str}:${s.shooter_number}`,
+    );
+  };
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+  await expectCells(page, 1, 1, ["8", null, null]);
+
+  // 射手2のマスを直し、一つ戻って一つ進める。
+  await cell(page, 1, 1, 1).click();
+  await page.getByTestId("score-button-9").click();
+  await expect.poll(savedShots).toEqual(["1:9:2"]);
+  await page.getByTestId("score-button-undo").click();
+  await expect.poll(savedShots).toEqual(["1:8:2"]);
+  await page.getByTestId("score-button-redo").click();
+  await expect.poll(savedShots).toEqual(["1:9:2"]);
+
+  // 射手2のマスを消し、空だった別のマスへ書く。
+  await page.getByTestId("score-button-clear").click();
+  await expect.poll(savedShots).toEqual([]);
+  await cell(page, 1, 1, 2).click();
+  await page.getByTestId("score-button-X").click();
+  await expect.poll(savedShots).toEqual(["2:X:1"]);
+
+  // 再読み込みしてから、消したマスへ書き直す。
+  await page.reload();
+  await waitForHydration(page);
+  await expectCells(page, 1, 1, [null, "X", null]);
+  await cell(page, 1, 1, 1).click();
+  await page.getByTestId("score-button-7").click();
+  await expect.poll(savedShots).toEqual(["1:7:2", "2:X:1"]);
+
+  // もう一度再読み込みして、画面の点数と射手が保たれることを確かめる。
+  await page.reload();
+  await waitForHydration(page);
+  await expectCells(page, 1, 1, ["7", "X", null]);
+  expect(await savedShots()).toEqual(["1:7:2", "2:X:1"]);
 });
 
 test("途中まで記録した入力中のラウンドを開くと、最初の空のマスが指されてテンキーが展開される", async ({

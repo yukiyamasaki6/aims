@@ -190,8 +190,8 @@ function disableDistance(
   return replaceDistance(tables, { ...target, disabled: true });
 }
 
-// record_shotsで端末が送る項目(点数だけ)。
-const SHOT_FIELDS = ["score"];
+// record_shotsで端末が送る項目。
+const SHOT_FIELDS = ["score", "shooter_number"];
 
 // record_shotsで効く項目。効かないときはnull。
 function effectiveShotFields(
@@ -226,16 +226,20 @@ function buildShotRow(
         shot_number: operation.shotNumber,
         score_str: "",
         score_int: 0,
+        shooter_number: operation.shooterNumber,
         disabled: false,
       };
   if (fields.has("score")) {
     row.score_str = operation.scoreStr;
     row.score_int = operation.scoreInt;
   }
+  if (fields.has("shooter_number")) {
+    row.shooter_number = operation.shooterNumber;
+  }
   return row;
 }
 
-// record_shots。要素に含まれる項目だけを変える。同じマスの行は上書きし、消した矢の行は記録で復活させる。
+// record_shots。点数と指定の射手を書く。同じマスの行は上書きし、消した矢の行は記録で復活させる。
 function recordShot(
   tables: RoundTables,
   operation: Op<"shot.recorded">,
@@ -278,6 +282,24 @@ function clearShot(
   };
 }
 
+// add_round_shooter。同じ番号が無いときだけ、利用者に紐づかない射手を足す。既にある行は変えない。
+function addShooter(
+  tables: RoundTables,
+  operation: Op<"shooter.added">,
+): RoundTables {
+  const { shooterNumber } = operation;
+  if (tables.shooters.some((s) => s.shooter_number === shooterNumber)) {
+    return tables;
+  }
+  return {
+    ...tables,
+    shooters: [
+      ...tables.shooters,
+      { shooter_number: shooterNumber, user_id: null, role: null },
+    ],
+  };
+}
+
 // 1つの操作を、サーバーの対応するRPCと同じ判定の順序でテーブルへ反映する。
 // 未確定の操作は規則で項目ごとに判定し、確定済みの操作はサーバーが効かせた項目(confirmedFields)だけを判定せずに反映する。
 // 同じ操作を重ねて適用しても結果は変わらない。ラウンドの削除以降の操作は、削除済みのラウンドに対するものとして反映しない。
@@ -305,6 +327,8 @@ export function applyOperation(
       return recordShot(tables, operation, confirmedFields, faces);
     case "shot.cleared":
       return clearShot(tables, operation);
+    case "shooter.added":
+      return addShooter(tables, operation);
   }
 }
 
